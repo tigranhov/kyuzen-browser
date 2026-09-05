@@ -19,8 +19,11 @@ If any answer is "yes" without a written justification, redesign the feature.
 3. Does it add work before first paint at startup? (Budget: +50 ms over vanilla.)
 4. Does it do work on the UI thread that is not needed for the frame being drawn? (Budget: 8 ms per frame; no sync I/O ever.)
 
-Run `scripts/perf` before declaring any stage done. A regression against the budgets in the spec
-(section 3) blocks the stage.
+Run `scripts/perf` at the end of a stage and record the result in `docs/perf/`. The budgets in the
+spec (section 3) are provisional until Stage 0 produces a baseline; until they are calibrated a perf
+result is discussed, not a gate. Never let perf tooling block feature progress: the machine is shared
+and often loaded, so measure when it is quiet and keep the script quick to run and quick to skip.
+The four questions above always apply; they cost nothing to answer.
 
 ### Architecture rules
 
@@ -45,8 +48,8 @@ Run `scripts/perf` before declaring any stage done. A regression against the bud
 3. Test-driven: unit tests in `arcium/test/` for models and services, browser tests for tab-to-space
    mapping, partition isolation and persistence. Write the failing test first.
 4. Iterate on Views UI in the standalone Views playground first, then wire into the browser.
-5. Verify before claiming done: build passes, tests pass, perf script within budget, the stage's
-   acceptance list executed by hand. Report failures with output, not summaries.
+5. Verify before claiming done: build passes, tests pass, the stage's acceptance list executed by
+   hand, perf result recorded. Report failures with output, not summaries.
 6. Commit small. Commit messages say why. Do not commit Chromium sources or build output.
 
 ### Upstream cadence

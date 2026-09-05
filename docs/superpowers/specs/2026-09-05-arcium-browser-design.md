@@ -1,7 +1,7 @@
 # Arcium Browser: Master Design and Stage Requirements
 
 Date: 2026-09-05
-Status: Draft for review
+Status: Approved 2026-09-05
 Scope: The whole product. Each stage below becomes its own implementation plan in `docs/superpowers/plans/`.
 
 ## 1. Vision
@@ -25,7 +25,9 @@ Arc was discontinued. Zen is Firefox-based. Arcium fills the gap on Chromium.
 
 ## 3. Non-functional requirements (apply to every stage)
 
-These are measured against a vanilla Chromium build of the same revision, same build flags, on the same machine. Measurements are scripted (Stage 0) and re-run before each stage is declared done.
+These are measured against a vanilla Chromium build of the same revision, same build flags, on the same machine. Measurements are scripted (Stage 0) and re-run at the end of each stage.
+
+The numbers below are provisional placeholders. They are calibrated after Stage 0 produces a baseline, and until then they are advisory: a perf result is recorded and discussed, it does not block a stage. The development machine is shared and often loaded, so perf runs are taken when it is quiet and the perf script must be quick to run and quick to skip.
 
 | ID | Requirement | Budget |
 |---|---|---|
@@ -36,7 +38,7 @@ These are measured against a vanilla Chromium build of the same revision, same b
 | NF5 | UI-thread blocking | No synchronous disk or network I/O from any UI code. Persistence writes go through `ImportantFileWriter` or a background sequence |
 | NF6 | Per-tab overhead added by Arcium | 0 extra processes, under 1 KB of browser-side state per tab beyond Chromium's own |
 | NF7 | Background spaces | Must not add work: no timers, no polling, no thumbnails unless visible |
-| NF8 | Every new feature | Answers the four questions in CLAUDE.md before it is built |
+| NF8 | Every new feature | Answers the four questions in CLAUDE.md before it is built. This one is not provisional |
 
 ## 4. Architecture
 
@@ -205,7 +207,7 @@ Acceptance: A6.1 a CSS boost persists across relaunch; A6.2 Library opens in und
 - R7.1 Sleeping tabs: inactive Today tabs unload after a configurable time and restore on click with their scroll position.
 - R7.2 Inactive spaces discard their tabs by policy; favorites and pinned exempt by default.
 - R7.3 Startup profile: no Arcium work before first paint beyond loading the live model.
-- R7.4 Perf script gates: any NF regression fails the stage.
+- R7.4 Perf script gates: by this stage the budgets are calibrated and a regression fails the stage.
 
 Acceptance: A7.1 50 tabs across 3 spaces, idle memory below vanilla Chrome with the same tabs after sleep kicks in.
 
