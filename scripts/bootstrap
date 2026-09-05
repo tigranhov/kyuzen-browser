@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+# One-time: depot_tools + shallow Chromium checkout at the pinned tag.
+# Safe to re-run; each phase is skipped when already done.
+source "$(dirname "$0")/lib.sh"
+
+mkdir -p "$CHROMIUM_ROOT"
+cd "$CHROMIUM_ROOT"
+
+if [ ! -d "$DEPOT_TOOLS/.git" ]; then
+  log "cloning depot_tools"
+  git clone https://chromium.googlesource.com/chromium/tools/depot_tools.git "$DEPOT_TOOLS"
+fi
+
+if [ ! -d "$SRC/.git" ]; then
+  log "fetching chromium without history (this downloads ~40 GB)"
+  caffeinate -i fetch --no-history chromium
+fi
+
+cd "$SRC"
+if ! git rev-parse -q --verify "refs/tags/$CHROMIUM_TAG" >/dev/null; then
+  log "fetching tag $CHROMIUM_TAG"
+  git fetch --depth 1 origin "+refs/tags/$CHROMIUM_TAG:refs/tags/$CHROMIUM_TAG"
+fi
+
+if [ "$(git describe --tags --exact-match 2>/dev/null || true)" != "$CHROMIUM_TAG" ]; then
+  log "checking out $CHROMIUM_TAG"
+  git checkout -q "tags/$CHROMIUM_TAG"
+fi
+
+log "syncing DEPS and running hooks"
+cd "$CHROMIUM_ROOT"
+caffeinate -i gclient sync -D --no-history
+
+log "bootstrap complete: $(grep -E 'MAJOR|MINOR|BUILD|PATCH' "$SRC/chrome/VERSION" | tr '\n' ' ')"
