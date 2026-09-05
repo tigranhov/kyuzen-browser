@@ -20,6 +20,8 @@
 - Perf numbers are recorded, not gated (spec section 3, provisional).
 - The machine is shared and often loaded. Every long build runs under `caffeinate -i nice -n 10`, respects `ARCIUM_JOBS`, and logs to a file so it can run in the background.
 - Commits are small, messages say why, and end with `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`.
+- The interactive shell is zsh. `scripts/lib.sh` is bash-only (`BASH_SOURCE`); run scripts directly, and for ad-hoc checks use `bash -c 'source scripts/lib.sh && ...'`.
+- Git status in the checkout shows a few untracked `third_party/` directories. They are gclient-managed dependencies not covered by upstream's `.gitignore`, not ours. Never `git clean` them.
 
 ## Time expectations
 
@@ -455,6 +457,25 @@ done
 git status --short arcium/branding | head -20
 ```
 Expected: modified `app.icns` and the `product_logo_*.png` files that existed upstream. Leave any other upstream PNGs (for example `product_logo_name_*.png`, document icons) as they are for this stage.
+
+- [ ] **Step 5b: Rebuild the compiled mac asset catalog with our icon**
+
+`chrome/BUILD.gn` ships two icon formats: `mac/app.icns` and `mac/Assets.car`, a compiled asset catalog that macOS 26 and later prefer for the Dock. Replacing only `app.icns` leaves the Chromium icon on this Mac. The catalog source is `mac/Assets.xcassets`; swap its PNGs and compile with Xcode's `actool`:
+
+```bash
+cd arcium/branding/theme/mac
+for s in 16 32 64 128 256 512 1024; do cp "$S/product_logo_$s.png" "Assets.xcassets/AppIcon.appiconset/appicon_$s.png"; done
+cp "$S/product_logo_256.png" Assets.xcassets/Icon.iconset/icon_256x256.png
+cp "$S/product_logo_512.png" Assets.xcassets/Icon.iconset/icon_256x256@2x.png
+OUT="$S/car"; rm -rf "$OUT"; mkdir -p "$OUT"
+xcrun actool Assets.xcassets --compile "$OUT" --platform macosx --minimum-deployment-target 12.0 \
+  --target-device mac --app-icon AppIcon --output-partial-info-plist "$OUT/partial.plist"
+grep -A1 CFBundleIconName "$OUT/partial.plist"   # expected: <string>AppIcon</string>
+cp "$OUT/Assets.car" Assets.car
+cd -
+```
+
+`mac/AppIcon.icon` is the layered Icon Composer source for the Liquid Glass look; it is left as upstream's for now and replaced when real artwork exists.
 
 - [ ] **Step 6: Verify the symlinked view from inside the Chromium tree**
 
@@ -959,9 +980,16 @@ tag="${1:-}"
 [ -n "$tag" ] || die "usage: scripts/rebase <tag>   (current: $CHROMIUM_TAG)"
 
 cd "$SRC"
-log "discarding patch effects in the working tree"
-git checkout -q -- .
-git clean -qfd   # keeps ignored paths, so our symlinks (in .git/info/exclude) survive
+log "reverting applied patches"
+# Reverse order so dependent patches unwind cleanly. Untracked gclient-managed dependency
+# directories are left alone on purpose; a git clean here would force them to re-download.
+for p in $(ls -r "$ARCIUM_ROOT"/patches/*.patch 2>/dev/null); do
+  if git apply --reverse --check "$p" 2>/dev/null; then
+    git apply --reverse "$p"
+    log "reverted $(basename "$p")"
+  fi
+done
+git checkout -q -- .   # any stray edit to a tracked upstream file is a rule violation; drop it
 
 if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
   log "fetching tag $tag"
@@ -971,7 +999,7 @@ log "checking out $tag"
 git checkout -q "tags/$tag"
 
 log "syncing DEPS"
-(cd "$CHROMIUM_ROOT" && caffeinate -i gclient sync -D --no-history)
+(cd "$CHROMIUM_ROOT" && caffeinate -i gclient sync -D --no-history --jobs="${GCLIENT_JOBS:-3}")
 
 printf '%s\n' "$tag" > "$ARCIUM_ROOT/CHROMIUM_VERSION"
 CHROMIUM_TAG="$tag"
