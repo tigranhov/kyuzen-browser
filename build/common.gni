@@ -1,0 +1,26 @@
+# Shared by every Arcium build config. scripts/build concatenates this with <config>.gn.
+
+# Branding: chrome/app/theme/arcium is a symlink into arcium/branding (see scripts/sync).
+branding_path_component = "arcium"
+
+# macOS toolchain: system Xcode, Apple linker on arm64 (per docs/mac_build_instructions.md).
+use_remoteexec = false
+use_lld = false
+treat_warnings_as_errors = false
+
+# Spec D6: remove Google account services and background Google services.
+use_official_google_api_keys = false
+google_api_key = ""
+google_default_client_id = ""
+google_default_client_secret = ""
+disable_fieldtrial_testing_config = true
+enable_remoting = false
+enable_mdns = false
+enable_service_discovery = false
+# Keep Safe Browsing available as a user toggle.
+safe_browsing_mode = 1
+
+# Full media support: H.264/AAC and Widevine, like Chrome.
+proprietary_codecs = true
+ffmpeg_branding = "Chrome"
+enable_widevine = true

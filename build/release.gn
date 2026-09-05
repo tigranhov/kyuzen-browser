@@ -1,0 +1,11 @@
+# Shipping build (Stage 8). Official build enables LTO and other optimisations; no PGO profile download.
+is_debug = false
+is_official_build = true
+chrome_pgo_phase = 0
+is_component_build = false
+dcheck_always_on = false
+symbol_level = 1
+blink_symbol_level = 0
+v8_symbol_level = 0
+enable_dsyms = true
+enable_stripping = true

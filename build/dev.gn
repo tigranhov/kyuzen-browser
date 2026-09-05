@@ -1,0 +1,9 @@
+# Daily development build: fast incremental links, DCHECKs on, function-level symbols.
+is_debug = false
+is_component_build = true
+dcheck_always_on = true
+symbol_level = 1
+blink_symbol_level = 0
+v8_symbol_level = 0
+enable_dsyms = false
+enable_stripping = false
