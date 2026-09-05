@@ -638,7 +638,14 @@ ls "$SRC/out/dev/Arcium.app/Contents/MacOS/"
 ```
 Expected: `Arcium` executable; `org.arcium.browser` and `Arcium`.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 7: Verify an incremental UI change builds in minutes (spec R0.4)**
+
+```bash
+source scripts/lib.sh && touch "$SRC/ui/views/view.cc" && time scripts/build dev 2>&1 | tail -2
+```
+Expected: ninja recompiles one file, relinks the `views` component and the few dylibs that depend on it directly, and finishes in under 5 minutes. If it relinks the whole browser for minutes on end, `is_component_build` did not take effect; check `gn args out/dev --list=is_component_build --short`.
+
+- [ ] **Step 8: Commit**
 
 ```bash
 git add build scripts/build
@@ -689,9 +696,10 @@ Run: `scripts/run https://www.youtube.com` and check each item by hand:
 2. A YouTube video plays with sound (proves `proprietary_codecs` and `ffmpeg_branding`).
 3. Open `chrome://version`: Executable path ends in `Arcium.app/Contents/MacOS/Arcium`; Profile path is under `Application Support/Arcium-dev`.
 4. DevTools opens with Cmd+Option+I.
-5. Open `https://chromewebstore.google.com`, pick uBlock Origin Lite, click "Add to Arcium" (the store shows our product name). Extension installs and its icon appears in the toolbar. If the store refuses with "This browser is not supported", record the exact message: that is the known risk from spec section 6 and needs a user-agent decision before Stage 1.
-6. `chrome://settings`: there is no "Sign in" or "Sync" entry at the top of the People or "You and Google" section, or the section is absent.
-7. Netflix or another Widevine site plays, or reports a licensing error rather than a missing-plugin error (Widevine is present; a licensing error is acceptable for an unsigned dev build).
+5. Open `https://chromewebstore.google.com`, pick uBlock Origin Lite, click "Add to Chrome" (the store's button text is not ours to change). Extension installs and its icon appears in the toolbar. If the store refuses with "This browser is not supported", record the exact message: that is the known risk from spec section 6 and needs a user-agent decision before Stage 1.
+6. `chrome://settings`, "You and Google": clicking any sign-in or "Turn on sync" control must fail or be absent. Record exactly which controls are still visible; removing leftover promo UI is a Stage 1 pref-default or hook, not Stage 0 work.
+7. Expected annoyance: every window shows an infobar "Google API keys are missing. Some functionality of Chromium will be disabled." This is Chromium's response to the empty keys from `build/common.gni` and it is correct behaviour for Stage 0. Removing it is the first candidate for a one-line hook patch in Stage 1 (`chrome/browser/ui/startup/`, the API-keys infobar). Do not fix it in this stage.
+8. Netflix or another Widevine site plays, or reports a licensing error rather than a missing-plugin error (Widevine is present; a licensing error is acceptable for an unsigned dev build).
 
 Record results in `docs/perf/2026-09-XX-stage0-baseline.md` under a "Smoke" heading (the file is created in Task 6; append then).
 
@@ -786,7 +794,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 - Consumes: binary path convention from Task 5.
 - Produces: `scripts/perf [--runs N] [--idle SECONDS] [--label NAME]` writing `docs/perf/<date>-<label>.md`. Later stages compare against the Stage 0 file.
 
-Method, kept deliberately cheap: startup is the time from process spawn until the DevTools HTTP endpoint answers `/json/version`, which happens after the first window and its renderer are up. Idle memory is the sum of resident set size over every process whose command line contains the app bundle path, sampled after the idle period. Process count is the number of those processes. All three are proxies; they are consistent between runs of the same build on the same machine, which is all a baseline needs.
+Method, kept deliberately cheap: startup is the time from process spawn until the DevTools HTTP endpoint answers `/json/version`, which happens after the first window and its renderer are up. The port is chosen by Chromium (`--remote-debugging-port=0`) and read from the profile's `DevToolsActivePort` file, so runs never collide on a port. Idle memory is the sum of resident set size over every process whose command line contains the app bundle path, sampled after the idle period. Process count is the number of those processes. All three are proxies; they are consistent between runs of the same build on the same machine, which is all a baseline needs.
 
 - [ ] **Step 1: Write the perf script**
 
@@ -803,7 +811,6 @@ import argparse, datetime, json, os, pathlib, shutil, statistics, subprocess, sy
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 CHROMIUM_ROOT = pathlib.Path(os.environ.get("CHROMIUM_ROOT", "/Volumes/Texternal/chromium"))
-PORT = 9333
 
 
 def app_path(config):
@@ -824,14 +831,18 @@ def one_run(app, idle):
     profile = tempfile.mkdtemp(prefix="arcium-perf-")
     binary = app / "Contents" / "MacOS" / "Arcium"
     start = time.monotonic()
+    # --remote-debugging-port=0 makes Chromium pick a free port and write it to
+    # <profile>/DevToolsActivePort once the browser is serving, so no fixed port can collide.
     proc = subprocess.Popen([str(binary), f"--user-data-dir={profile}", "--no-first-run",
-                             "--no-default-browser-check", f"--remote-debugging-port={PORT}",
+                             "--no-default-browser-check", "--remote-debugging-port=0",
                              "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    port_file = pathlib.Path(profile) / "DevToolsActivePort"
     startup_ms = None
     deadline = start + 60
     while time.monotonic() < deadline:
         try:
-            urllib.request.urlopen(f"http://127.0.0.1:{PORT}/json/version", timeout=0.2).read()
+            port = int(port_file.read_text().splitlines()[0])
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=0.2).read()
             startup_ms = round((time.monotonic() - start) * 1000)
             break
         except Exception:
@@ -1051,7 +1062,7 @@ Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 Replace the block from `## Commands` up to (not including) `## Stage status` with:
 
-```markdown
+````markdown
 ## Commands
 
 All scripts read `CHROMIUM_VERSION` and put depot_tools on PATH themselves.
@@ -1071,7 +1082,7 @@ Environment knobs: `ARCIUM_JOBS` (ninja parallelism, default all cores; lower it
 busy), `ARCIUM_CONFIG` (dev by default), `ARCIUM_USER_DATA_DIR`, `CHROMIUM_ROOT`.
 
 Long builds: run `nohup scripts/build dev > /Volumes/Texternal/chromium/build.log 2>&1 &` and tail the log.
-```
+````
 
 - [ ] **Step 2: Mark Stage 0 done in the status table**
 
