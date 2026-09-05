@@ -30,8 +30,17 @@ if [ "$(git describe --tags --exact-match 2>/dev/null || true)" != "$CHROMIUM_TA
   git checkout -q "tags/$CHROMIUM_TAG"
 fi
 
+# chromium.googlesource.com rate-limits anonymous clients (HTTP 429) when too many fetches run at
+# once. Keep parallelism low and retry with backoff; gclient resumes where it stopped.
 log "syncing DEPS and running hooks"
 cd "$CHROMIUM_ROOT"
-caffeinate -i gclient sync -D --no-history
+for attempt in 1 2 3 4 5 6 7 8; do
+  if caffeinate -i gclient sync -D --no-history --jobs="${GCLIENT_JOBS:-3}"; then
+    break
+  fi
+  [ "$attempt" -lt 8 ] || die "gclient sync failed after $attempt attempts; re-run scripts/bootstrap later"
+  log "gclient sync failed (attempt $attempt); waiting $((attempt * 60)) s before retrying"
+  sleep $((attempt * 60))
+done
 
 log "bootstrap complete: $(grep -E 'MAJOR|MINOR|BUILD|PATCH' "$SRC/chrome/VERSION" | tr '\n' ' ')"
