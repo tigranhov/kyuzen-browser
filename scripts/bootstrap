@@ -3,6 +3,9 @@
 # Safe to re-run; each phase is skipped when already done.
 source "$(dirname "$0")/lib.sh"
 
+# Chromium's DEPS pull some repositories through Git LFS; without it gclient sync fails mid-way.
+command -v git-lfs >/dev/null || die "git-lfs is required: brew install git-lfs && git lfs install"
+
 mkdir -p "$CHROMIUM_ROOT"
 cd "$CHROMIUM_ROOT"
 

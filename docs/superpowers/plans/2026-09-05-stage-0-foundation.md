@@ -147,15 +147,18 @@ EOF
 chmod +x scripts/bootstrap
 ```
 
-- [ ] **Step 3: Run the bootstrap in the background with a log**
+- [ ] **Step 3: Install git-lfs, then run the bootstrap in the background with a log**
+
+Several Chromium dependencies (for example `third_party/litert`) are fetched through Git LFS; without it `gclient sync` fails mid-way with `git-lfs: command not found`. The bootstrap script checks for it and refuses to start otherwise.
 
 ```bash
+brew install git-lfs && git lfs install
 mkdir -p /Volumes/Texternal/chromium
 nohup scripts/bootstrap > /Volumes/Texternal/chromium/bootstrap.log 2>&1 &
 echo "pid $!"
 ```
 
-Check progress with `tail -f /Volumes/Texternal/chromium/bootstrap.log`. Expect 1 to 2 hours. If `fetch` fails mid-way on network, re-run `scripts/bootstrap`; `fetch` and `gclient` resume.
+Check progress with `tail -f /Volumes/Texternal/chromium/bootstrap.log`. Expect 1 to 2 hours. If it fails mid-way on network, including HTTP 429 rate limits from `chromium.googlesource.com` which are transient, re-run `scripts/bootstrap`; every phase resumes. If gclient left `_bad_scm` directories under `/Volumes/Texternal/chromium`, delete them before re-running.
 
 - [ ] **Step 4: Verify the checkout is on the pinned tag**
 
