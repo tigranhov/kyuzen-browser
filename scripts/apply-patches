@@ -51,3 +51,19 @@ apply_patches() {
   log "patches: applied=$applied skipped=$skipped failed=$failed"
   [ "$failed" -eq 0 ]
 }
+
+# Fail if any gclient-managed dependency checkout has no revision. An interrupted gclient sync
+# (rate limit, missing git-lfs) can leave an empty repository that gclient still records as synced;
+# the build then dies hours later on a missing file. Deleting the directory and re-running
+# scripts/bootstrap repairs it.
+check_deps() {
+  local broken=0 g d
+  while IFS= read -r g; do
+    d="${g%/.git}"
+    if ! git -C "$d" rev-parse -q --verify HEAD >/dev/null 2>&1; then
+      log "BROKEN dependency checkout (no HEAD): ${d#"$SRC"/}"
+      broken=$((broken + 1))
+    fi
+  done < <(find "$SRC" -maxdepth 6 -name .git -not -path "$SRC/out/*" -not -path "$SRC/.git" 2>/dev/null)
+  [ "$broken" -eq 0 ] || die "$broken broken dependency checkout(s); rm -rf each and re-run scripts/bootstrap"
+}

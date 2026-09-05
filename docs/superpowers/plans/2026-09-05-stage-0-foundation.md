@@ -53,6 +53,7 @@
 | `arcium/branding/BRANDING` | Product names and bundle id, consumed by Chromium's build via `branding_path_component = "arcium"` |
 | `arcium/branding/theme/` | Copy of `chrome/app/theme/chromium/` with our icon. Symlinked as `chrome/app/theme/arcium` |
 | `arcium/branding/default_100_percent/`, `default_200_percent/` | Copies of the matching `chromium` dirs. Symlinked under the same names |
+| `arcium/branding/vector_icons/` | Copy of `components/vector_icons/chromium/` (`product.icon`, `product_refresh.icon`). Symlinked as `components/vector_icons/arcium`. The only branding-keyed path outside `chrome/app/theme` |
 | `arcium/branding/tools/make_icon.py` | Generates the placeholder app icon PNG set and `.icns` with stdlib only |
 | `docs/perf/2026-09-XX-stage0-baseline.md` | Baseline numbers written by `scripts/perf` |
 | `patches/` | Empty this stage except `README.md` |
@@ -292,6 +293,8 @@ The contents are filled in Task 3. For now the directories must exist.
 mkdir -p arcium/branding/theme arcium/branding/default_100_percent arcium/branding/default_200_percent
 touch arcium/branding/theme/.gitkeep arcium/branding/default_100_percent/.gitkeep arcium/branding/default_200_percent/.gitkeep
 ```
+
+`scripts/sync` also runs `check_deps`, which scans every dependency checkout for a missing HEAD revision. An interrupted gclient sync can leave an empty repository that gclient still records as synced (this happened with `third_party/litert/src`), and the build then fails hours in on a missing file. The fix is always: delete the directory, re-run `scripts/bootstrap`.
 
 - [ ] **Step 4: Run sync twice and verify it is idempotent**
 

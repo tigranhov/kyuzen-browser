@@ -8,5 +8,6 @@ actual="$(git -C "$SRC" describe --tags --exact-match 2>/dev/null || echo none)"
 [ "$actual" = "$CHROMIUM_TAG" ] || die "checkout is at $actual, expected $CHROMIUM_TAG; run scripts/rebase $CHROMIUM_TAG"
 
 ensure_symlinks
+check_deps
 apply_patches
 log "sync complete"
