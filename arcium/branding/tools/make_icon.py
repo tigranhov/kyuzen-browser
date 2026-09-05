@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate Arcium's placeholder app icon as an .icns using only the standard library.
 
-Usage: make_icon.py OUT_DIR   -> writes OUT_DIR/app.icns and OUT_DIR/product_logo_{16,32,48,128,256}.png
+Usage: make_icon.py OUT_DIR   -> writes OUT_DIR/app.icns and OUT_DIR/product_logo_{16,24,32,48,64,128,256,512,1024}.png
 """
 import os, struct, subprocess, sys, tempfile, zlib
 
@@ -47,7 +47,7 @@ def icon(size):
 
 def main(out_dir):
     os.makedirs(out_dir, exist_ok=True)
-    for s in (16, 32, 48, 128, 256):
+    for s in (16, 24, 32, 48, 64, 128, 256, 512, 1024):
         with open(os.path.join(out_dir, f'product_logo_{s}.png'), 'wb') as f:
             f.write(icon(s))
     with tempfile.TemporaryDirectory() as tmp:

@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Usage: scripts/rebase <chromium tag>
+# Moves the checkout to the tag, syncs DEPS, reapplies patches, updates CHROMIUM_VERSION.
+# Upstream files carry no edits outside patches (CLAUDE.md), so discarding the working tree is safe.
+source "$(dirname "$0")/lib.sh"
+source "$ARCIUM_ROOT/scripts/apply-patches"
+need_src
+
+tag="${1:-}"
+[ -n "$tag" ] || die "usage: scripts/rebase <tag>   (current: $CHROMIUM_TAG)"
+
+cd "$SRC"
+log "reverting applied patches"
+# Reverse order so dependent patches unwind cleanly. Untracked gclient-managed dependency
+# directories are left alone on purpose; a git clean here would force them to re-download.
+for p in $(ls -r "$ARCIUM_ROOT"/patches/*.patch 2>/dev/null); do
+  if git apply --reverse --check "$p" 2>/dev/null; then
+    git apply --reverse "$p"
+    log "reverted $(basename "$p")"
+  fi
+done
+git checkout -q -- .   # any stray edit to a tracked upstream file is a rule violation; drop it
+
+if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+  log "fetching tag $tag"
+  git fetch --depth 1 origin "+refs/tags/$tag:refs/tags/$tag"
+fi
+log "checking out $tag"
+git checkout -q "tags/$tag"
+
+log "syncing DEPS"
+(cd "$CHROMIUM_ROOT" && caffeinate -i gclient sync -D --no-history --jobs="${GCLIENT_JOBS:-3}")
+
+printf '%s\n' "$tag" > "$ARCIUM_ROOT/CHROMIUM_VERSION"
+CHROMIUM_TAG="$tag"
+
+ensure_symlinks
+if apply_patches; then
+  log "rebase to $tag complete with no conflicts; now run scripts/build dev"
+else
+  die "rebase to $tag has conflicting patches; fix them in patches/ and re-run scripts/sync"
+fi
