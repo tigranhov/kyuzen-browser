@@ -1,0 +1,9 @@
+# Chromium checkout and build output never live here
+/chromium/
+out/
+*.o
+*.a
+*.dSYM/
+.DS_Store
+# perf raw dumps are large; committed summaries live in docs/perf/*.md
+docs/perf/raw/
