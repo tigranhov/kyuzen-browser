@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Idempotent: make the Chromium tree ready to build Arcium at the pinned tag.
+source "$(dirname "$0")/lib.sh"
+source "$ARCIUM_ROOT/scripts/apply-patches"
+need_src
+
+actual="$(git -C "$SRC" describe --tags --exact-match 2>/dev/null || echo none)"
+[ "$actual" = "$CHROMIUM_TAG" ] || die "checkout is at $actual, expected $CHROMIUM_TAG; run scripts/rebase $CHROMIUM_TAG"
+
+ensure_symlinks
+apply_patches
+log "sync complete"

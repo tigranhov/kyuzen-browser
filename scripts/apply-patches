@@ -1,0 +1,53 @@
+# Sourced by scripts/sync and scripts/rebase. Requires lib.sh already sourced.
+
+# Place every symlink from ARCIUM_SYMLINKS and hide them from `git status` in the checkout.
+ensure_symlinks() {
+  local exclude="$SRC/.git/info/exclude"
+  local entry link target
+  for entry in "${ARCIUM_SYMLINKS[@]}"; do
+    link="${entry% *}"
+    target="${entry#* }"
+    mkdir -p "$(dirname "$SRC/$link")"
+    if [ -L "$SRC/$link" ] && [ "$(readlink "$SRC/$link")" = "$target" ]; then
+      :
+    else
+      if [ -L "$SRC/$link" ]; then
+        rm "$SRC/$link"           # our link, stale target: replace it
+      elif [ -e "$SRC/$link" ]; then
+        die "$SRC/$link exists and is not a symlink; refusing to overwrite"
+      fi
+      ln -s "$target" "$SRC/$link"
+      log "linked $link -> $target"
+    fi
+    grep -qxF "/$link" "$exclude" 2>/dev/null || printf '/%s\n' "$link" >> "$exclude"
+  done
+  for entry in "${ARCIUM_SYMLINKS[@]}"; do
+    link="${entry% *}"
+    [ -e "$SRC/$link/" ] || die "symlink $link is dangling (target missing)"
+  done
+}
+
+# Apply patches/*.patch in lexical order. Already-applied patches are skipped.
+apply_patches() {
+  local applied=0 skipped=0 failed=0 p name
+  shopt -s nullglob
+  for p in "$ARCIUM_ROOT"/patches/*.patch; do
+    name="$(basename "$p")"
+    if git -C "$SRC" apply --reverse --check "$p" 2>/dev/null; then
+      skipped=$((skipped + 1))
+      continue
+    fi
+    if git -C "$SRC" apply --check "$p" 2>/dev/null; then
+      git -C "$SRC" apply "$p"
+      log "applied $name"
+      applied=$((applied + 1))
+    else
+      log "CONFLICT $name"
+      git -C "$SRC" apply --check "$p" 2>&1 | sed 's/^/    /' >&2 || true
+      failed=$((failed + 1))
+    fi
+  done
+  shopt -u nullglob
+  log "patches: applied=$applied skipped=$skipped failed=$failed"
+  [ "$failed" -eq 0 ]
+}
