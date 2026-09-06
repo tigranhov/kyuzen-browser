@@ -38,7 +38,6 @@ class FavoritesGridView : public views::View {
  private:
   raw_ptr<SidebarModel> model_;
   std::vector<raw_ptr<views::ImageButton>> tiles_;
-  std::vector<int> tab_indices_;
 };
 
 }  // namespace arcium

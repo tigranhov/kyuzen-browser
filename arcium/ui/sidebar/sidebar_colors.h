@@ -9,7 +9,7 @@
 #include "ui/color/color_provider.h"
 
 namespace ui {
-class ColorProviderKey;
+struct ColorProviderKey;
 }
 
 namespace arcium {

@@ -47,10 +47,8 @@ void FavoritesGridView::SetRows(const std::vector<SidebarRow>& rows) {
     RemoveChildViewT(tiles_.back().get());
     tiles_.pop_back();
   }
-  tab_indices_.clear();
   for (size_t i = 0; i < mine.size(); ++i) {
     const SidebarRow& row = *mine[i];
-    tab_indices_.push_back(row.tab_index);
     tiles_[i]->SetImageModel(views::Button::STATE_NORMAL, row.favicon);
     tiles_[i]->SetTooltipText(row.title);
     tiles_[i]->GetViewAccessibility().SetName(row.title);

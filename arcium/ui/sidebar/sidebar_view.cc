@@ -110,10 +110,6 @@ gfx::Size SidebarView::CalculatePreferredSize(
                    available_size.height().value_or(0));
 }
 
-void SidebarView::OnThemeChanged() {
-  views::View::OnThemeChanged();
-}
-
 void SidebarView::Rebuild() {
   // Rebuilt wholesale on every change: cheap at tens of rows, and the model
   // coalesces bursts. Each section reuses its row views by position.

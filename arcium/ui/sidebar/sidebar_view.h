@@ -65,7 +65,6 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
-  void OnThemeChanged() override;
 
  private:
   void Rebuild();
