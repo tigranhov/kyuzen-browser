@@ -6,7 +6,7 @@
 
 **Architecture:** A side table over `TabStripModel`. `ArciumModel` owns persistent entries and knows nothing about tabs; `TabBinding` maps an entry to the live tab currently representing it; `SidebarTabModel` merges the two into the rows the Stage 1 views already draw. Persistence is JSON via `ImportantFileWriter` for the live model and SQLite via `sql::Database` for the archive, both off the UI thread.
 
-**Tech Stack:** Chromium 152.0.7977.83, C++20, Views, GN/siso, `base::Uuid`, `base::Value::Dict`, `base::ImportantFileWriter`, `sql::Database`, gtest.
+**Tech Stack:** Chromium 152.0.7977.83, C++20, Views, GN/siso, `base::Uuid`, `base::DictValue`, `base::ImportantFileWriter`, `sql::Database`, gtest.
 
 **Spec:** `docs/superpowers/specs/2026-09-06-stage-2-arc-tab-model-design.md`
 
@@ -25,6 +25,11 @@
 - Every commit message ends with `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 
 ## Notes that apply to every task
+
+- **`base::DictValue` / `base::ListValue`, not `base::Value::Dict` / `base::Value::List`.** This
+  tree flattened the nested classes to top-level ones (`base/values.h:242`), and
+  `base::JSONReader::ReadDict` takes a required `options` argument — pass `base::JSON_PARSE_RFC`.
+  Verified against the pinned checkout on 2026-09-07 after Task 2 hit it.
 
 - Test snippets in this plan name `base::NumberToString`, `base::WriteFile`
   and `content::WebContentsTester` without repeating their includes each
@@ -61,7 +66,7 @@ New, in `arcium/browser/model/` — pure data, no Chromium UI or browser depende
 | `folder.h` | `Folder` |
 | `space.h` | `Space` and `ArchiveTimeout` |
 | `arcium_model.h/.cc` | Owns entries, folders and spaces. Mutations plus observers |
-| `model_serializer.h/.cc` | `ArciumModel` to and from `base::Value::Dict`, with a schema version |
+| `model_serializer.h/.cc` | `ArciumModel` to and from `base::DictValue`, with a schema version |
 
 New, in `arcium/browser/`:
 
@@ -919,7 +924,7 @@ EOF
 
 ### Task 2: JSON serialisation
 
-Turning the model into `base::Value::Dict` and back, with a schema version and tolerance for files written by a future or a broken Arcium.
+Turning the model into `base::DictValue` and back, with a schema version and tolerance for files written by a future or a broken Arcium.
 
 **Files:**
 - Create: `arcium/browser/model/model_serializer.h`
@@ -930,7 +935,7 @@ Turning the model into `base::Value::Dict` and back, with a schema version and t
 
 **Interfaces:**
 - Consumes: `arcium::ArciumModel` and its entity structs from Task 1.
-- Produces: `base::Value::Dict arcium::SerializeModel(const ArciumModel&)` and `bool arcium::DeserializeModel(const base::Value::Dict&, ArciumModel*)`, plus `constexpr int arcium::kModelSchemaVersion = 1`.
+- Produces: `base::DictValue arcium::SerializeModel(const ArciumModel&)` and `bool arcium::DeserializeModel(const base::DictValue&, ArciumModel*)`, plus `constexpr int arcium::kModelSchemaVersion = 1`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -990,9 +995,9 @@ TEST(ModelSerializerTest, RoundTripPreservesEntriesFoldersAndSpaces) {
 TEST(ModelSerializerTest, UnknownFieldsAreIgnoredNotFatal) {
   ArciumModel original;
   original.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
-  base::Value::Dict dict = SerializeModel(original);
+  base::DictValue dict = SerializeModel(original);
   dict.Set("something_from_the_future", "hello");
-  base::Value::List* entries = dict.FindList("entries");
+  base::ListValue* entries = dict.FindList("entries");
   ASSERT_TRUE(entries);
   (*entries)[0].GetDict().Set("also_new", 42);
 
@@ -1003,7 +1008,7 @@ TEST(ModelSerializerTest, UnknownFieldsAreIgnoredNotFatal) {
 
 TEST(ModelSerializerTest, ANewerSchemaVersionIsRefused) {
   ArciumModel original;
-  base::Value::Dict dict = SerializeModel(original);
+  base::DictValue dict = SerializeModel(original);
   dict.Set("version", kModelSchemaVersion + 1);
 
   ArciumModel restored;
@@ -1011,8 +1016,8 @@ TEST(ModelSerializerTest, ANewerSchemaVersionIsRefused) {
 }
 
 TEST(ModelSerializerTest, AMissingVersionIsRefused) {
-  base::Value::Dict dict;
-  dict.Set("entries", base::Value::List());
+  base::DictValue dict;
+  dict.Set("entries", base::ListValue());
 
   ArciumModel restored;
   EXPECT_FALSE(DeserializeModel(dict, &restored));
@@ -1021,17 +1026,17 @@ TEST(ModelSerializerTest, AMissingVersionIsRefused) {
 TEST(ModelSerializerTest, EntriesWithBadIdsOrUrlsAreDroppedNotFatal) {
   ArciumModel original;
   original.AddEntry(EntryKind::kPinned, GURL("https://good.example/"), u"good");
-  base::Value::Dict dict = SerializeModel(original);
-  base::Value::List* entries = dict.FindList("entries");
+  base::DictValue dict = SerializeModel(original);
+  base::ListValue* entries = dict.FindList("entries");
   ASSERT_TRUE(entries);
 
-  base::Value::Dict bad_id;
+  base::DictValue bad_id;
   bad_id.Set("id", "not-a-uuid");
   bad_id.Set("kind", "pinned");
   bad_id.Set("url", "https://bad.example/");
   entries->Append(std::move(bad_id));
 
-  base::Value::Dict bad_url;
+  base::DictValue bad_url;
   bad_url.Set("id", EntryId::Generate().value());
   bad_url.Set("kind", "pinned");
   bad_url.Set("url", "not a url");
@@ -1048,15 +1053,15 @@ TEST(ModelSerializerTest, TruncatedJsonDoesNotParse) {
   original.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
   std::string json = *base::WriteJson(SerializeModel(original));
   const std::string truncated = json.substr(0, json.size() / 2);
-  EXPECT_FALSE(base::JSONReader::ReadDict(truncated).has_value());
+  EXPECT_FALSE(base::JSONReader::ReadDict(truncated, base::JSON_PARSE_RFC).has_value());
 }
 
 TEST(ModelSerializerTest, AnEntryInAnUnknownFolderLandsAtTheTopLevel) {
   ArciumModel original;
   const EntryId id = original.AddEntry(EntryKind::kPinned,
                                        GURL("https://a.example/"), u"A");
-  base::Value::Dict dict = SerializeModel(original);
-  base::Value::List* entries = dict.FindList("entries");
+  base::DictValue dict = SerializeModel(original);
+  base::ListValue* entries = dict.FindList("entries");
   ASSERT_TRUE(entries);
   (*entries)[0].GetDict().Set("folder_id", FolderId::Generate().value());
 
@@ -1100,12 +1105,12 @@ class ArciumModel;
 // refused rather than half-read, so a downgrade cannot silently drop data.
 inline constexpr int kModelSchemaVersion = 1;
 
-base::Value::Dict SerializeModel(const ArciumModel& model);
+base::DictValue SerializeModel(const ArciumModel& model);
 
 // Returns false only when the file is unusable as a whole: a missing or newer
 // version. Individual malformed entries are dropped, because losing one row
 // beats refusing to start.
-bool DeserializeModel(const base::Value::Dict& dict, ArciumModel* model);
+bool DeserializeModel(const base::DictValue& dict, ArciumModel* model);
 
 }  // namespace arcium
 
@@ -1174,13 +1179,13 @@ ArchiveTimeout TimeoutFromString(const std::string* value) {
 
 }  // namespace
 
-base::Value::Dict SerializeModel(const ArciumModel& model) {
-  base::Value::Dict dict;
+base::DictValue SerializeModel(const ArciumModel& model) {
+  base::DictValue dict;
   dict.Set("version", kModelSchemaVersion);
 
-  base::Value::List spaces;
+  base::ListValue spaces;
   for (const Space& space : model.spaces()) {
-    base::Value::Dict value;
+    base::DictValue value;
     value.Set("id", space.id.value());
     value.Set("name", base::UTF16ToUTF8(space.name));
     value.Set("archive_timeout", TimeoutToString(space.archive_timeout));
@@ -1189,9 +1194,9 @@ base::Value::Dict SerializeModel(const ArciumModel& model) {
   }
   dict.Set("spaces", std::move(spaces));
 
-  base::Value::List folders;
+  base::ListValue folders;
   for (const Folder& folder : model.folders()) {
-    base::Value::Dict value;
+    base::DictValue value;
     value.Set("id", folder.id.value());
     value.Set("space_id", folder.space_id.value());
     value.Set("name", base::UTF16ToUTF8(folder.name));
@@ -1201,9 +1206,9 @@ base::Value::Dict SerializeModel(const ArciumModel& model) {
   }
   dict.Set("folders", std::move(folders));
 
-  base::Value::List entries;
+  base::ListValue entries;
   for (const TabEntry& entry : model.entries()) {
-    base::Value::Dict value;
+    base::DictValue value;
     value.Set("id", entry.id.value());
     value.Set("kind", KindToString(entry.kind));
     value.Set("space_id", entry.space_id.value());
@@ -1224,7 +1229,7 @@ base::Value::Dict SerializeModel(const ArciumModel& model) {
   return dict;
 }
 
-bool DeserializeModel(const base::Value::Dict& dict, ArciumModel* model) {
+bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
   const std::optional<int> version = dict.FindInt("version");
   if (!version || *version > kModelSchemaVersion) {
     return false;
@@ -1232,9 +1237,9 @@ bool DeserializeModel(const base::Value::Dict& dict, ArciumModel* model) {
 
   std::vector<Space> spaces;
   std::set<SpaceId> space_ids;
-  if (const base::Value::List* list = dict.FindList("spaces")) {
+  if (const base::ListValue* list = dict.FindList("spaces")) {
     for (const base::Value& item : *list) {
-      const base::Value::Dict* value = item.GetIfDict();
+      const base::DictValue* value = item.GetIfDict();
       if (!value) {
         continue;
       }
@@ -1260,9 +1265,9 @@ bool DeserializeModel(const base::Value::Dict& dict, ArciumModel* model) {
 
   std::vector<Folder> folders;
   std::set<FolderId> folder_ids;
-  if (const base::Value::List* list = dict.FindList("folders")) {
+  if (const base::ListValue* list = dict.FindList("folders")) {
     for (const base::Value& item : *list) {
-      const base::Value::Dict* value = item.GetIfDict();
+      const base::DictValue* value = item.GetIfDict();
       if (!value) {
         continue;
       }
@@ -1287,9 +1292,9 @@ bool DeserializeModel(const base::Value::Dict& dict, ArciumModel* model) {
   }
 
   std::vector<TabEntry> entries;
-  if (const base::Value::List* list = dict.FindList("entries")) {
+  if (const base::ListValue* list = dict.FindList("entries")) {
     for (const base::Value& item : *list) {
-      const base::Value::Dict* value = item.GetIfDict();
+      const base::DictValue* value = item.GetIfDict();
       if (!value) {
         continue;
       }
@@ -1570,7 +1575,7 @@ class ModelStore : public ArciumModel::Observer,
 
  private:
   void OnLoaded(base::OnceClosure done,
-                std::optional<base::Value::Dict> dict);
+                std::optional<base::DictValue> dict);
 
   raw_ptr<ArciumModel> model_;
   scoped_refptr<base::SequencedTaskRunner> background_runner_;
@@ -1611,13 +1616,13 @@ namespace {
 
 // Runs on the background sequence. Returns nullopt for a missing, unreadable
 // or unparseable file; all three mean "start empty", never "crash".
-std::optional<base::Value::Dict> ReadFileOnBackgroundSequence(
+std::optional<base::DictValue> ReadFileOnBackgroundSequence(
     const base::FilePath& path) {
   std::string contents;
   if (!base::ReadFileToString(path, &contents)) {
     return std::nullopt;
   }
-  return base::JSONReader::ReadDict(contents);
+  return base::JSONReader::ReadDict(contents, base::JSON_PARSE_RFC);
 }
 
 }  // namespace
@@ -1649,7 +1654,7 @@ void ModelStore::Load(base::OnceClosure done) {
 }
 
 void ModelStore::OnLoaded(base::OnceClosure done,
-                          std::optional<base::Value::Dict> dict) {
+                          std::optional<base::DictValue> dict) {
   if (dict) {
     // A false return means the file is unusable as a whole. The model is left
     // as constructed — empty and valid — rather than partly filled.
@@ -1676,7 +1681,7 @@ ModelStore::GetSerializedDataProducerForBackgroundSequence() {
   last_save_time_ = base::Time::Now();
   ++completed_saves_;
   return base::BindOnce(
-      [](base::Value::Dict snapshot) -> std::optional<std::string> {
+      [](base::DictValue snapshot) -> std::optional<std::string> {
         return base::WriteJson(snapshot);
       },
       SerializeModel(*model_));
