@@ -1,0 +1,21 @@
+Seam: tools/metrics/histograms/metadata/sql/histograms.xml, DatabaseTag variants.
+
+Why: sql::Database validates its Tag at compile time against an allowlist
+generated from this file (sql/BUILD.gn, target sql_name_variants). A database
+with an unregistered tag does not compile. Registers Arcium's archive database.
+
+Delegates to: nothing. This is a registration table Chromium keys by name, so
+the patch carries no call into arcium/.
+
+diff --git a/tools/metrics/histograms/metadata/sql/histograms.xml b/tools/metrics/histograms/metadata/sql/histograms.xml
+index 10c7b0a724..856fc40ea9 100644
+--- a/tools/metrics/histograms/metadata/sql/histograms.xml
++++ b/tools/metrics/histograms/metadata/sql/histograms.xml
+@@ -35,6 +35,7 @@ chromium-metrics-reviews@google.com.
+   <variant name="Affiliation" summary="Affiliation"/>
+   <variant name="AggregationService" summary="AggregationService"/>
+   <variant name="AnnotationStorage" summary="AnnotationStorage"/>
++  <variant name="ArciumArchive" summary="Arcium tab archive"/>
+   <variant name="BackgroundRequestQueue" summary="BackgroundRequestQueue"/>
+   <variant name="BrowsingTopics" summary="BrowsingTopics"/>
+   <variant name="CdmStorage" summary="CdmStorage"/>

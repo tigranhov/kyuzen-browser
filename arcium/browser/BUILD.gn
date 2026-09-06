@@ -2,9 +2,15 @@
 # tabs, archiving and search. Depends on the model but not on Views.
 source_set("browser") {
   sources = [
+    "archive_store.cc",
+    "archive_store.h",
     "model_store.cc",
     "model_store.h",
   ]
   public_deps = [ "//arcium/browser/model" ]
-  deps = [ "//base" ]
+  deps = [
+    "//base",
+    "//sql",
+    "//url",
+  ]
 }
