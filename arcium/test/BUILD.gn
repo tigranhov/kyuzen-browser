@@ -19,5 +19,6 @@ test("arcium_unittests") {
     "//chrome/test:test_support_unit",
     "//content/test:test_support",
     "//testing/gtest",
+    "//third_party/sqlite",
   ]
 }

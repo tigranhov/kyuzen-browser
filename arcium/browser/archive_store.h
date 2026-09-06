@@ -48,15 +48,26 @@ class ArchiveStore {
   std::vector<ArchivedTab> Search(const std::u16string& query, int limit);
   void Remove(const GURL& url, base::Time archived_at);
 
+  // Exposes the file-unusable classifier for a unit test that pins it
+  // directly: the codes it must never crash on (SQLITE_BUSY, SQLITE_LOCKED,
+  // SQLITE_NOMEM, an unrecognised code) are hard to reach through a real
+  // sql::Database, since they name transient or environmental conditions,
+  // not something a test can reliably provoke. Production code must reach
+  // the classifier only through Open(); see archive_store.cc.
+  static bool IsFileUnusableForTesting(int sqlite_error_code);
+
  private:
   // Creates the schema inside its own transaction. On failure, `*sqlite_error`
   // is set to the sqlite error code captured at the exact statement that
   // failed (Begin/Execute/Run/Commit) — the caller must not re-read
   // db_.GetErrorCode() afterwards instead, because by the time InitSchema()
-  // returns, the local sql::Transaction has already gone out of scope and run
-  // an implicit ROLLBACK, and a successful ROLLBACK overwrites the
-  // connection's error code with SQLITE_OK. `*sqlite_error` is left
-  // untouched on success.
+  // returns, the local sql::Transaction has already rolled back (either via
+  // sql::Database::CommitTransaction's own internal recovery for a failed
+  // COMMIT, or via sql::Transaction's destructor for an abandoned Begin()),
+  // and a successful ROLLBACK overwrites the connection's error code with
+  // SQLITE_OK. See the Commit() branch in the .cc for why that capture is
+  // itself not fully trustworthy either. `*sqlite_error` is left untouched
+  // on success.
   bool InitSchema(int* sqlite_error);
 
   sql::Database db_;

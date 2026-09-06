@@ -8,7 +8,6 @@
 
 #include "base/i18n/case_conversion.h"
 #include "base/strings/utf_string_conversions.h"
-#include "sql/error_delegate_util.h"
 #include "sql/statement.h"
 #include "sql/transaction.h"
 
@@ -22,9 +21,15 @@ constexpr char kDatabaseTag[] = "ArciumArchive";
 
 constexpr int kCurrentVersion = 1;
 
-// SQLite guarantees SQLITE_OK == 0; sql/database.h forbids code outside sql/
-// from including sqlite3.h to spell the macro itself.
-constexpr int kSqliteOk = 0;
+// Raw SQLite result codes. sql/database.h keeps sqlite3.h out of its own
+// public headers so ordinary callers of sql::Database never need to depend
+// on SQLite directly, and no feature code outside sql/'s own tests includes
+// it either — so these are named locally rather than pulling in
+// "third_party/sqlite/sqlite3.h" for three integers. Values confirmed
+// against third_party/sqlite/src/amalgamation/sqlite3.h.
+constexpr int kSqliteOk = 0;             // SQLITE_OK (line ~455)
+constexpr int kSqliteCorrupt = 11;       // SQLITE_CORRUPT (line 461)
+constexpr int kSqliteNotADatabase = 26;  // SQLITE_NOTADB (line 476)
 
 // Case- and diacritic-insensitive fold of `text`, as UTF-8. SQLite's LIKE is
 // already ASCII-case-insensitive on its own, so folding only matters for
@@ -48,6 +53,41 @@ std::string EscapeLikePattern(std::string_view value) {
   return escaped;
 }
 
+// Whether `sqlite_error_code` means the file is not a usable database any
+// more, as opposed to something transient (busy, locked, out of memory) or
+// unrecognised.
+//
+// This deliberately does NOT call sql::IsErrorCatastrophic(). That function
+// is written for Chromium's error-callback path, where SQLite has already
+// narrowed which codes can arrive by the time the callback runs. Read
+// directly (sql/error_delegate_util.cc), it NOTREACHED()s — unconditionally
+// fatal in this checkout — on SQLITE_OK/SQLITE_ROW/SQLITE_DONE,
+// SQLITE_LOCKED, SQLITE_NOMEM, SQLITE_INTERRUPT, SQLITE_NOTFOUND,
+// SQLITE_MISUSE, SQLITE_AUTH, SQLITE_RANGE, and any code it does not
+// recognise. Open() below is a general path, not an error callback, and can
+// genuinely surface every one of those from a concurrent connection, a
+// low-memory device, or an unfamiliar SQLite build. So classify here
+// instead: name only what actually means "this file is not a database any
+// more," and fail open — return false — for everything else, including
+// values this function has never seen.
+bool IsFileUnusable(int sqlite_error_code) {
+  // The primary result code lives in the low 8 bits; an extended code packs
+  // detail into the high bits, e.g. SQLITE_CORRUPT_VTAB is
+  // SQLITE_CORRUPT | (1 << 8) (third_party/sqlite/src/amalgamation/sqlite3.h,
+  // "extended result code" definitions starting at line 485). This matters
+  // here because sql::Database::GetErrorCode() returns
+  // sqlite3_extended_errcode(), an extended code (sql/database.cc), not the
+  // bare primary one — so the mask below is required, not defensive
+  // decoration.
+  switch (sqlite_error_code & 0xff) {
+    case kSqliteCorrupt:
+    case kSqliteNotADatabase:
+      return true;
+    default:
+      return false;
+  }
+}
+
 }  // namespace
 
 // Exclusive locking (Chromium's default) has a second ArchiveStore opening
@@ -63,19 +103,26 @@ ArchiveStore::ArchiveStore()
 
 ArchiveStore::~ArchiveStore() = default;
 
+// static
+bool ArchiveStore::IsFileUnusableForTesting(int sqlite_error_code) {
+  return IsFileUnusable(sqlite_error_code);
+}
+
 bool ArchiveStore::Open(const base::FilePath& path) {
   int sqlite_error = kSqliteOk;
   if (db_.Open(path) && InitSchema(&sqlite_error)) {
     return true;
   }
   // Classify on the error InitSchema() itself captured, not on a fresh
-  // db_.GetErrorCode() read. InitSchema()'s local sql::Transaction goes out
-  // of scope the moment it returns false, which runs an implicit ROLLBACK —
-  // and a *successful* ROLLBACK overwrites the connection's error code with
-  // SQLITE_OK. Re-reading the connection here would then see SQLITE_OK for a
-  // genuine mid-schema failure (e.g. a CREATE TABLE losing a write-lock
-  // race) and hand it to IsErrorCatastrophic(), which NOTREACHED()s on
-  // SQLITE_OK — crashing the browser instead of recovering.
+  // db_.GetErrorCode() read. By the time InitSchema() returns, its local
+  // sql::Transaction has already rolled back — either via
+  // sql::Database::CommitTransaction's own internal recovery when a COMMIT
+  // fails with the transaction still open, or via sql::Transaction's
+  // destructor unwinding an abandoned Begin() — and a *successful* ROLLBACK
+  // resets the connection's error code to SQLITE_OK. Re-reading the
+  // connection here would then see SQLITE_OK for a genuine mid-schema
+  // failure (e.g. a CREATE TABLE losing a write-lock race), which is exactly
+  // the value IsFileUnusable() must never be tricked by.
   //
   // sqlite_error is only left at kSqliteOk when InitSchema() was never
   // reached at all, i.e. db_.Open() itself failed outright; in that case
@@ -84,15 +131,12 @@ bool ArchiveStore::Open(const base::FilePath& path) {
   if (sqlite_error == kSqliteOk) {
     sqlite_error = db_.GetErrorCode();
   }
-  // Belt and braces: never hand SQLITE_OK to IsErrorCatastrophic(). If the
-  // captured code still comes back SQLITE_OK somehow, treat it as
-  // non-catastrophic and fail open rather than crash.
-  if (sqlite_error == kSqliteOk || !sql::IsErrorCatastrophic(sqlite_error)) {
-    // A concurrent connection surfaces here as a bare SQLITE_BUSY or
-    // SQLITE_LOCKED (sql::Database runs with a zero busy timeout), not
-    // corruption. Never destroy the user's archive over lock contention:
-    // fail open instead, so the window still opens with no archive for this
-    // session (list and search simply come back empty).
+  if (!IsFileUnusable(sqlite_error)) {
+    // Busy, locked, out of memory, an sqlite code this build has never
+    // produced before, or a laundered SQLITE_OK — none of that means the
+    // file is corrupt. Never destroy the user's archive over something that
+    // might be transient: fail open instead, so the window still opens with
+    // no archive for this session (list and search simply come back empty).
     db_.Close();
     return false;
   }
@@ -164,6 +208,22 @@ bool ArchiveStore::InitSchema(int* sqlite_error) {
     return false;
   }
   if (!transaction.Commit()) {
+    // Unlike the branches above, this capture is NOT known to be accurate.
+    // sql::Transaction::Commit() calls sql::Database::CommitTransaction(),
+    // which — when the COMMIT statement itself fails with the transaction
+    // still open — runs its own internal DoRollback() and returns false, all
+    // before this call returns control to us (sql/database.cc:1424-1486). A
+    // successful ROLLBACK there resets the connection's error code to
+    // SQLITE_OK, so by the time we read it below, it has already been
+    // laundered exactly like the destructor-driven rollback that motivated
+    // capturing at all. There is no seam in the public
+    // sql::Transaction/sql::Database API to observe the code between
+    // commit.Run() failing and that internal rollback running — both happen
+    // inside one opaque call. In practice this narrows to SQLITE_BUSY (the
+    // COMMIT itself losing a lock race), which IsFileUnusable() treats as
+    // non-catastrophic regardless of whether the real code or a laundered
+    // SQLITE_OK is what we see — so the outcome (fail open, leave the file
+    // alone) is correct even though this specific capture is not trustworthy.
     *sqlite_error = db_.GetErrorCode();
     return false;
   }

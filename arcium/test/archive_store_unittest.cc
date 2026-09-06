@@ -12,6 +12,7 @@
 #include "base/test/task_environment.h"
 #include "sql/database.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/sqlite/sqlite3.h"
 
 namespace arcium {
 namespace {
@@ -163,6 +164,24 @@ TEST_F(ArchiveStoreTest, ASchemaFailureInsideTheTransactionDoesNotCrash) {
   if (opened) {
     EXPECT_TRUE(store.ListRecent(space_, 10).empty());
   }
+}
+
+TEST_F(ArchiveStoreTest, OnlyCorruptionCodesRazeTheFile) {
+  // Every one of these previously reached a NOTREACHED() inside
+  // sql::IsErrorCatastrophic and crashed the browser.
+  EXPECT_FALSE(ArchiveStore::IsFileUnusableForTesting(SQLITE_BUSY));
+  EXPECT_FALSE(ArchiveStore::IsFileUnusableForTesting(SQLITE_LOCKED));
+  EXPECT_FALSE(ArchiveStore::IsFileUnusableForTesting(SQLITE_NOMEM));
+  EXPECT_FALSE(ArchiveStore::IsFileUnusableForTesting(SQLITE_OK));
+  EXPECT_FALSE(ArchiveStore::IsFileUnusableForTesting(9999));  // Unknown code.
+  EXPECT_TRUE(ArchiveStore::IsFileUnusableForTesting(SQLITE_CORRUPT));
+  EXPECT_TRUE(ArchiveStore::IsFileUnusableForTesting(SQLITE_NOTADB));
+  // Extended result codes pack detail into the high bits (e.g.
+  // SQLITE_CORRUPT_VTAB == SQLITE_CORRUPT | (1 << 8)), and
+  // sql::Database::GetErrorCode() returns exactly that extended form. Pin
+  // that the classifier masks it down to the primary code rather than
+  // missing it as an "unknown" value.
+  EXPECT_TRUE(ArchiveStore::IsFileUnusableForTesting(SQLITE_CORRUPT_VTAB));
 }
 
 TEST_F(ArchiveStoreTest, OpeningACorruptFileStartsAFreshDatabase) {
