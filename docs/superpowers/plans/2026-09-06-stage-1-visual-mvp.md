@@ -813,6 +813,7 @@ cat > arcium/ui/browser/sidebar_tab_model.cc <<'EOF'
 
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/tabs/public/tab_alert.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 
@@ -943,7 +944,7 @@ open(p, 'w').write(s)
 EOF
 ```
 
-Names to confirm against the tree while implementing (they moved recently and may move again): `TabStripModel::GetTabAtIndex`, `tabs::TabNetworkState`, `tabs::TabAlert::kAudioPlaying` and `kAudioMuting` (in `chrome/browser/ui/tabs/alert/tab_alert.h`), `TabStripModelDelegate::AddTabAt`, and the `TabCloseTypes` constants. Use `git grep -n` in the checkout for each and adjust the include or name. If `TabChangedAt`'s signature differs, copy it from `tab_strip_model_observer.h`.
+Verified at 152.0.7977.83: `TabStripModel::GetTabAtIndex(int)` (tab_strip_model.h:895), `TabStripModelDelegate::AddTabAt(url, index, foreground, group = nullopt)`, `tabs::TabAlert::kAudioPlaying` and `kAudioMuting` in `components/tabs/public/tab_alert.h`. Still to confirm while implementing: `tabs::TabNetworkState` header and the `TabCloseTypes` constants. Use `git grep -n` in the checkout for each and adjust the include or name. If `TabChangedAt`'s signature differs, copy it from `tab_strip_model_observer.h`.
 
 - [ ] **Step 5: Build and run the tests**
 
@@ -3086,6 +3087,7 @@ cat > arcium/ui/browser/browser_sidebar_controller.h <<'EOF'
 #include "ui/gfx/geometry/rect.h"
 
 class BrowserView;
+class ContentsContainerView;
 struct BrowserLayoutParams;
 
 namespace arcium {
@@ -3123,7 +3125,9 @@ class BrowserSidebarController {
   std::unique_ptr<SidebarTabModel> model_;
   raw_ptr<SidebarView> view_ = nullptr;
   bool visible_ = true;
-  int caption_button_width_ = 0;
+  int caption_button_width_ = -1;
+  float applied_corner_radius_ = -1.f;
+  raw_ptr<ContentsContainerView> last_container_ = nullptr;
 };
 
 }  // namespace arcium
@@ -3194,9 +3198,15 @@ void BrowserSidebarController::AdjustLayoutParams(BrowserLayoutParams& params) {
   // Remember the frame's caption-button area so the nav row leaves room for
   // the traffic lights, then take the sidebar column off the leading edge and
   // inset the rest so the page floats on the tinted frame.
-  caption_button_width_ = static_cast<int>(
+  // GetBrowserLayoutParams is called several times per layout pass, so only
+  // touch the view when the value changes; SetCaptionButtonWidth invalidates
+  // layout and would otherwise loop.
+  const int caption = static_cast<int>(
       params.leading_exclusion.ContentWithPadding().width());
-  view_->SetCaptionButtonWidth(caption_button_width_);
+  if (caption != caption_button_width_) {
+    caption_button_width_ = caption;
+    view_->SetCaptionButtonWidth(caption_button_width_);
+  }
   params.InsetHorizontal(width(), /*leading=*/true);
   params.leading_exclusion = BrowserLayoutExclusionArea();
   if (visible_) {
@@ -3220,6 +3230,11 @@ void BrowserSidebarController::UpdateContentCorners() {
     return;
   }
   const float r = visible_ ? metrics::kContentCornerRadius : 0.f;
+  if (r == applied_corner_radius_ && container == last_container_) {
+    return;  // Called on every layout; do not re-apply unchanged radii.
+  }
+  applied_corner_radius_ = r;
+  last_container_ = container;
   container->SetBorderRoundedCornersFrom(gfx::RoundedCornersF(r, r, r, r));
 }
 
@@ -3368,7 +3383,9 @@ Decide from the outcome:
 - Works: keep it, delete nothing.
 - Popup anchors to the wrong place: `OmniboxPopupView` anchors to the location bar's bounds in screen coordinates, so it should follow; if it clips, the pill's width is the fix (allow the popup to overhang via `LocationBarView::GetOmniboxPopupView` anchor width; note the file and line).
 - DCHECK in `ToolbarView` layout or accessibility about a missing child: add a guard hook in that `ToolbarView` method (`if (!location_bar_view_->parent() == this) return;` style), record as a second small patch `0055-toolbar-hosted-location-bar.patch`.
-- Fundamentally broken (the bar depends on `ToolbarView` as parent for delegate calls that crash): fall back. `UrlPillView` keeps the placeholder, shows `url_formatter::FormatUrlForSecurityDisplay(url)` of the active row, and `edit_url` opens the quick entry from Task 12 pre-filled with the current URL. Record the finding in `docs/stage1-findings.md`.
+- Fundamentally broken (the bar depends on `ToolbarView` as parent for delegate calls that crash): fall back. `UrlPillView` keeps the placeholder, shows `url_formatter::FormatUrlForSecurityDisplay(url)` of the active row, and `edit_url` opens the quick entry from Task 11 pre-filled with the current URL. Cmd+L then needs a hook too: `BrowserView::SetFocusToLocationBar` returns early when `IsLocationBarVisible()` is false, which it is with the toolbar hidden, so add `if (arcium_sidebar_ && arcium_sidebar_->HandleFocusLocation()) return;` at its top (patch 0050) and have the controller open the quick entry. Record the finding in `docs/stage1-findings.md`.
+
+Why reparenting is expected to work for Cmd+L: `IsLocationBarVisible()` (browser_view.cc) is `SupportsWindowFeature(kFeatureLocationBar) && GetLocationBar()->IsVisible()`, and `views::View::IsVisible()` walks the parent chain, so a location bar inside the visible sidebar reports visible even though the toolbar does not.
 
 - [ ] **Step 2: Implement the chosen path, add the hook if used**
 
