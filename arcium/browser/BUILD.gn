@@ -1,0 +1,12 @@
+# Browser-process services for the Arcium model: persistence, binding to live
+# tabs, archiving and search. Depends on the model but not on Views.
+source_set("browser") {
+  sources = [
+    "model_store.cc",
+    "model_store.h",
+  ]
+  deps = [
+    "//arcium/browser/model",
+    "//base",
+  ]
+}
