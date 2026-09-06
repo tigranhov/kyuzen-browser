@@ -17,4 +17,8 @@ bool IsSidebarEnabled() {
   return base::FeatureList::IsEnabled(kArciumSidebar);
 }
 
+bool UsesImmersiveFullscreen() {
+  return !IsSidebarEnabled();
+}
+
 }  // namespace arcium::features

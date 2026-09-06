@@ -26,6 +26,12 @@ inline constexpr char kSnapshotDelaySwitch[] = "arcium-snapshot-delay";
 // True when the sidebar layout should be used for normal tabbed windows.
 bool IsSidebarEnabled();
 
+// macOS immersive fullscreen moves top chrome into a separate overlay window.
+// Arcium hides the tab strip and toolbar, so that overlay would be zero-sized,
+// which is unsupported (it DCHECKs). Plain fullscreen keeps the sidebar and
+// gives the page the rest of the screen.
+bool UsesImmersiveFullscreen();
+
 }  // namespace arcium::features
 
 #endif  // ARCIUM_COMMON_ARCIUM_FEATURES_H_

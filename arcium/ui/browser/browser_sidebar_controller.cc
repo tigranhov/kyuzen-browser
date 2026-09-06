@@ -236,7 +236,7 @@ void BrowserSidebarController::MaybeScheduleSnapshot() {
 }
 
 void BrowserSidebarController::WriteSnapshot(const base::FilePath& path) {
-  LogViewHierarchy(view_);
+  LogViewHierarchy(browser_view_);
   WriteViewSnapshot(browser_view_, path, /*scale=*/2.f, base::DoNothing());
 }
 

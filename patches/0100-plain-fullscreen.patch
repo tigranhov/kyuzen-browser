@@ -1,0 +1,41 @@
+Seam: WindowFeatureController::UsesImmersiveFullscreenMode (macOS).
+Why: immersive fullscreen moves top chrome into an overlay window. Arcium hides
+     the tab strip and toolbar, so that overlay is zero-sized, which macOS does
+     not support (DCHECK in NativeWidgetMacNSWindowHost::SetSize). Plain
+     fullscreen keeps the sidebar and gives the page the rest of the screen.
+Delegates to: arcium::features::UsesImmersiveFullscreen
+
+diff --git a/chrome/browser/ui/window_feature_controller/BUILD.gn b/chrome/browser/ui/window_feature_controller/BUILD.gn
+index 8fe49bb5e6..be081f7676 100644
+--- a/chrome/browser/ui/window_feature_controller/BUILD.gn
++++ b/chrome/browser/ui/window_feature_controller/BUILD.gn
+@@ -17,6 +17,7 @@ source_set("window_feature_controller") {
+   ]
+ 
+   deps = [
++    "//arcium/common",
+     "//chrome/browser/ui/fullscreen",
+     "//chrome/browser/ui/web_applications",
+   ]
+diff --git a/chrome/browser/ui/window_feature_controller/window_feature_controller.cc b/chrome/browser/ui/window_feature_controller/window_feature_controller.cc
+index ec7bd3ea6c..7fc61fb8e8 100644
+--- a/chrome/browser/ui/window_feature_controller/window_feature_controller.cc
++++ b/chrome/browser/ui/window_feature_controller/window_feature_controller.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/window_feature_controller/window_feature_controller.h"
++#include "arcium/common/arcium_features.h"
+ 
+ #include "base/check.h"
+ #include "base/check_deref.h"
+@@ -63,6 +64,9 @@ bool WindowFeatureController::UsesImmersiveFullscreenMode() const {
+   const bool is_pwa = app_controller_ != nullptr;
+   const bool is_tabbed_window =
+       CanSupportWindowFeature(WindowFeature::kFeatureTabStrip);
++  if (is_tabbed_window && !is_pwa && !arcium::features::UsesImmersiveFullscreen()) {
++    return false;
++  }
+   return is_pwa || is_tabbed_window;
+ }
+ 
