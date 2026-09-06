@@ -1,0 +1,36 @@
+Seam: components/embedder_support/user_agent_utils.cc
+Why: Client-hints brand Google Chrome so the Web Store treats Arcium as Chrome.
+Delegates to: arcium/common/branding_hooks.cc
+
+diff --git a/components/embedder_support/BUILD.gn b/components/embedder_support/BUILD.gn
+index 847ba42327..c9944f8fb9 100644
+--- a/components/embedder_support/BUILD.gn
++++ b/components/embedder_support/BUILD.gn
+@@ -57,6 +57,7 @@ static_library("user_agent") {
+ 
+   deps = [
+     ":embedder_support",
++    "//arcium/common",
+     "//build:branding_buildflags",
+     "//components/policy/core/common",
+     "//components/prefs",
+diff --git a/components/embedder_support/user_agent_utils.cc b/components/embedder_support/user_agent_utils.cc
+index 3f87ec84fb..3d7d69439d 100644
+--- a/components/embedder_support/user_agent_utils.cc
++++ b/components/embedder_support/user_agent_utils.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "components/embedder_support/user_agent_utils.h"
++#include "arcium/common/branding_hooks.h"
+ 
+ #include <stdint.h>
+ 
+@@ -166,6 +167,7 @@ const blink::UserAgentBrandList GetUserAgentBrandList(
+ #if !BUILDFLAG(CHROMIUM_BRANDING)
+   brand = version_info::GetProductName();
+ #endif
++  brand = arcium::UserAgentBrand();
+ 
+   std::string brand_version =
+       output_version_type == blink::UserAgentBrandVersionType::kFullVersion

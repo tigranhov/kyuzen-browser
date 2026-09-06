@@ -2,6 +2,8 @@ source_set("common") {
   sources = [
     "arcium_features.cc",
     "arcium_features.h",
+    "branding_hooks.cc",
+    "branding_hooks.h",
   ]
   deps = [ "//base" ]
 }

@@ -1,0 +1,24 @@
+Seam: chrome/browser/signin/account_consistency_mode_manager.cc
+Why: Sign-in cannot work without OAuth keys; disabling it hides the controls.
+Delegates to: arcium/common/branding_hooks.cc
+
+diff --git a/chrome/browser/signin/account_consistency_mode_manager.cc b/chrome/browser/signin/account_consistency_mode_manager.cc
+index f11db47c92..c03499a756 100644
+--- a/chrome/browser/signin/account_consistency_mode_manager.cc
++++ b/chrome/browser/signin/account_consistency_mode_manager.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/signin/account_consistency_mode_manager.h"
++#include "arcium/common/branding_hooks.h"
+ 
+ #include <string>
+ 
+@@ -131,6 +132,7 @@ AccountConsistencyModeManager::AccountConsistencyModeManager(Profile* profile)
+     signin_allowed = false;
+   }
+ 
++  signin_allowed = signin_allowed && arcium::IsSigninAllowed();
+   prefs->SetBoolean(prefs::kSigninAllowed, signin_allowed);
+ 
+   UMA_HISTOGRAM_BOOLEAN("Signin.SigninAllowed", signin_allowed);

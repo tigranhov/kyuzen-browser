@@ -1,0 +1,26 @@
+Seam: chrome/browser/ui/startup/infobar_utils.cc
+Why: Arcium ships without Google API keys; the infobar is expected noise.
+Delegates to: arcium/common/branding_hooks.cc
+
+diff --git a/chrome/browser/ui/startup/infobar_utils.cc b/chrome/browser/ui/startup/infobar_utils.cc
+index 4907b9a951..bb91cbdc76 100644
+--- a/chrome/browser/ui/startup/infobar_utils.cc
++++ b/chrome/browser/ui/startup/infobar_utils.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/startup/infobar_utils.h"
++#include "arcium/common/branding_hooks.h"
+ 
+ #include "base/command_line.h"
+ #include "base/metrics/histogram_functions.h"
+@@ -185,7 +186,8 @@ void AddInfoBarsIfNecessary(BrowserWindowInterface* browser,
+   infobars::ContentInfoBarManager* infobar_manager =
+       infobars::ContentInfoBarManager::FromWebContents(web_contents);
+ 
+-  if (!google_apis::HasAPIKeyConfigured()) {
++  if (!google_apis::HasAPIKeyConfigured() &&
++      arcium::ShouldShowGoogleApiKeysInfoBar()) {
+     GoogleApiKeysInfoBarDelegate::Create(infobar_manager);
+   }
+ 
