@@ -1,0 +1,26 @@
+Seam: BrowserViewLayoutImpl::Layout after ApplyLayout.
+Why: the sidebar is a BrowserView child the layout does not know; position it.
+Delegates to: BrowserSidebarController::LayoutSidebar
+
+diff --git a/chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc
+index f789176b17..d4e17953aa 100644
+--- a/chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc
++++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/views/frame/layout/browser_view_layout_impl.h"
++#include "chrome/browser/ui/views/frame/browser_view.h"
+ 
+ #include "base/functional/bind.h"
+ #include "build/build_config.h"
+@@ -272,6 +273,9 @@ void BrowserViewLayoutImpl::Layout(views::View* host) {
+   std::move(layout).ApplyLayout(host, [this](views::View* view, bool visible) {
+     SetViewVisibility(view, visible);
+   });
++  if (auto* sidebar = static_cast<BrowserView*>(host)->arcium_sidebar()) {
++    sidebar->LayoutSidebar(host->GetLocalBounds());
++  }
+ 
+   // The normal clipping created by `View::Paint()` may not cover the bottom of
+   // the TopContainerView at certain scale factor because both of the position

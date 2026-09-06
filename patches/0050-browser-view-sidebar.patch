@@ -1,0 +1,79 @@
+Seam: BrowserView::InitViews (twice), ShouldDrawTabStrip, NonClientHitTest (mac).
+Why: create the sidebar controller; move the location bar into the sidebar after
+     the toolbar exists; hide the tab strip; drag the window from the sidebar.
+Delegates to: arcium/ui/browser/browser_sidebar_controller.cc
+
+diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
+index cfa9bbe1e0..f8108b3cfd 100644
+--- a/chrome/browser/ui/views/frame/browser_view.cc
++++ b/chrome/browser/ui/views/frame/browser_view.cc
+@@ -946,6 +946,7 @@ BrowserView::BrowserView(Browser* browser)
+ 
+   contents_container_ = AddChildView(std::move(contents_container));
+   set_contents_view(contents_container_);
++  arcium_sidebar_ = arcium::BrowserSidebarController::MaybeCreate(this);
+ 
+   // InfoBarContainer needs to be added as a child here for drop-shadow, but
+   // needs to come after toolbar in focus order (see EnsureFocusOrder()).
+@@ -1377,6 +1378,9 @@ bool BrowserView::ShouldDrawTabStrokes() const {
+ }
+ 
+ bool BrowserView::ShouldDrawTabStrip() const {
++  if (arcium_sidebar_) {
++    return false;
++  }
+   // Return false if this window does not normally display a tabstrip or if the
+   // tabstrip is currently hidden, e.g. because we're in fullscreen.
+   if (!browser_->SupportsWindowFeature(
+@@ -4570,6 +4574,10 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
+       return HTCLIENT;
+     }
+ 
++    if (arcium_sidebar_ &&
++        arcium_sidebar_->IsPositionInWindowCaption(point)) {
++      return HTCAPTION;
++    }
+     // The vertical tabstrip is not part of the overlay in immersive mode and
+     // must be tested separately.
+     if (vertical_tab_strip_region_view_ &&
+@@ -4934,6 +4942,9 @@ void BrowserView::AddedToWidget() {
+ #endif
+ 
+   toolbar_->Init();
++  if (arcium_sidebar_) {
++    arcium_sidebar_->HostLocationBar();
++  }
+ 
+   if (omnibox::IsWebUIOmniboxInBrowserViewEnabled()) {
+     // When the WebUI Omnibox is embedded directly in the `BrowserView` (instead
+diff --git a/chrome/browser/ui/views/frame/browser_view.h b/chrome/browser/ui/views/frame/browser_view.h
+index a4e53aca6a..8c74e599f6 100644
+--- a/chrome/browser/ui/views/frame/browser_view.h
++++ b/chrome/browser/ui/views/frame/browser_view.h
+@@ -6,6 +6,7 @@
+ #define CHROME_BROWSER_UI_VIEWS_FRAME_BROWSER_VIEW_H_
+ 
+ #include <map>
++#include "arcium/ui/browser/browser_sidebar_controller.h"
+ #include <memory>
+ #include <optional>
+ #include <string>
+@@ -624,6 +625,9 @@ class BrowserView : public BrowserWindow,
+ 
+   BookmarkBarView* GetBookmarkBarView() const;
+   LocationBarView* GetLocationBarView() const;
++  arcium::BrowserSidebarController* arcium_sidebar() {
++    return arcium_sidebar_.get();
++  }
+ 
+   void ShowIncognitoClearBrowsingDataDialog() override;
+ 
+@@ -1166,6 +1170,8 @@ class BrowserView : public BrowserWindow,
+   std::optional<size_t> horizontal_tab_strip_region_insertion_index_;
+   // The Toolbar containing the navigation buttons, menus and the address bar.
+   raw_ptr<ToolbarView> toolbar_ = nullptr;
++  // Arcium: sidebar-first layout. Null when the feature is off.
++  std::unique_ptr<arcium::BrowserSidebarController> arcium_sidebar_;
+ 
+   // The OverlayView for the widget, which is used to host `top_container_`
+   // during immersive reveal.

@@ -1,0 +1,27 @@
+Seam: BrowserCommandController::ExecuteCommandWithDisposition, IDC_NEW_TAB.
+Why: Cmd+T opens the floating quick entry instead of a bare new tab.
+Delegates to: arcium::HandleNewTabCommand
+
+diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
+index 2d86241e35..eda5e4cda6 100644
+--- a/chrome/browser/ui/browser_command_controller.cc
++++ b/chrome/browser/ui/browser_command_controller.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/browser_command_controller.h"
++#include "arcium/ui/browser/browser_sidebar_controller.h"
+ 
+ #include <stddef.h>
+ 
+@@ -730,7 +731,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+       CloseWindow(browser_);
+       break;
+     case IDC_NEW_TAB: {
+-      NewTab(browser_, NewTabTypes::kNewTabCommand);
++      if (!arcium::HandleNewTabCommand(browser_)) {
++        NewTab(browser_, NewTabTypes::kNewTabCommand);
++      }
+       break;
+     }
+     case IDC_NEW_TAB_TO_RIGHT: {

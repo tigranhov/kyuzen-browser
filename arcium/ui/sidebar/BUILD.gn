@@ -39,6 +39,8 @@ source_set("sidebar") {
     "tint_background.h",
     "url_pill_view.cc",
     "url_pill_view.h",
+    "view_snapshot.cc",
+    "view_snapshot.h",
   ]
   sources += get_target_outputs(":sidebar_icons")
   public_deps = [
@@ -53,7 +55,9 @@ source_set("sidebar") {
     "//cc/paint",
     "//components/vector_icons",
     "//skia",
+    "//ui/compositor",
     "//ui/gfx",
+    "//ui/gfx/codec",
     "//ui/menus",
   ]
 }

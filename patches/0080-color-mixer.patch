@@ -1,0 +1,36 @@
+Seam: chrome/browser/ui/color/chrome_color_mixers.cc, AddChromeColorMixers.
+Why: Arcium colour ids must resolve in every browser ColorProvider.
+Delegates to: arcium/ui/sidebar/sidebar_colors.cc
+
+diff --git a/chrome/browser/ui/color/BUILD.gn b/chrome/browser/ui/color/BUILD.gn
+index bc471f6f7d..8d1bbd8e17 100644
+--- a/chrome/browser/ui/color/BUILD.gn
++++ b/chrome/browser/ui/color/BUILD.gn
+@@ -50,6 +50,7 @@ source_set("mixers") {
+   configs += [ "//build/config/compiler:wexit_time_destructors" ]
+ 
+   deps = [
++    "//arcium/ui/sidebar",
+     ":color_headers",
+     "//build:branding_buildflags",
+     "//chrome/app/theme:theme_resources",
+diff --git a/chrome/browser/ui/color/chrome_color_mixers.cc b/chrome/browser/ui/color/chrome_color_mixers.cc
+index 9698e807b1..f2c7f10e27 100644
+--- a/chrome/browser/ui/color/chrome_color_mixers.cc
++++ b/chrome/browser/ui/color/chrome_color_mixers.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/ui/color/chrome_color_mixers.h"
++#include "arcium/ui/sidebar/sidebar_colors.h"
+ 
+ #include <memory>
+ #include <string_view>
+@@ -73,6 +74,7 @@ void AddChromeColorMixers(ui::ColorProvider* provider,
+ 
+   // Must be the last one in order to override other mixer colors.
+   AddNativeChromeColorMixer(provider, key);
++  arcium::AddArciumColorMixer(provider, key);
+ 
+   if (key.custom_theme) {
+     key.custom_theme->AddColorMixers(provider, key);

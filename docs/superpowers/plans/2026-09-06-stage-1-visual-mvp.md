@@ -26,7 +26,10 @@
 
 1. **Reuse list narrowed.** `TabIcon` and `ToolbarButton` live in `chrome/browser/ui` and would drag the whole browser into the playground binary. The sidebar draws its own favicon-plus-throbber and uses `views::ImageButton` with vector icons shipped in `arcium/ui/sidebar/icons/`. Chromium pieces reused: `tabs::TabData` (browser side only), the colour provider and mixers, `views::BubbleDialogDelegateView`, `AutocompleteClassifier` for quick-entry input.
 2. **Browser test deferred.** Building Chromium's `browser_tests` costs hours; an `arcium_browsertests` executable is set up in Stage 2 together with persistence. Stage 1 verification is `arcium_unittests` for the model plus the hand-run acceptance list and CDP checks.
-3. **No Cmd+S sidebar toggle.** Arrives with collapse in Stage 5; the toggle button in the nav row is present but only hides and shows the sidebar within the session.
+3. **Tasks 6 to 8 landed as one commit.** The components were written while the first unit-test build ran (the machine was shared with an Xcode build), then built and verified together in the playground so each commit stays buildable.
+4. **Snapshot switches instead of screen capture.** The agent cannot take screenshots (macOS screen-recording permission), so `arcium_playground --snapshot=<png>` and `Arcium --arcium-snapshot=<png>` paint the Views tree offscreen at 2x and write a PNG; web contents come out blank. `arcium/ui/sidebar/view_snapshot.cc`, no cost without the switch.
+5. **`//arcium/ui/browser` does not depend on `//chrome/browser/ui`.** GN rejects a dependency cycle even with `allow_circular_includes_from`; the target includes the headers without the dep, the Chromium pattern for such cycles.
+6. **No Cmd+S sidebar toggle.** Arrives with collapse in Stage 5; the toggle button in the nav row is present but only hides and shows the sidebar within the session.
 
 ## Patch inventory for this stage
 
@@ -38,7 +41,7 @@
 | `0020-api-keys-infobar.patch` | `chrome/browser/ui/startup/infobar_utils.cc` | Suppress the missing-API-keys infobar |
 | `0030-signin-not-allowed.patch` | `chrome/browser/signin/account_consistency_mode_manager.cc` | Sign-in disabled, which hides the settings controls |
 | `0040-ua-brand.patch` | `components/embedder_support/user_agent_utils.cc` | Client-hints brand "Google Chrome" |
-| `0050-browser-view-sidebar.patch` | `chrome/browser/ui/views/frame/browser_view.cc/.h` | Create the sidebar controller; caption hit-test; hide tab strip |
+| `0050-browser-view-sidebar.patch` | `chrome/browser/ui/views/frame/browser_view.cc/.h` | Create the sidebar controller; host the location bar after toolbar init; caption hit-test; hide tab strip |
 | `0060-layout-params-sidebar.patch` | `chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.cc` | Inset the visual client area by the sidebar width; toolbar hidden |
 | `0070-layout-sidebar-bounds.patch` | `chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc` | Position the sidebar after the proposed layout is applied |
 | `0080-color-mixer.patch` | `chrome/browser/ui/color/chrome_color_mixers.cc` | Register the Arcium colour mixer |

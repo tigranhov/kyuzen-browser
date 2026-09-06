@@ -15,6 +15,11 @@ BASE_DECLARE_FEATURE(kArciumSidebar);
 // Command line switch that turns the sidebar off for one run, for debugging.
 inline constexpr char kNoSidebarSwitch[] = "arcium-no-sidebar";
 
+// Debugging: --arcium-snapshot=<file.png> paints the first browser window's
+// Views (not the page) to a PNG a few seconds after it opens, then continues.
+// Screen capture needs a macOS permission that automated runs do not have.
+inline constexpr char kSnapshotSwitch[] = "arcium-snapshot";
+
 // True when the sidebar layout should be used for normal tabbed windows.
 bool IsSidebarEnabled();
 

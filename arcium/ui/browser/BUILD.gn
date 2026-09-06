@@ -4,6 +4,11 @@
 # both directions would be a GN dependency cycle.
 source_set("browser") {
   sources = [
+    "browser_sidebar_controller.cc",
+    "browser_sidebar_controller.h",
+    "color_ids_check.cc",
+    "quick_entry_bubble.cc",
+    "quick_entry_bubble.h",
     "sidebar_tab_model.cc",
     "sidebar_tab_model.h",
   ]
@@ -11,7 +16,12 @@ source_set("browser") {
     "//arcium/common",
     "//arcium/ui/sidebar",
     "//base",
+    "//chrome/app:command_ids",
+    "//chrome/browser/ui/color:color_headers",
+    "//components/omnibox/browser",
     "//components/tabs:public",
     "//content/public/browser",
+    "//third_party/metrics_proto",
+    "//ui/views",
   ]
 }
