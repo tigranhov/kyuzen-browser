@@ -1,0 +1,7 @@
+source_set("common") {
+  sources = [
+    "arcium_features.cc",
+    "arcium_features.h",
+  ]
+  deps = [ "//base" ]
+}

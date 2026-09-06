@@ -1,0 +1,9 @@
+# Chromium-side adapters for the Arcium sidebar. Depends on //chrome/browser/ui,
+# which depends back on this target; chrome/browser/ui/BUILD.gn allows the cycle.
+source_set("browser") {
+  sources = []
+  deps = [
+    "//arcium/common",
+    "//base",
+  ]
+}

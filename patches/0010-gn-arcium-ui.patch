@@ -1,0 +1,26 @@
+Seam: chrome/browser/ui/BUILD.gn, static_library("ui").
+Why: Arcium's browser-side adapters live in //arcium/ui/browser and include
+     browser_view.h; browser_view.cc calls into them. GN needs the cycle allowed.
+Delegates to: //arcium/ui/browser.
+
+diff --git a/chrome/browser/ui/BUILD.gn b/chrome/browser/ui/BUILD.gn
+index 4ecd2c2579..41c43e1290 100644
+--- a/chrome/browser/ui/BUILD.gn
++++ b/chrome/browser/ui/BUILD.gn
+@@ -459,6 +459,7 @@ static_library("ui") {
+   ]
+ 
+   deps = [
++    "//arcium/ui/browser",
+     ":browser_element_identifiers",
+     ":browser_otr_state",
+     ":browser_ui_prefs",
+@@ -993,6 +994,8 @@ static_library("ui") {
+   ]
+ 
+   allow_circular_includes_from = [
++    # Arcium: sidebar adapters include browser_view.h and are included by it.
++    "//arcium/ui/browser",
+     # page_load_metrics's :impl includes headers from //chrome/browser/ui that
+     # can't be split out yet.
+     "//chrome/browser/page_load_metrics:impl",
