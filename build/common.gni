@@ -2,6 +2,8 @@
 
 # Branding: chrome/app/theme/arcium is a symlink into arcium/branding (see scripts/sync).
 branding_path_component = "arcium"
+# Product strings: chrome/app/arcium_strings.grd and components/components_arcium_strings.grd (symlinks).
+branding_path_product = "arcium"
 
 # macOS toolchain: system Xcode, Apple linker on arm64 (per docs/mac_build_instructions.md).
 use_remoteexec = false

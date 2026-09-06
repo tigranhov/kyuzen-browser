@@ -25,4 +25,6 @@ ARCIUM_SYMLINKS=(
   "chrome/app/theme/default_100_percent/arcium ../../../../arcium/branding/default_100_percent"
   "chrome/app/theme/default_200_percent/arcium ../../../../arcium/branding/default_200_percent"
   "components/vector_icons/arcium ../../arcium/branding/vector_icons"
+  "chrome/app/arcium_strings.grd ../../arcium/branding/strings/arcium_strings.grd"
+  "components/components_arcium_strings.grd ../arcium/branding/strings/components_arcium_strings.grd"
 )

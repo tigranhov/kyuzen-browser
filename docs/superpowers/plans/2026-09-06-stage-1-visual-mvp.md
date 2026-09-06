@@ -33,6 +33,7 @@
 | Patch | Seam | Purpose |
 |---|---|---|
 | `0010-gn-arcium-ui.patch` | `chrome/browser/ui/BUILD.gn` | Dependency on `//arcium/ui/browser` with circular includes allowed |
+| `0015-resource-ids-arcium-strings.patch` | `tools/gritsettings/resource_ids.spec` | Message id ranges for the renamed string tables (found during Task 2: grit keys ranges by .grd path) |
 | `0020-api-keys-infobar.patch` | `chrome/browser/ui/startup/infobar_utils.cc` | Suppress the missing-API-keys infobar |
 | `0030-signin-not-allowed.patch` | `chrome/browser/signin/account_consistency_mode_manager.cc` | Sign-in disabled, which hides the settings controls |
 | `0040-ua-brand.patch` | `components/embedder_support/user_agent_utils.cc` | Client-hints brand "Google Chrome" |
@@ -42,7 +43,7 @@
 | `0080-color-mixer.patch` | `chrome/browser/ui/color/chrome_color_mixers.cc` | Register the Arcium colour mixer |
 | `0090-new-tab-quick-entry.patch` | `chrome/browser/ui/browser_command_controller.cc` | Cmd+T opens the quick entry |
 
-Product strings need no patch: `branding_path_product = "arcium"` plus two symlinked `.grd` files.
+Product strings: `branding_path_product = "arcium"` plus two symlinked `.grd` files and the id-range registration in 0015.
 
 ## File structure
 

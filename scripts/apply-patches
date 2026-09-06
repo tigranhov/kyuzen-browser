@@ -23,7 +23,7 @@ ensure_symlinks() {
   done
   for entry in "${ARCIUM_SYMLINKS[@]}"; do
     link="${entry% *}"
-    [ -e "$SRC/$link/" ] || die "symlink $link is dangling (target missing)"
+    [ -e "$SRC/$link" ] || die "symlink $link is dangling (target missing)"
   done
 }
 

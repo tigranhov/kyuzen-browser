@@ -1,0 +1,31 @@
+Seam: tools/gritsettings/resource_ids.spec, message id ranges keyed by .grd path.
+Why: branding_path_product = "arcium" selects chrome/app/arcium_strings.grd and
+     components/components_arcium_strings.grd; grit refuses a .grd it has no
+     id range for. Same ranges as the chromium/google_chrome tables.
+Delegates to: nothing; registration only.
+
+diff --git a/tools/gritsettings/resource_ids.spec b/tools/gritsettings/resource_ids.spec
+index 24ed276c40..4917ca34cf 100644
+--- a/tools/gritsettings/resource_ids.spec
++++ b/tools/gritsettings/resource_ids.spec
+@@ -41,6 +41,10 @@
+   "chrome/app/google_chrome_strings.grd": {
+     "messages": [800],
+   },
++  # Arcium: same range as the tables above; only one branding is ever built.
++  "chrome/app/arcium_strings.grd": {
++    "messages": [800],
++  },
+ 
+   # Leave lots of space for generated_resources since it has most of our
+   # strings.
+@@ -1228,6 +1232,9 @@
+   "components/components_google_chrome_strings.grd": {
+     "messages": [7020],
+   },
++  "components/components_arcium_strings.grd": {
++    "messages": [7020],
++  },
+   "components/components_locale_settings.grd": {
+     "META": {"join": 2},
+     "includes": [7040],
