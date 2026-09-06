@@ -8,3 +8,4 @@ out/
 # perf raw dumps are large; committed summaries live in docs/perf/*.md
 docs/perf/raw/
 __pycache__/
+.superpowers/
