@@ -4,9 +4,17 @@
 
 #include "arcium/ui/browser/sidebar_tab_model.h"
 
+#include <utility>
+
+#include "arcium/browser/model/tab_entry.h"
+#include "arcium/ui/sidebar/sidebar_colors.h"
+#include "arcium/ui/sidebar/sidebar_metrics.h"
+#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chrome/browser/tab_list/tab_removed_reason.h"
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -14,23 +22,44 @@
 #include "components/tabs/public/tab_alert.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/tabs/public/tab_network_state.h"
+#include "components/vector_icons/vector_icons.h"
+#include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/page_transition_types.h"
 
 namespace arcium {
 
 namespace {
 
-constexpr uint32_t kCloseTypes =
-    TabCloseTypes::CLOSE_USER_GESTURE | TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB;
+constexpr uint32_t kCloseTypes = TabCloseTypes::CLOSE_USER_GESTURE |
+                                 TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB;
+
+// A cold entry has no tab and so no favicon; the globe stands in until the
+// entry is warmed. Favicons for cold entries are Stage 6 work.
+ui::ImageModel ColdFavicon() {
+  return ui::ImageModel::FromVectorIcon(
+      vector_icons::kGlobeIcon, kColorArciumRowText, metrics::kFaviconSize);
+}
+
+SidebarSection SectionForKind(EntryKind kind) {
+  return kind == EntryKind::kFavorite ? SidebarSection::kFavorites
+                                      : SidebarSection::kPinned;
+}
 
 }  // namespace
 
-SidebarTabModel::SidebarTabModel(TabStripModel* tab_strip_model)
-    : tab_strip_model_(tab_strip_model) {
+SidebarTabModel::SidebarTabModel(TabStripModel* tab_strip_model,
+                                 ArciumModel* arcium_model,
+                                 TabBinding* binding)
+    : tab_strip_model_(tab_strip_model),
+      arcium_model_(arcium_model),
+      binding_(binding) {
   tab_strip_model_->AddObserver(this);
+  arcium_model_->AddObserver(this);
 }
 
 SidebarTabModel::~SidebarTabModel() {
+  arcium_model_->RemoveObserver(this);
   if (tab_strip_model_) {
     tab_strip_model_->RemoveObserver(this);
   }
@@ -41,26 +70,93 @@ std::vector<SidebarRow> SidebarTabModel::rows() const {
   if (!tab_strip_model_) {
     return rows;
   }
+  const SpaceId space = arcium_model_->default_space_id();
+  for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
+    for (const TabEntry* entry : arcium_model_->EntriesForKind(space, kind)) {
+      rows.push_back(RowForEntry(*entry));
+    }
+  }
+  // Whatever no entry claims is Today, in strip order.
   const int count = tab_strip_model_->count();
-  rows.reserve(count);
   for (int i = 0; i < count; ++i) {
     tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(i);
-    const tabs::TabData data = tabs::TabData::FromTabInterface(tab);
-    SidebarRow row;
-    row.tab_index = i;
-    row.section = tab_strip_model_->IsTabPinned(i) ? SidebarSection::kPinned
-                                                   : SidebarSection::kToday;
-    row.title = data.title;
-    row.favicon = data.favicon;
-    row.is_active = i == tab_strip_model_->active_index();
-    row.is_loading = data.network_state != tabs::TabNetworkState::kNone &&
-                     !data.should_hide_throbber;
-    row.is_audible = data.alert_state == tabs::TabAlert::kAudioPlaying;
-    row.is_muted = data.alert_state == tabs::TabAlert::kAudioMuting;
-    row.url = data.visible_url;
-    rows.push_back(std::move(row));
+    if (binding_->IsBound(tab->GetHandle())) {
+      continue;
+    }
+    rows.push_back(RowForTab(i, tab));
   }
   return rows;
+}
+
+tabs::TabInterface* SidebarTabModel::LiveTabForEntry(EntryId id) const {
+  if (!tab_strip_model_) {
+    return nullptr;
+  }
+  const std::optional<tabs::TabHandle> handle = binding_->TabForEntry(id);
+  if (!handle.has_value()) {
+    return nullptr;
+  }
+  // The handle is weak, so a closed tab reads as null. A tab living in
+  // another window's strip is not this window's to draw, so it reads cold
+  // here too.
+  tabs::TabInterface* tab = handle->Get();
+  if (!tab || tab_strip_model_->GetIndexOfTab(tab) == TabStripModel::kNoTab) {
+    return nullptr;
+  }
+  return tab;
+}
+
+SidebarRow SidebarTabModel::RowForEntry(const TabEntry& entry) const {
+  SidebarRow row;
+  row.entry_id = entry.id;
+  row.section = SectionForKind(entry.kind);
+  row.folder_id = entry.folder_id;
+
+  tabs::TabInterface* tab = LiveTabForEntry(entry.id);
+  if (!tab) {
+    row.is_cold = true;
+    row.tab_index = -1;
+    row.title = entry.DisplayTitle();
+    if (row.title.empty()) {
+      row.title = base::UTF8ToUTF16(entry.url.host());
+    }
+    row.favicon = ColdFavicon();
+    row.url = entry.url;
+    return row;
+  }
+
+  const tabs::TabData data = tabs::TabData::FromTabInterface(tab);
+  row.tab_index = tab_strip_model_->GetIndexOfTab(tab);
+  // A rename wins over the live page title for ever; otherwise the tab is
+  // the truth, exactly as Stage 1 had it.
+  row.title = entry.custom_title.empty() ? data.title : entry.custom_title;
+  row.favicon = data.favicon;
+  row.is_active = row.tab_index == tab_strip_model_->active_index();
+  row.is_loading = data.network_state != tabs::TabNetworkState::kNone &&
+                   !data.should_hide_throbber;
+  row.is_audible = data.alert_state == tabs::TabAlert::kAudioPlaying;
+  row.is_muted = data.alert_state == tabs::TabAlert::kAudioMuting;
+  row.url = data.visible_url;
+  row.can_return_to_pinned_url =
+      entry.kind == EntryKind::kPinned && data.visible_url != entry.url;
+  return row;
+}
+
+SidebarRow SidebarTabModel::RowForTab(int index,
+                                      tabs::TabInterface* tab) const {
+  const tabs::TabData data = tabs::TabData::FromTabInterface(tab);
+  SidebarRow row;
+  row.tab_index = index;
+  row.section = SidebarSection::kToday;
+  row.title = data.title;
+  row.favicon = data.favicon;
+  row.is_active = index == tab_strip_model_->active_index();
+  row.is_loading = data.network_state != tabs::TabNetworkState::kNone &&
+                   !data.should_hide_throbber;
+  row.is_audible = data.alert_state == tabs::TabAlert::kAudioPlaying;
+  row.is_muted = data.alert_state == tabs::TabAlert::kAudioMuting;
+  row.url = data.visible_url;
+  return row;
 }
 
 void SidebarTabModel::ActivateTab(int tab_index) {
@@ -90,18 +186,101 @@ void SidebarTabModel::NewTab() {
 }
 
 void SidebarTabModel::ClearToday() {
-  // Close from the end so indices stay valid; pinned tabs are always first.
-  for (int i = tab_strip_model_->count() - 1;
-       i >= tab_strip_model_->IndexOfFirstNonPinnedTab(); --i) {
-    tab_strip_model_->CloseWebContentsAt(i, kCloseTypes);
+  // Close from the end so indices stay valid. A tab an entry claims is not a
+  // Today tab, whatever Chromium thinks of its pinned state.
+  for (int i = tab_strip_model_->count() - 1; i >= 0; --i) {
+    if (!binding_->IsBound(tab_strip_model_->GetTabAtIndex(i)->GetHandle())) {
+      tab_strip_model_->CloseWebContentsAt(i, kCloseTypes);
+    }
   }
 }
 
-void SidebarTabModel::AddObserver(Observer* observer) {
+void SidebarTabModel::AddEntryForTab(int tab_index, EntryKind kind) {
+  if (tab_index < 0 || tab_index >= tab_strip_model_->count()) {
+    return;
+  }
+  tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(tab_index);
+  const tabs::TabData data = tabs::TabData::FromTabInterface(tab);
+  // Deliberately not TabStripModel::SetTabPinned: a Chromium pinned tab is
+  // always live, which is precisely what a cold entry must not be.
+  const EntryId id =
+      arcium_model_->AddEntry(kind, data.visible_url, data.title);
+  binding_->Bind(id, tab->GetHandle());
+  NotifyChanged();
+}
+
+void SidebarTabModel::AddToFavorites(int tab_index) {
+  AddEntryForTab(tab_index, EntryKind::kFavorite);
+}
+
+void SidebarTabModel::PinTab(int tab_index) {
+  AddEntryForTab(tab_index, EntryKind::kPinned);
+}
+
+void SidebarTabModel::UnpinEntry(EntryId id) {
+  // Releasing the binding first is what returns the tab to Today: nothing
+  // claims it any more.
+  binding_->UnbindEntry(id);
+  arcium_model_->RemoveEntry(id);
+  NotifyChanged();
+}
+
+void SidebarTabModel::ActivateEntry(EntryId id) {
+  const TabEntry* entry = arcium_model_->GetEntry(id);
+  if (!entry || !tab_strip_model_) {
+    return;
+  }
+  if (tabs::TabInterface* tab = LiveTabForEntry(id)) {
+    tab_strip_model_->ActivateTabAt(tab_strip_model_->GetIndexOfTab(tab));
+    return;
+  }
+  if (!entry->url.is_valid()) {
+    return;
+  }
+  // AddTabAt notifies synchronously, and OnTabStripModelChanged binds the
+  // tab it reports while `pending_bind_` is set. Clearing it straight after
+  // the call means a failed insert cannot capture some later tab.
+  pending_bind_ = id;
+  tab_strip_model_->delegate()->AddTabAt(entry->url, -1, /*foreground=*/true);
+  pending_bind_ = EntryId();
+}
+
+void SidebarTabModel::CloseEntryTab(EntryId id) {
+  tabs::TabInterface* tab = LiveTabForEntry(id);
+  if (!tab) {
+    return;
+  }
+  // The entry stays; only the tab goes, and the row turns cold.
+  tab_strip_model_->CloseWebContentsAt(tab_strip_model_->GetIndexOfTab(tab),
+                                       kCloseTypes);
+}
+
+void SidebarTabModel::SetEntryTitle(EntryId id, const std::u16string& title) {
+  arcium_model_->SetCustomTitle(id, title);
+}
+
+void SidebarTabModel::ReturnToPinnedUrl(EntryId id) {
+  const TabEntry* entry = arcium_model_->GetEntry(id);
+  tabs::TabInterface* tab = LiveTabForEntry(id);
+  if (!entry || !tab || !entry->url.is_valid()) {
+    return;
+  }
+  content::WebContents* contents = tab->GetContents();
+  if (!contents) {
+    return;
+  }
+  // Navigate the tab already bound to the entry; opening a new one would
+  // leave the entry pointing at the wrong tab.
+  contents->GetController().LoadURL(entry->url, content::Referrer(),
+                                    ui::PAGE_TRANSITION_AUTO_BOOKMARK,
+                                    std::string());
+}
+
+void SidebarTabModel::AddObserver(SidebarModel::Observer* observer) {
   observers_.AddObserver(observer);
 }
 
-void SidebarTabModel::RemoveObserver(Observer* observer) {
+void SidebarTabModel::RemoveObserver(SidebarModel::Observer* observer) {
   observers_.RemoveObserver(observer);
 }
 
@@ -109,6 +288,27 @@ void SidebarTabModel::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
+  if (change.type() == TabStripModelChange::kInserted &&
+      pending_bind_.is_valid()) {
+    const TabStripModelChange::Insert* insert = change.GetInsert();
+    if (insert && !insert->contents.empty() && insert->contents.front().tab) {
+      binding_->Bind(pending_bind_, insert->contents.front().tab->GetHandle());
+      pending_bind_ = EntryId();
+    }
+  } else if (change.type() == TabStripModelChange::kRemoved) {
+    const TabStripModelChange::Remove* remove = change.GetRemove();
+    if (remove) {
+      for (const TabStripModelChange::RemovedTab& removed : remove->contents) {
+        // A tab moving to another window keeps its entry; a tab going away
+        // releases it, which is what leaves the entry cold rather than
+        // deleting it.
+        if (removed.tab && removed.remove_reason !=
+                               TabRemovedReason::kInsertedIntoOtherTabStrip) {
+          binding_->UnbindTab(removed.tab->GetHandle());
+        }
+      }
+    }
+  }
   NotifyChanged();
 }
 
@@ -128,6 +328,36 @@ void SidebarTabModel::OnTabStripModelDestroyed(TabStripModel* tab_strip_model) {
   tab_strip_model_ = nullptr;
 }
 
+void SidebarTabModel::OnArciumModelChanged() {
+  if (suppress_model_notifications_) {
+    return;
+  }
+  NotifyChanged();
+}
+
+void SidebarTabModel::SyncEntryTitles() {
+  if (!tab_strip_model_) {
+    return;
+  }
+  const SpaceId space = arcium_model_->default_space_id();
+  std::vector<EntryId> ids;
+  for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
+    for (const TabEntry* entry : arcium_model_->EntriesForKind(space, kind)) {
+      ids.push_back(entry->id);
+    }
+  }
+  for (const EntryId& id : ids) {
+    tabs::TabInterface* tab = LiveTabForEntry(id);
+    if (!tab) {
+      continue;
+    }
+    const std::u16string title = tabs::TabData::FromTabInterface(tab).title;
+    if (!title.empty()) {
+      arcium_model_->SetLastTitle(id, title);
+    }
+  }
+}
+
 void SidebarTabModel::NotifyChanged() {
   if (notification_pending_) {
     return;
@@ -140,7 +370,12 @@ void SidebarTabModel::NotifyChanged() {
 
 void SidebarTabModel::FlushNotification() {
   notification_pending_ = false;
-  for (Observer& observer : observers_) {
+  {
+    // The write-back is part of this burst, not a new one.
+    base::AutoReset<bool> suppress(&suppress_model_notifications_, true);
+    SyncEntryTitles();
+  }
+  for (SidebarModel::Observer& observer : observers_) {
     observer.OnSidebarModelChanged();
   }
 }

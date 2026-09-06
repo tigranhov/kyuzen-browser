@@ -5,8 +5,12 @@
 #ifndef ARCIUM_UI_BROWSER_SIDEBAR_TAB_MODEL_H_
 #define ARCIUM_UI_BROWSER_SIDEBAR_TAB_MODEL_H_
 
+#include <string>
 #include <vector>
 
+#include "arcium/browser/model/arcium_model.h"
+#include "arcium/browser/model/entry_id.h"
+#include "arcium/browser/tab_binding.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -15,16 +19,36 @@
 
 class TabStripModel;
 
+namespace tabs {
+class TabInterface;
+}
+
 namespace arcium {
 
-// Adapts a window's TabStripModel to the SidebarModel interface. Rows are
-// derived on demand from tabs::TabData, so nothing is cached per tab.
-// Strip callbacks arrive in bursts (insert, then title, favicon and loading
-// updates for the same tab); they are coalesced into one observer
-// notification per run-loop turn, posted as a task. No timers.
-class SidebarTabModel : public SidebarModel, public TabStripModelObserver {
+struct TabEntry;
+
+// Merges the window's live tabs with the profile's persistent entries into
+// one list of rows. Favourites lead, then pinned entries in `position` order
+// whether or not they have a tab, then whatever tabs no entry claims.
+//
+// The asymmetry is deliberate: an entry owns identity and outlives its tab,
+// so closing a warm entry's tab leaves the entry cold rather than deleting
+// it, while clicking a cold entry opens its URL and binds the new tab.
+//
+// Nothing is cached per row. Strip callbacks arrive in bursts (insert, then
+// title, favicon and loading updates for the same tab) and an ArciumModel
+// mutation is another source of the same burst; all of them are coalesced
+// into one observer notification per run-loop turn, posted as a task. No
+// timers.
+class SidebarTabModel : public SidebarModel,
+                        public TabStripModelObserver,
+                        public ArciumModel::Observer {
  public:
-  explicit SidebarTabModel(TabStripModel* tab_strip_model);
+  // `arcium_model` and `binding` are shared by every window on the profile
+  // and must outlive this object.
+  SidebarTabModel(TabStripModel* tab_strip_model,
+                  ArciumModel* arcium_model,
+                  TabBinding* binding);
   SidebarTabModel(const SidebarTabModel&) = delete;
   SidebarTabModel& operator=(const SidebarTabModel&) = delete;
   ~SidebarTabModel() override;
@@ -36,8 +60,16 @@ class SidebarTabModel : public SidebarModel, public TabStripModelObserver {
   void MoveTab(int from_index, int to_index) override;
   void NewTab() override;
   void ClearToday() override;
-  void AddObserver(Observer* observer) override;
-  void RemoveObserver(Observer* observer) override;
+  void AddToFavorites(int tab_index) override;
+  void PinTab(int tab_index) override;
+  void UnpinEntry(EntryId id) override;
+  void ActivateEntry(EntryId id) override;
+  void CloseEntryTab(EntryId id) override;
+  void SetEntryTitle(EntryId id, const std::u16string& title) override;
+  void ReturnToPinnedUrl(EntryId id) override;
+  // Qualified: ArciumModel::Observer is also in scope through the base.
+  void AddObserver(SidebarModel::Observer* observer) override;
+  void RemoveObserver(SidebarModel::Observer* observer) override;
 
   // TabStripModelObserver:
   void OnTabStripModelChanged(
@@ -50,14 +82,35 @@ class SidebarTabModel : public SidebarModel, public TabStripModelObserver {
   void OnTabPinnedStateChanged(tabs::TabInterface* tab, int index) override;
   void OnTabStripModelDestroyed(TabStripModel* tab_strip_model) override;
 
+  // ArciumModel::Observer:
+  void OnArciumModelChanged() override;
+
  private:
+  // The entry's tab if it is live and in this window's strip, else null.
+  tabs::TabInterface* LiveTabForEntry(EntryId id) const;
+  SidebarRow RowForEntry(const TabEntry& entry) const;
+  SidebarRow RowForTab(int index, tabs::TabInterface* tab) const;
+  // Creates an entry of `kind` from the tab at `tab_index` and binds it.
+  void AddEntryForTab(int tab_index, EntryKind kind);
+  // Copies the live page title of every warm entry into the model, so a row
+  // that later goes cold has something better than a URL to draw.
+  void SyncEntryTitles();
+
   // Schedules FlushNotification() unless one is already pending.
   void NotifyChanged();
   void FlushNotification();
 
   raw_ptr<TabStripModel> tab_strip_model_;
-  base::ObserverList<Observer> observers_;
+  raw_ptr<ArciumModel> arcium_model_;
+  raw_ptr<TabBinding> binding_;
+  base::ObserverList<SidebarModel::Observer> observers_;
   bool notification_pending_ = false;
+  // Set while SyncEntryTitles() writes back into the model, so its own
+  // mutations do not schedule a second notification for the same burst.
+  bool suppress_model_notifications_ = false;
+  // The entry awaiting the tab ActivateEntry() just asked for. Valid only
+  // across that synchronous call.
+  EntryId pending_bind_;
   base::WeakPtrFactory<SidebarTabModel> weak_factory_{this};
 };
 

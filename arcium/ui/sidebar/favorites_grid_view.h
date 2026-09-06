@@ -36,6 +36,8 @@ class FavoritesGridView : public views::View {
       const views::SizeBounds& available_size) const override;
 
  private:
+  void OnTileActivated(EntryId entry_id, int tab_index);
+
   raw_ptr<SidebarModel> model_;
   std::vector<raw_ptr<views::ImageButton>> tiles_;
 };

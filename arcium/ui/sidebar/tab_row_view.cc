@@ -37,9 +37,7 @@ constexpr int kIndicatorSize = 14;
 
 TabRowView::TabRowView(Delegate delegate)
     : views::Button(base::BindRepeating(
-          [](TabRowView* self) {
-            self->delegate_.activate.Run(self->tab_index());
-          },
+          [](TabRowView* self) { self->delegate_.activate.Run(self->row_); },
           base::Unretained(this))),
       delegate_(std::move(delegate)) {
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
@@ -75,9 +73,7 @@ TabRowView::TabRowView(Delegate delegate)
 
   close_ = AddChildView(views::CreateVectorImageButtonWithNativeTheme(
       base::BindRepeating(
-          [](TabRowView* self) {
-            self->delegate_.close.Run(self->tab_index());
-          },
+          [](TabRowView* self) { self->delegate_.close.Run(self->row_); },
           base::Unretained(this)),
       kCloseIcon, kIndicatorSize));
   close_->SetVisible(false);
@@ -105,9 +101,9 @@ void TabRowView::UpdateVisuals() {
   title_->SetEnabledColor(row_.is_active ? kColorArciumRowTextActive
                                          : kColorArciumRowText);
   if (row_.is_audible || row_.is_muted) {
-    audio_->SetImage(ui::ImageModel::FromVectorIcon(
-        row_.is_muted ? kMutedIcon : kAudioIcon, kColorArciumRowText,
-        kIndicatorSize));
+    audio_->SetImage(
+        ui::ImageModel::FromVectorIcon(row_.is_muted ? kMutedIcon : kAudioIcon,
+                                       kColorArciumRowText, kIndicatorSize));
   }
   GetViewAccessibility().SetName(row_.title);
   UpdateCloseButtonVisibility();
@@ -122,7 +118,7 @@ void TabRowView::UpdateCloseButtonVisibility() {
 
 bool TabRowView::OnMousePressed(const ui::MouseEvent& event) {
   if (event.IsOnlyMiddleMouseButton()) {
-    delegate_.close.Run(tab_index());
+    delegate_.close.Run(row_);
     return true;
   }
   drag_start_ = event.location();

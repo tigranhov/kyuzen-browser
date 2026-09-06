@@ -37,6 +37,10 @@ class TabListView : public views::View {
   size_t row_count() const { return rows_.size(); }
 
  private:
+  // A row backed by an entry commands the entry; a Today row commands the
+  // tab. Only the first can be cold, and a cold row has no tab index.
+  void OnActivateRow(const SidebarRow& row);
+  void OnCloseRow(const SidebarRow& row);
   void OnDragMove(int from, int to);
 
   raw_ptr<SidebarModel> model_;

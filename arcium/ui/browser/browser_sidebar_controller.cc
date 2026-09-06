@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "arcium/browser/arcium_profile_state.h"
 #include "arcium/common/arcium_features.h"
 #include "arcium/ui/browser/quick_entry_bubble.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
@@ -16,16 +17,17 @@
 #include "arcium/ui/sidebar/view_snapshot.h"
 #include "base/command_line.h"
 #include "base/files/file_path.h"
-#include "base/task/single_thread_task_runner.h"
-#include "base/time/time.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
-#include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
+#include "base/task/single_thread_task_runner.h"
+#include "base/time/time.h"
 #include "chrome/app/chrome_command_ids.h"
+#include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -56,15 +58,20 @@ std::unique_ptr<BrowserSidebarController> BrowserSidebarController::MaybeCreate(
 }
 
 BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
-    : browser_view_(browser_view),
-      model_(std::make_unique<SidebarTabModel>(
-          browser_view->browser()->tab_strip_model())) {
+    : browser_view_(browser_view) {
+  // One model, binding and store per profile, not per window: a second
+  // window on the same profile must see the same entries. GetForBrowserContext
+  // also starts the (asynchronous) load the first time it is asked.
+  ArciumProfileState* state =
+      ArciumProfileState::GetForBrowserContext(browser_view->GetProfile());
+  model_ = std::make_unique<SidebarTabModel>(
+      browser_view->browser()->tab_strip_model(), state->model(),
+      state->binding());
   SidebarView::Delegate delegate;
   delegate.toggle_sidebar = base::BindRepeating(
       &BrowserSidebarController::ToggleVisibility, base::Unretained(this));
-  delegate.back =
-      base::BindRepeating(&BrowserSidebarController::ExecuteCommand,
-                          base::Unretained(this), IDC_BACK);
+  delegate.back = base::BindRepeating(&BrowserSidebarController::ExecuteCommand,
+                                      base::Unretained(this), IDC_BACK);
   delegate.forward =
       base::BindRepeating(&BrowserSidebarController::ExecuteCommand,
                           base::Unretained(this), IDC_FORWARD);
@@ -230,9 +237,9 @@ void BrowserSidebarController::MaybeScheduleSnapshot() {
       &delay_seconds);
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
-      base::BindOnce(&BrowserSidebarController::WriteSnapshot,
-                     weak_factory_.GetWeakPtr(),
-                     command_line->GetSwitchValuePath(features::kSnapshotSwitch)),
+      base::BindOnce(
+          &BrowserSidebarController::WriteSnapshot, weak_factory_.GetWeakPtr(),
+          command_line->GetSwitchValuePath(features::kSnapshotSwitch)),
       base::Seconds(delay_seconds > 0 ? delay_seconds : 4));
 }
 

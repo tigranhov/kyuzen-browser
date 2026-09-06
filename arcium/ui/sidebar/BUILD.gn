@@ -44,6 +44,10 @@ source_set("sidebar") {
   ]
   sources += get_target_outputs(":sidebar_icons")
   public_deps = [
+    # sidebar_model.h names EntryId and FolderId, so every consumer of this
+    # header needs the model target. It carries no Chromium UI or browser
+    # dependency, so the playground stays small.
+    "//arcium/browser/model",
     "//base",
     "//ui/base",
     "//ui/color",

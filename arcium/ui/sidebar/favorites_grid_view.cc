@@ -53,7 +53,8 @@ void FavoritesGridView::SetRows(const std::vector<SidebarRow>& rows) {
     tiles_[i]->SetTooltipText(row.title);
     tiles_[i]->GetViewAccessibility().SetName(row.title);
     tiles_[i]->SetCallback(base::BindRepeating(
-        &SidebarModel::ActivateTab, base::Unretained(model_), row.tab_index));
+        &FavoritesGridView::OnTileActivated, base::Unretained(this),
+        row.entry_id, row.tab_index));
     tiles_[i]->SetBackground(views::CreateRoundedRectBackground(
         row.is_active ? kColorArciumRowActiveBackground
                       : kColorArciumControlBackground,
@@ -61,6 +62,16 @@ void FavoritesGridView::SetRows(const std::vector<SidebarRow>& rows) {
   }
   SetVisible(!tiles_.empty());
   InvalidateLayout();
+}
+
+void FavoritesGridView::OnTileActivated(EntryId entry_id, int tab_index) {
+  // A favourite is an entry, so it is normally the first branch; the fallback
+  // exists for the playground's fake, whose rows carry no entry.
+  if (entry_id.is_valid()) {
+    model_->ActivateEntry(entry_id);
+  } else {
+    model_->ActivateTab(tab_index);
+  }
 }
 
 void FavoritesGridView::Layout(PassKey) {
@@ -82,8 +93,8 @@ gfx::Size FavoritesGridView::CalculatePreferredSize(
       metrics::kFavoritesPerRow;
   const int size = TileSize(width);
   return gfx::Size(
-      width, rows == 0 ? 0
-                       : rows * size + (rows - 1) * metrics::kFavoriteTileGap);
+      width,
+      rows == 0 ? 0 : rows * size + (rows - 1) * metrics::kFavoriteTileGap);
 }
 
 BEGIN_METADATA(FavoritesGridView)

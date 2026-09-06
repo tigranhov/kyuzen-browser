@@ -34,8 +34,8 @@ SidebarExample::SidebarExample()
                  SidebarSection::kFavorites, false);
   model_->AddTab(u"Linear", "https://linear.app/", SidebarSection::kFavorites,
                  false);
-  model_->AddTab(u"Discord", "https://discord.com/app",
-                 SidebarSection::kPinned, false);
+  model_->AddTab(u"Discord", "https://discord.com/app", SidebarSection::kPinned,
+                 false);
   model_->AddTab(u"Linear · Arcium board", "https://linear.app/arcium",
                  SidebarSection::kPinned, false);
   model_->AddTab(u"tigranhov/arcium", "https://github.com/tigranhov/arcium",
@@ -47,6 +47,13 @@ SidebarExample::SidebarExample()
                  "https://source.chromium.org/", SidebarSection::kToday, false);
   model_->AddTab(u"Hacker News", "https://news.ycombinator.com/",
                  SidebarSection::kToday, false);
+  // Two entries with no tab behind them: they draw from their stored title
+  // and open their URL when clicked.
+  model_->AddColdEntry(u"Figma", "https://figma.com/",
+                       SidebarSection::kFavorites);
+  model_->AddColdEntry(u"Chromium Gerrit",
+                       "https://chromium-review.googlesource.com/",
+                       SidebarSection::kPinned);
   model_->SetLoading(8, true);
   model_->SetAudible(7, true);
 }
@@ -61,8 +68,8 @@ void SidebarExample::CreateExampleView(views::View* container) {
 
   // Window actions have no window here; log them so clicks are visible.
   auto log = [](const char* what) {
-    return base::BindRepeating([](const char* w) { LOG(ERROR) << "sidebar: " << w; },
-                               what);
+    return base::BindRepeating(
+        [](const char* w) { LOG(ERROR) << "sidebar: " << w; }, what);
   };
   SidebarView::Delegate delegate;
   delegate.toggle_sidebar = log("toggle sidebar");
@@ -77,10 +84,10 @@ void SidebarExample::CreateExampleView(views::View* container) {
   auto* page = container->AddChildView(std::make_unique<views::View>());
   page->SetBackground(views::CreateRoundedRectBackground(
       SkColorSetRGB(0xFF, 0xFF, 0xFF), metrics::kContentCornerRadius));
-  page->SetProperty(views::kMarginsKey,
-                    gfx::Insets::TLBR(metrics::kContentInset, 0,
-                                      metrics::kContentInset,
-                                      metrics::kContentInset));
+  page->SetProperty(
+      views::kMarginsKey,
+      gfx::Insets::TLBR(metrics::kContentInset, 0, metrics::kContentInset,
+                        metrics::kContentInset));
   page->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::LayoutOrientation::kHorizontal,

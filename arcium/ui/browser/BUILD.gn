@@ -13,6 +13,8 @@ source_set("browser") {
     "sidebar_tab_model.h",
   ]
   deps = [
+    "//arcium/browser",
+    "//arcium/browser/model",
     "//arcium/common",
     "//arcium/ui/sidebar",
     "//base",
@@ -20,6 +22,7 @@ source_set("browser") {
     "//chrome/browser/ui/color:color_headers",
     "//components/omnibox/browser",
     "//components/tabs:public",
+    "//components/vector_icons",
     "//content/public/browser",
     "//third_party/metrics_proto",
     "//ui/views",

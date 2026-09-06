@@ -58,12 +58,12 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
   // reused by position so a title change or reorder does not allocate.
   while (rows_.size() < mine.size()) {
     TabRowView::Delegate delegate;
-    delegate.activate = base::BindRepeating(&SidebarModel::ActivateTab,
-                                            base::Unretained(model_));
-    delegate.close = base::BindRepeating(&SidebarModel::CloseTab,
-                                         base::Unretained(model_));
-    delegate.drag_move = base::BindRepeating(&TabListView::OnDragMove,
-                                             base::Unretained(this));
+    delegate.activate = base::BindRepeating(&TabListView::OnActivateRow,
+                                            base::Unretained(this));
+    delegate.close =
+        base::BindRepeating(&TabListView::OnCloseRow, base::Unretained(this));
+    delegate.drag_move =
+        base::BindRepeating(&TabListView::OnDragMove, base::Unretained(this));
     auto* row = AddChildViewAt(
         std::make_unique<TabRowView>(std::move(delegate)), rows_.size());
     rows_.push_back(row);
@@ -78,6 +78,23 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
   }
   SetVisible(!rows_.empty() || new_tab_);
   InvalidateLayout();
+}
+
+void TabListView::OnActivateRow(const SidebarRow& row) {
+  if (row.entry_id.is_valid()) {
+    model_->ActivateEntry(row.entry_id);
+  } else {
+    model_->ActivateTab(row.tab_index);
+  }
+}
+
+void TabListView::OnCloseRow(const SidebarRow& row) {
+  // Closing a warm entry's tab leaves the entry behind, cold.
+  if (row.entry_id.is_valid()) {
+    model_->CloseEntryTab(row.entry_id);
+  } else {
+    model_->CloseTab(row.tab_index);
+  }
 }
 
 void TabListView::OnDragMove(int from, int to) {

@@ -4,6 +4,8 @@ source_set("browser") {
   sources = [
     "archive_store.cc",
     "archive_store.h",
+    "arcium_profile_state.cc",
+    "arcium_profile_state.h",
     "model_store.cc",
     "model_store.h",
     "tab_binding.cc",
@@ -18,5 +20,8 @@ source_set("browser") {
   deps = [
     "//base",
     "//base:i18n",
+
+    # BrowserContext only, for the SupportsUserData key. No //chrome deps.
+    "//content/public/browser",
   ]
 }

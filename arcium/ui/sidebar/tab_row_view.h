@@ -27,8 +27,10 @@ class TabRowView : public views::Button {
 
  public:
   struct Delegate {
-    base::RepeatingCallback<void(int tab_index)> activate;
-    base::RepeatingCallback<void(int tab_index)> close;
+    // The whole row, not an index: a cold row has no tab index, so the
+    // owner has to dispatch on entry_id instead.
+    base::RepeatingCallback<void(const SidebarRow& row)> activate;
+    base::RepeatingCallback<void(const SidebarRow& row)> close;
     // Called while dragging: the row at `from` wants to move to `to`.
     base::RepeatingCallback<void(int from, int to)> drag_move;
   };
