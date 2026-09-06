@@ -4,6 +4,8 @@
 
 #include "arcium/browser/archive_store.h"
 
+#include <tuple>
+
 #include "base/files/file_util.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_number_conversions.h"
@@ -73,16 +75,36 @@ TEST_F(ArchiveStoreTest, ListRecentIsScopedToOneSpace) {
   EXPECT_EQ(GURL("https://mine.example/"), tabs[0].url);
 }
 
-TEST_F(ArchiveStoreTest, SearchMatchesTitleAndUrlCaseInsensitively) {
+TEST_F(ArchiveStoreTest, SearchIsCaseAndDiacriticInsensitive) {
   const base::Time now = base::Time::Now();
   store_.Add(
       MakeTab("https://github.com/tigranhov/arcium", u"Arcium repo", now));
-  store_.Add(MakeTab("https://news.ycombinator.com/", u"Hacker News", now));
+  store_.Add(MakeTab("https://de.example/", u"ÖKONOMIE heute", now));
 
-  EXPECT_EQ(1u, store_.Search(u"ARCIUM", 10).size());
-  EXPECT_EQ(1u, store_.Search(u"github", 10).size());
-  EXPECT_EQ(1u, store_.Search(u"hacker", 10).size());
+  ASSERT_EQ(1u, store_.Search(u"ARCIUM", 10).size());
+  EXPECT_EQ(u"Arcium repo", store_.Search(u"ARCIUM", 10)[0].title);
+  ASSERT_EQ(1u, store_.Search(u"github", 10).size());
+  EXPECT_EQ(u"Arcium repo", store_.Search(u"github", 10)[0].title);
+  // The half that silently did not work before: lower(title) LIKE ? plus
+  // base::ToLowerASCII is byte-identical to a plain LIKE, so a non-ASCII
+  // query used to match nothing.
+  ASSERT_EQ(1u, store_.Search(u"ökonomie", 10).size());
+  EXPECT_EQ(u"ÖKONOMIE heute", store_.Search(u"ökonomie", 10)[0].title);
   EXPECT_EQ(0u, store_.Search(u"nothing here", 10).size());
+}
+
+TEST_F(ArchiveStoreTest, SearchEscapesLikeMetacharactersInTheQuery) {
+  const base::Time now = base::Time::Now();
+  store_.Add(MakeTab("https://a.example/", u"100% done", now));
+  // Contains "100" but not the literal substring "100%". An unescaped needle
+  // turns the query's '%' into a wildcard, so "100%" would match this row
+  // too (and, in the reviewer's measurement against a larger corpus, 140
+  // rows instead of 1).
+  store_.Add(MakeTab("https://b.example/", u"1005 users online", now));
+
+  std::vector<ArchivedTab> results = store_.Search(u"100%", 10);
+  ASSERT_EQ(1u, results.size());
+  EXPECT_EQ(u"100% done", results[0].title);
 }
 
 TEST_F(ArchiveStoreTest, RemoveDropsOneRow) {
@@ -99,6 +121,21 @@ TEST_F(ArchiveStoreTest, ReopeningTheDatabaseKeepsItsRows) {
   ArchiveStore reopened;
   ASSERT_TRUE(reopened.Open(path));
   EXPECT_EQ(1u, reopened.ListRecent(space_, 10).size());
+}
+
+TEST_F(ArchiveStoreTest, ASecondConnectionDoesNotDestroyTheFirstsData) {
+  store_.Add(MakeTab("https://keep.example/", u"Keep", base::Time::Now()));
+  const base::FilePath path = dir_.GetPath().AppendASCII("archive.db");
+
+  // A second live connection must never be mistaken for corruption. Whether
+  // it succeeds or fails on lock contention is not the point of this test.
+  ArchiveStore second;
+  std::ignore = second.Open(path);
+
+  // Whatever the second connection concluded, the data is still there.
+  ArchiveStore third;
+  ASSERT_TRUE(third.Open(path));
+  EXPECT_EQ(1u, third.ListRecent(space_, 10).size());
 }
 
 TEST_F(ArchiveStoreTest, OpeningACorruptFileStartsAFreshDatabase) {

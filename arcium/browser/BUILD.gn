@@ -7,10 +7,13 @@ source_set("browser") {
     "model_store.cc",
     "model_store.h",
   ]
-  public_deps = [ "//arcium/browser/model" ]
-  deps = [
-    "//base",
+  public_deps = [
+    "//arcium/browser/model",
     "//sql",
     "//url",
+  ]
+  deps = [
+    "//base",
+    "//base:i18n",
   ]
 }

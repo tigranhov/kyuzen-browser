@@ -33,10 +33,15 @@ class ArchiveStore {
   ArchiveStore& operator=(const ArchiveStore&) = delete;
   ~ArchiveStore();
 
-  // Creates the file and schema if absent. A file that is not a usable
-  // database is razed and recreated: an unreadable archive must not stop the
-  // browser, and there is nothing in it worth a recovery path.
-  bool Open(const base::FilePath& path);
+  // Creates the file and schema if absent. A file that is genuinely
+  // unreadable (corruption, not lock contention from another live
+  // connection) is razed and recreated: nothing in the archive is worth a
+  // recovery path. A transient failure such as a concurrent connection
+  // holding the file busy is NOT treated as corruption and does not touch
+  // the file; Open() simply returns false so the caller runs with no
+  // archive for this session. An unreadable archive must not stop the
+  // browser from opening either way.
+  [[nodiscard]] bool Open(const base::FilePath& path);
 
   void Add(const ArchivedTab& tab);
   std::vector<ArchivedTab> ListRecent(SpaceId space_id, int limit);
