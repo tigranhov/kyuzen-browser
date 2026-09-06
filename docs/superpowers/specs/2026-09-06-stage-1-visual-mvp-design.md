@@ -66,6 +66,19 @@ editing to the quick entry.
 
 Back, forward and reload reuse Chromium's toolbar buttons bound to the existing browser commands.
 
+### 4.3a Chromium's native vertical tab strip: not used
+
+Chromium 152 ships a vertical tab strip behind a flag (`chrome/browser/ui/views/frame/vertical_tab_strip_region_view.*`).
+Decision (2026-09-06): Arcium builds its own sidebar. Chromium's strip keeps the address bar in a top
+toolbar, has no favourites, today or spaces sections, and is new code that will change every release,
+so hooks into it would conflict on every rebase. It is used only as a reference for how a left panel
+coexists with the window's caption buttons.
+
+Building blocks reused from Chromium where they are libraries, not layouts: `TabRendererData` (title,
+favicon, loading and alert state per tab), `TabIcon` (favicon with throbber), `AlertIndicatorButton`,
+`ToolbarButton` for navigation, `NewTabButton`, `views::ResizeArea` (Stage 5), the colour provider
+and `ui::ColorMixer` for theming, and `views::BubbleDialogDelegateView` for the quick entry.
+
 ### 4.4 Data flow
 
 `SidebarTabModel` implements Chromium's tab model observer, the same interface the native tab strip
