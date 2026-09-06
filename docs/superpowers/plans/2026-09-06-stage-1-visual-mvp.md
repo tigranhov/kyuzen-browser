@@ -46,6 +46,7 @@
 | `0070-layout-sidebar-bounds.patch` | `chrome/browser/ui/views/frame/layout/browser_view_layout_impl.cc` | Position the sidebar after the proposed layout is applied |
 | `0080-color-mixer.patch` | `chrome/browser/ui/color/chrome_color_mixers.cc` | Register the Arcium colour mixer |
 | `0090-new-tab-quick-entry.patch` | `chrome/browser/ui/browser_command_controller.cc` | Cmd+T opens the quick entry |
+| `0100-plain-fullscreen.patch` | `chrome/browser/ui/window_feature_controller/window_feature_controller.cc` | Plain instead of immersive fullscreen on macOS: the immersive overlay is sized from the hidden top chrome (found during Task 12) |
 
 Product strings: `branding_path_product = "arcium"` plus two symlinked `.grd` files and the id-range registration in 0015.
 

@@ -9,8 +9,14 @@ Every patch header states: what upstream seam it hooks, why the hook is needed, 
 
 ## Status
 
-Stage 0 shipped with zero patches. Branding is selected by GN (`branding_path_component`), and
-Google services are removed by GN args in `build/common.gni`. Keep it that way as long as possible.
+Stage 0 shipped with zero patches: branding is selected by GN (`branding_path_component`) and
+Google services are removed by GN args in `build/common.gni`.
+
+Stage 1 adds twelve. Nine are hooks of a few lines each that call into `arcium/`. Three carry no
+call and say so in their header, because Chromium keys them by file name and there is nowhere to
+delegate to: `0010` and `0011` are GN wiring, and `0015` registers message id ranges for the
+renamed string tables. The inventory with the seam and reason for each lives in
+`docs/superpowers/plans/2026-09-06-stage-1-visual-mvp.md`.
 
 ## Monthly rebase routine
 
