@@ -1,5 +1,10 @@
 # Stage 0 carry-over: findings for Stage 1
 
+Decisions taken 2026-09-06: default search engine is Google; GCM push messaging stays (sites may
+send notifications); Arcium presents a Chrome brand in user-agent client hints so the Web Store treats
+it as Chrome; product strings, the API-keys infobar and the dead sign-in controls are fixed in Stage 1.
+Visual direction for Stage 1: Zen's look, refined with mockups.
+
 Observed on the first Arcium build (Chromium 152.0.7977.83, 2026-09-06). None blocks Stage 0's
 acceptance; each is an input to the Stage 1 plan.
 
