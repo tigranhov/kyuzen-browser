@@ -6,9 +6,12 @@ source_set("browser") {
     "archive_store.h",
     "model_store.cc",
     "model_store.h",
+    "tab_binding.cc",
+    "tab_binding.h",
   ]
   public_deps = [
     "//arcium/browser/model",
+    "//components/tabs:public",
     "//sql",
     "//url",
   ]
