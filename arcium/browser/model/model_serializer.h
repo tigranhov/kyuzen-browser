@@ -17,9 +17,12 @@ inline constexpr int kModelSchemaVersion = 1;
 
 base::DictValue SerializeModel(const ArciumModel& model);
 
-// Returns false only when the file is unusable as a whole: a missing or newer
-// version. Individual malformed entries are dropped, because losing one row
-// beats refusing to start.
+// Returns false only when the file is unusable as a whole: a missing or
+// newer version. Everything else is row-level damage and is recovered rather
+// than refused: a malformed space, folder or entry is dropped, and if every
+// space is dropped this way a default space is synthesised so that entries
+// and folders in an otherwise-intact file are not thrown away along with a
+// corrupt spaces list.
 bool DeserializeModel(const base::DictValue& dict, ArciumModel* model);
 
 }  // namespace arcium

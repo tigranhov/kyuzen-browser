@@ -7,6 +7,7 @@
 #include "arcium/browser/model/arcium_model.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace arcium {
@@ -46,6 +47,62 @@ TEST(ModelSerializerTest, RoundTripPreservesEntriesFoldersAndSpaces) {
       1u,
       restored.EntriesForKind(restored.default_space_id(), EntryKind::kFavorite)
           .size());
+}
+
+TEST(ModelSerializerTest, RoundTripPreservesPositionsAndCollapsedState) {
+  ArciumModel original;
+  const FolderId folder = original.AddFolder(u"Work");
+  original.SetFolderCollapsed(folder, true);
+  const EntryId first =
+      original.AddEntry(EntryKind::kPinned, GURL("https://one.example/"), u"1");
+  const EntryId second =
+      original.AddEntry(EntryKind::kPinned, GURL("https://two.example/"), u"2");
+
+  ArciumModel restored;
+  ASSERT_TRUE(DeserializeModel(SerializeModel(original), &restored));
+
+  ASSERT_EQ(1u, restored.folders().size());
+  EXPECT_TRUE(restored.folders()[0].collapsed);
+  EXPECT_EQ(0, restored.folders()[0].position);
+
+  const TabEntry* restored_first = restored.GetEntry(first);
+  const TabEntry* restored_second = restored.GetEntry(second);
+  ASSERT_TRUE(restored_first);
+  ASSERT_TRUE(restored_second);
+  EXPECT_EQ(0, restored_first->position);
+  EXPECT_EQ(1, restored_second->position);
+}
+
+TEST(ModelSerializerTest, CreatedAtSurvivesToTheMicrosecond) {
+  ArciumModel original;
+  const EntryId id =
+      original.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  // An odd microsecond count is what a double silently rounds away.
+  const base::Time odd = base::Time::FromDeltaSinceWindowsEpoch(
+      base::Microseconds(13442473600000001));
+  const_cast<TabEntry*>(original.GetEntry(id))->created_at = odd;
+
+  ArciumModel restored;
+  ASSERT_TRUE(DeserializeModel(SerializeModel(original), &restored));
+  ASSERT_TRUE(restored.GetEntry(id));
+  EXPECT_EQ(odd, restored.GetEntry(id)->created_at);
+}
+
+TEST(ModelSerializerTest, AFileWhoseSpacesAreAllMalformedStillLoadsItsEntries) {
+  ArciumModel original;
+  original.AddEntry(EntryKind::kPinned, GURL("https://keep.example/"), u"Keep");
+  base::DictValue dict = SerializeModel(original);
+  base::ListValue* spaces = dict.FindList("spaces");
+  ASSERT_TRUE(spaces);
+  (*spaces)[0].GetDict().Set("id", "not-a-uuid");
+
+  ArciumModel restored;
+  // Row-level damage: the entry is the data that matters and it survives.
+  ASSERT_TRUE(DeserializeModel(dict, &restored));
+  ASSERT_EQ(1u, restored.entries().size());
+  EXPECT_EQ(GURL("https://keep.example/"), restored.entries()[0].url);
+  ASSERT_EQ(1u, restored.spaces().size());
+  EXPECT_EQ(restored.default_space_id(), restored.entries()[0].space_id);
 }
 
 TEST(ModelSerializerTest, UnknownFieldsAreIgnoredNotFatal) {

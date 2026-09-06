@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "arcium/browser/model/arcium_model.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 
 namespace arcium {
@@ -97,9 +98,11 @@ base::DictValue SerializeModel(const ArciumModel& model) {
     value.Set("url", entry.url.spec());
     value.Set("custom_title", base::UTF16ToUTF8(entry.custom_title));
     value.Set("last_title", base::UTF16ToUTF8(entry.last_title));
+    // A decimal string, not a number: a double cannot hold a microsecond
+    // timestamp exactly above 2^53, and today's timestamps already are.
     value.Set(
         "created_at",
-        static_cast<double>(
+        base::NumberToString(
             entry.created_at.ToDeltaSinceWindowsEpoch().InMicroseconds()));
     entries.Append(std::move(value));
   }
@@ -137,8 +140,21 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
       spaces.push_back(std::move(space));
     }
   }
+  // Every space failing to parse is row-level damage, not structural damage:
+  // the entries and folders in the rest of the file are still worth keeping,
+  // so synthesise the same default space a fresh model would start with
+  // rather than refusing the whole file. This has to happen here, before
+  // entries and folders are parsed, because they need a valid space id to
+  // fall back to; ArciumModel::ReplaceAll's own empty-spaces fallback runs
+  // too late for that.
   if (spaces.empty()) {
-    return false;
+    Space space;
+    space.id = SpaceId::Generate();
+    space.name = u"Space";
+    space.archive_timeout = ArchiveTimeout::kTwelveHours;
+    space.position = 0;
+    space_ids.insert(space.id);
+    spaces.push_back(std::move(space));
   }
   const SpaceId default_space = spaces.front().id;
 
@@ -209,9 +225,12 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
       if (const std::string* title = value->FindString("last_title")) {
         entry.last_title = base::UTF8ToUTF16(*title);
       }
-      const double created = value->FindDouble("created_at").value_or(0.0);
+      int64_t created_micros = 0;
+      if (const std::string* created = value->FindString("created_at")) {
+        base::StringToInt64(*created, &created_micros);
+      }
       entry.created_at = base::Time::FromDeltaSinceWindowsEpoch(
-          base::Microseconds(static_cast<int64_t>(created)));
+          base::Microseconds(created_micros));
       entries.push_back(std::move(entry));
     }
   }
