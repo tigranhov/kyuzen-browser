@@ -22,6 +22,10 @@ constexpr char kDatabaseTag[] = "ArciumArchive";
 
 constexpr int kCurrentVersion = 1;
 
+// SQLite guarantees SQLITE_OK == 0; sql/database.h forbids code outside sql/
+// from including sqlite3.h to spell the macro itself.
+constexpr int kSqliteOk = 0;
+
 // Case- and diacritic-insensitive fold of `text`, as UTF-8. SQLite's LIKE is
 // already ASCII-case-insensitive on its own, so folding only matters for
 // non-ASCII text (e.g. "ÖKONOMIE" vs "ökonomie") — but that is exactly the
@@ -60,10 +64,30 @@ ArchiveStore::ArchiveStore()
 ArchiveStore::~ArchiveStore() = default;
 
 bool ArchiveStore::Open(const base::FilePath& path) {
-  if (db_.Open(path) && InitSchema()) {
+  int sqlite_error = kSqliteOk;
+  if (db_.Open(path) && InitSchema(&sqlite_error)) {
     return true;
   }
-  if (!sql::IsErrorCatastrophic(db_.GetErrorCode())) {
+  // Classify on the error InitSchema() itself captured, not on a fresh
+  // db_.GetErrorCode() read. InitSchema()'s local sql::Transaction goes out
+  // of scope the moment it returns false, which runs an implicit ROLLBACK —
+  // and a *successful* ROLLBACK overwrites the connection's error code with
+  // SQLITE_OK. Re-reading the connection here would then see SQLITE_OK for a
+  // genuine mid-schema failure (e.g. a CREATE TABLE losing a write-lock
+  // race) and hand it to IsErrorCatastrophic(), which NOTREACHED()s on
+  // SQLITE_OK — crashing the browser instead of recovering.
+  //
+  // sqlite_error is only left at kSqliteOk when InitSchema() was never
+  // reached at all, i.e. db_.Open() itself failed outright; in that case
+  // there was no transaction to roll back, so reading the connection
+  // directly is accurate.
+  if (sqlite_error == kSqliteOk) {
+    sqlite_error = db_.GetErrorCode();
+  }
+  // Belt and braces: never hand SQLITE_OK to IsErrorCatastrophic(). If the
+  // captured code still comes back SQLITE_OK somehow, treat it as
+  // non-catastrophic and fail open rather than crash.
+  if (sqlite_error == kSqliteOk || !sql::IsErrorCatastrophic(sqlite_error)) {
     // A concurrent connection surfaces here as a bare SQLITE_BUSY or
     // SQLITE_LOCKED (sql::Database runs with a zero busy timeout), not
     // corruption. Never destroy the user's archive over lock contention:
@@ -79,16 +103,16 @@ bool ArchiveStore::Open(const base::FilePath& path) {
   // orphans a -journal/-wal sidecar the way deleting only the main file
   // would.
   if (db_.is_open()) {
-    return db_.Raze() && InitSchema();
+    return db_.Raze() && InitSchema(&sqlite_error);
   }
   // db_.Open() itself failed outright (e.g. permission denied, disk full):
   // there is no handle to raze. Delete the file and any sidecars, then try
   // once more against a clean path.
   sql::Database::Delete(path);
-  return db_.Open(path) && InitSchema();
+  return db_.Open(path) && InitSchema(&sqlite_error);
 }
 
-bool ArchiveStore::InitSchema() {
+bool ArchiveStore::InitSchema(int* sqlite_error) {
   static constexpr char kCreateTable[] =
       "CREATE TABLE IF NOT EXISTS archived_tabs("
       "  url TEXT NOT NULL,"
@@ -115,10 +139,18 @@ bool ArchiveStore::InitSchema() {
 
   sql::Transaction transaction(&db_);
   if (!transaction.Begin()) {
+    // Begin() failing never starts the transaction (sql::Transaction's
+    // is_active_ stays false), so its destructor below runs no ROLLBACK and
+    // db_.GetErrorCode() stays accurate even after this function returns.
+    // Captured anyway for uniformity with the branches below.
+    *sqlite_error = db_.GetErrorCode();
     return false;
   }
   if (!db_.Execute(kCreateTable) || !db_.Execute(kCreateSpaceIndex) ||
       !db_.Execute(kCreateTimeIndex) || !db_.Execute(kCreateMeta)) {
+    // Capture now: `transaction` going out of scope on return will roll
+    // back and reset the connection's error code to SQLITE_OK.
+    *sqlite_error = db_.GetErrorCode();
     return false;
   }
   // Version row written on creation so a future migration has a floor to
@@ -128,9 +160,14 @@ bool ArchiveStore::InitSchema() {
       "EXISTS (SELECT 1 FROM arcium_meta)"));
   version.BindInt(0, kCurrentVersion);
   if (!version.Run()) {
+    *sqlite_error = db_.GetErrorCode();
     return false;
   }
-  return transaction.Commit();
+  if (!transaction.Commit()) {
+    *sqlite_error = db_.GetErrorCode();
+    return false;
+  }
+  return true;
 }
 
 void ArchiveStore::Add(const ArchivedTab& tab) {

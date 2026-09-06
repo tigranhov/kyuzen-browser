@@ -10,6 +10,7 @@
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/test/task_environment.h"
+#include "sql/database.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
 namespace arcium {
@@ -136,6 +137,32 @@ TEST_F(ArchiveStoreTest, ASecondConnectionDoesNotDestroyTheFirstsData) {
   ArchiveStore third;
   ASSERT_TRUE(third.Open(path));
   EXPECT_EQ(1u, third.ListRecent(space_, 10).size());
+}
+
+TEST_F(ArchiveStoreTest, ASchemaFailureInsideTheTransactionDoesNotCrash) {
+  const base::FilePath path = dir_.GetPath().AppendASCII("collide.db");
+  {
+    sql::Database raw(sql::Database::Tag("ArciumArchive"));
+    ASSERT_TRUE(raw.Open(path));
+    // A view of this name makes InitSchema()'s transaction fail *inside*
+    // itself, after Begin() has already succeeded — the path where the
+    // transaction's own destructor resets the connection's error code to
+    // SQLITE_OK before Open() gets to inspect it. In practice "CREATE TABLE
+    // IF NOT EXISTS archived_tabs" itself is a silent no-op against an
+    // existing view of the same name (IF NOT EXISTS checks the name, not the
+    // object kind); the failure actually surfaces one statement later, at
+    // "CREATE INDEX ... ON archived_tabs(...)", with sqlite's own "views may
+    // not be indexed" — still squarely inside the same transaction.
+    ASSERT_TRUE(raw.Execute("CREATE VIEW archived_tabs AS SELECT 1 AS url"));
+  }
+
+  ArchiveStore store;
+  // The contract is only that this returns rather than crashing, and that
+  // whatever it decides leaves the store safe to query.
+  const bool opened = store.Open(path);
+  if (opened) {
+    EXPECT_TRUE(store.ListRecent(space_, 10).empty());
+  }
 }
 
 TEST_F(ArchiveStoreTest, OpeningACorruptFileStartsAFreshDatabase) {

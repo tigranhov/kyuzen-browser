@@ -49,7 +49,15 @@ class ArchiveStore {
   void Remove(const GURL& url, base::Time archived_at);
 
  private:
-  bool InitSchema();
+  // Creates the schema inside its own transaction. On failure, `*sqlite_error`
+  // is set to the sqlite error code captured at the exact statement that
+  // failed (Begin/Execute/Run/Commit) — the caller must not re-read
+  // db_.GetErrorCode() afterwards instead, because by the time InitSchema()
+  // returns, the local sql::Transaction has already gone out of scope and run
+  // an implicit ROLLBACK, and a successful ROLLBACK overwrites the
+  // connection's error code with SQLITE_OK. `*sqlite_error` is left
+  // untouched on success.
+  bool InitSchema(int* sqlite_error);
 
   sql::Database db_;
 };
