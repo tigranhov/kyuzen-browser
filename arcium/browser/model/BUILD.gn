@@ -6,6 +6,8 @@ source_set("model") {
     "arcium_model.h",
     "entry_id.h",
     "folder.h",
+    "model_serializer.cc",
+    "model_serializer.h",
     "space.h",
     "tab_entry.h",
   ]

@@ -1,0 +1,223 @@
+// Copyright 2026 The Arcium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#include "arcium/browser/model/model_serializer.h"
+
+#include <set>
+#include <string>
+#include <vector>
+
+#include "arcium/browser/model/arcium_model.h"
+#include "base/strings/utf_string_conversions.h"
+
+namespace arcium {
+
+namespace {
+
+// Strings rather than ints on the wire: a JSON file a human may read during a
+// bug report should say "pinned", not "1".
+std::string KindToString(EntryKind kind) {
+  return kind == EntryKind::kFavorite ? "favorite" : "pinned";
+}
+
+EntryKind KindFromString(const std::string* value) {
+  return (value && *value == "favorite") ? EntryKind::kFavorite
+                                         : EntryKind::kPinned;
+}
+
+std::string TimeoutToString(ArchiveTimeout timeout) {
+  switch (timeout) {
+    case ArchiveTimeout::kTwelveHours:
+      return "12h";
+    case ArchiveTimeout::kOneDay:
+      return "24h";
+    case ArchiveTimeout::kSevenDays:
+      return "7d";
+    case ArchiveTimeout::kNever:
+      return "never";
+  }
+}
+
+ArchiveTimeout TimeoutFromString(const std::string* value) {
+  if (!value) {
+    return ArchiveTimeout::kTwelveHours;
+  }
+  if (*value == "24h") {
+    return ArchiveTimeout::kOneDay;
+  }
+  if (*value == "7d") {
+    return ArchiveTimeout::kSevenDays;
+  }
+  if (*value == "never") {
+    return ArchiveTimeout::kNever;
+  }
+  return ArchiveTimeout::kTwelveHours;
+}
+
+}  // namespace
+
+base::DictValue SerializeModel(const ArciumModel& model) {
+  base::DictValue dict;
+  dict.Set("version", kModelSchemaVersion);
+
+  base::ListValue spaces;
+  for (const Space& space : model.spaces()) {
+    base::DictValue value;
+    value.Set("id", space.id.value());
+    value.Set("name", base::UTF16ToUTF8(space.name));
+    value.Set("archive_timeout", TimeoutToString(space.archive_timeout));
+    value.Set("position", space.position);
+    spaces.Append(std::move(value));
+  }
+  dict.Set("spaces", std::move(spaces));
+
+  base::ListValue folders;
+  for (const Folder& folder : model.folders()) {
+    base::DictValue value;
+    value.Set("id", folder.id.value());
+    value.Set("space_id", folder.space_id.value());
+    value.Set("name", base::UTF16ToUTF8(folder.name));
+    value.Set("collapsed", folder.collapsed);
+    value.Set("position", folder.position);
+    folders.Append(std::move(value));
+  }
+  dict.Set("folders", std::move(folders));
+
+  base::ListValue entries;
+  for (const TabEntry& entry : model.entries()) {
+    base::DictValue value;
+    value.Set("id", entry.id.value());
+    value.Set("kind", KindToString(entry.kind));
+    value.Set("space_id", entry.space_id.value());
+    if (entry.folder_id) {
+      value.Set("folder_id", entry.folder_id->value());
+    }
+    value.Set("position", entry.position);
+    value.Set("url", entry.url.spec());
+    value.Set("custom_title", base::UTF16ToUTF8(entry.custom_title));
+    value.Set("last_title", base::UTF16ToUTF8(entry.last_title));
+    value.Set(
+        "created_at",
+        static_cast<double>(
+            entry.created_at.ToDeltaSinceWindowsEpoch().InMicroseconds()));
+    entries.Append(std::move(value));
+  }
+  dict.Set("entries", std::move(entries));
+
+  return dict;
+}
+
+bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
+  const std::optional<int> version = dict.FindInt("version");
+  if (!version || *version > kModelSchemaVersion) {
+    return false;
+  }
+
+  std::vector<Space> spaces;
+  std::set<SpaceId> space_ids;
+  if (const base::ListValue* list = dict.FindList("spaces")) {
+    for (const base::Value& item : *list) {
+      const base::DictValue* value = item.GetIfDict();
+      if (!value) {
+        continue;
+      }
+      const std::string* id = value->FindString("id");
+      Space space;
+      space.id = id ? SpaceId::FromString(*id) : SpaceId();
+      if (!space.id.is_valid()) {
+        continue;
+      }
+      const std::string* name = value->FindString("name");
+      space.name = name ? base::UTF8ToUTF16(*name) : u"Space";
+      space.archive_timeout =
+          TimeoutFromString(value->FindString("archive_timeout"));
+      space.position = value->FindInt("position").value_or(0);
+      space_ids.insert(space.id);
+      spaces.push_back(std::move(space));
+    }
+  }
+  if (spaces.empty()) {
+    return false;
+  }
+  const SpaceId default_space = spaces.front().id;
+
+  std::vector<Folder> folders;
+  std::set<FolderId> folder_ids;
+  if (const base::ListValue* list = dict.FindList("folders")) {
+    for (const base::Value& item : *list) {
+      const base::DictValue* value = item.GetIfDict();
+      if (!value) {
+        continue;
+      }
+      const std::string* id = value->FindString("id");
+      Folder folder;
+      folder.id = id ? FolderId::FromString(*id) : FolderId();
+      if (!folder.id.is_valid()) {
+        continue;
+      }
+      const std::string* space_id = value->FindString("space_id");
+      folder.space_id = space_id ? SpaceId::FromString(*space_id) : SpaceId();
+      if (!space_ids.contains(folder.space_id)) {
+        folder.space_id = default_space;
+      }
+      const std::string* name = value->FindString("name");
+      folder.name = name ? base::UTF8ToUTF16(*name) : std::u16string();
+      folder.collapsed = value->FindBool("collapsed").value_or(false);
+      folder.position = value->FindInt("position").value_or(0);
+      folder_ids.insert(folder.id);
+      folders.push_back(std::move(folder));
+    }
+  }
+
+  std::vector<TabEntry> entries;
+  if (const base::ListValue* list = dict.FindList("entries")) {
+    for (const base::Value& item : *list) {
+      const base::DictValue* value = item.GetIfDict();
+      if (!value) {
+        continue;
+      }
+      const std::string* id = value->FindString("id");
+      TabEntry entry;
+      entry.id = id ? EntryId::FromString(*id) : EntryId();
+      if (!entry.id.is_valid()) {
+        continue;
+      }
+      const std::string* url = value->FindString("url");
+      entry.url = url ? GURL(*url) : GURL();
+      if (!entry.url.is_valid()) {
+        continue;
+      }
+      entry.kind = KindFromString(value->FindString("kind"));
+      const std::string* space_id = value->FindString("space_id");
+      entry.space_id = space_id ? SpaceId::FromString(*space_id) : SpaceId();
+      if (!space_ids.contains(entry.space_id)) {
+        entry.space_id = default_space;
+      }
+      // An entry pointing at a folder that is gone belongs at the top level,
+      // not nowhere.
+      if (const std::string* folder_id = value->FindString("folder_id")) {
+        const FolderId parsed = FolderId::FromString(*folder_id);
+        if (folder_ids.contains(parsed)) {
+          entry.folder_id = parsed;
+        }
+      }
+      entry.position = value->FindInt("position").value_or(0);
+      if (const std::string* title = value->FindString("custom_title")) {
+        entry.custom_title = base::UTF8ToUTF16(*title);
+      }
+      if (const std::string* title = value->FindString("last_title")) {
+        entry.last_title = base::UTF8ToUTF16(*title);
+      }
+      const double created = value->FindDouble("created_at").value_or(0.0);
+      entry.created_at = base::Time::FromDeltaSinceWindowsEpoch(
+          base::Microseconds(static_cast<int64_t>(created)));
+      entries.push_back(std::move(entry));
+    }
+  }
+
+  model->ReplaceAll(std::move(spaces), std::move(folders), std::move(entries));
+  return true;
+}
+
+}  // namespace arcium
