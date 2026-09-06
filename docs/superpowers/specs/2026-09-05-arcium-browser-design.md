@@ -119,6 +119,8 @@ Acceptance:
 
 ### Stage 1. Visual MVP, the iteration start
 
+Detailed design: `2026-09-06-stage-1-visual-mvp-design.md` (visual decisions, components, hooks).
+
 Goal: the complete Arc layout on screen, bound to live tabs, usable as a daily browser, so look and feel can be judged and redirected before deep features.
 
 - R1.1 Native horizontal tab strip and top toolbar hidden.
