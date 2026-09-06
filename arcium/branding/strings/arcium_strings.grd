@@ -273,7 +273,7 @@ If you update this file, be sure also to update google_chrome_strings.grd. -->
     <messages fallback_to_english="true">
       <!-- Settings specific strings -->
       <if expr="not is_android">
-        <part file="settings_chromium_strings.grdp" />
+        <part file="settings_arcium_strings.grdp" />
       </if>
 
       <!--
