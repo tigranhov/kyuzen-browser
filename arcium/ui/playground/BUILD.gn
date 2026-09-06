@@ -17,6 +17,7 @@ executable("arcium_playground") {
     "//cc/paint",
     "//skia",
     "//ui/base",
+    "//ui/color",
     "//ui/compositor",
     "//ui/gfx",
     "//ui/gfx/codec",

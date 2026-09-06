@@ -6,6 +6,7 @@
 
 #include <cstdlib>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "base/command_line.h"
@@ -35,14 +36,29 @@ namespace arcium {
 namespace {
 
 constexpr float kScale = 2.f;
+constexpr gfx::Size kSnapshotWindowSize(1100, 720);
+
+// Logs class, bounds and visibility for `view` and its descendants, so layout
+// problems can be read from the log of a --snapshot run.
+void DumpHierarchy(const views::View* view, int depth) {
+  LOG(ERROR) << std::string(depth * 2, ' ') << view->GetClassName() << " "
+             << view->bounds().ToString()
+             << (view->GetVisible() ? "" : " hidden");
+  for (const views::View* child : view->children()) {
+    DumpHierarchy(child, depth + 1);
+  }
+}
 
 void WriteSnapshot(views::View* view, base::FilePath path) {
   // A root paint must start at the layer origin, so paint the widget's root
   // view and crop to `view` afterwards.
   views::Widget* widget = view->GetWidget();
   CHECK(widget);
+  // The examples window opens small; give the sidebar room for every section.
+  widget->SetSize(kSnapshotWindowSize);
   widget->LayoutRootViewIfNecessary();
   views::View* root = widget->GetRootView();
+  DumpHierarchy(view, 0);
   const gfx::Size size = root->size();
   auto list = base::MakeRefCounted<cc::DisplayItemList>();
   ui::PaintContext context(list.get(), kScale, gfx::Rect(size),

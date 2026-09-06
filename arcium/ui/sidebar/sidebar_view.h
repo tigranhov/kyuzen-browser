@@ -6,6 +6,7 @@
 #define ARCIUM_UI_SIDEBAR_SIDEBAR_VIEW_H_
 
 #include "arcium/ui/sidebar/sidebar_model.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 #include "ui/base/metadata/metadata_header_macros.h"
@@ -26,7 +27,17 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   METADATA_HEADER(SidebarView, views::View)
 
  public:
-  explicit SidebarView(SidebarModel* model);
+  // Window-level actions the sidebar triggers but does not implement.
+  struct Delegate {
+    base::RepeatingClosure toggle_sidebar;
+    base::RepeatingClosure back;
+    base::RepeatingClosure forward;
+    base::RepeatingClosure reload;
+    // Clicking the URL pill placeholder (no hosted location bar).
+    base::RepeatingClosure edit_url;
+  };
+
+  SidebarView(SidebarModel* model, Delegate delegate);
   SidebarView(const SidebarView&) = delete;
   SidebarView& operator=(const SidebarView&) = delete;
   ~SidebarView() override;
@@ -56,6 +67,7 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   void Rebuild();
 
   raw_ptr<SidebarModel> model_;
+  Delegate delegate_;
   base::ScopedObservation<SidebarModel, SidebarModel::Observer> observation_{
       this};
 

@@ -1,19 +1,59 @@
 import("//components/vector_icons/vector_icons.gni")
 
+aggregate_vector_icons("sidebar_icons") {
+  icon_directory = "icons"
+  sources = [
+    "add.icon",
+    "audio.icon",
+    "back.icon",
+    "close.icon",
+    "forward.icon",
+    "muted.icon",
+    "reload.icon",
+    "sidebar.icon",
+  ]
+}
+
 # Pure Views. Must not depend on //chrome/browser so the playground stays small.
 source_set("sidebar") {
   sources = [
+    "favorites_grid_view.cc",
+    "favorites_grid_view.h",
+    "nav_row_view.cc",
+    "nav_row_view.h",
+    "section_divider_view.cc",
+    "section_divider_view.h",
+    "sidebar_colors.cc",
+    "sidebar_colors.h",
     "sidebar_metrics.h",
     "sidebar_model.h",
     "sidebar_view.cc",
     "sidebar_view.h",
+    "space_bar_view.cc",
+    "space_bar_view.h",
+    "tab_list_view.cc",
+    "tab_list_view.h",
+    "tab_row_view.cc",
+    "tab_row_view.h",
+    "tint_background.cc",
+    "tint_background.h",
+    "url_pill_view.cc",
+    "url_pill_view.h",
   ]
+  sources += get_target_outputs(":sidebar_icons")
   public_deps = [
     "//base",
     "//ui/base",
+    "//ui/color",
+    "//ui/views",
     "//url",
   ]
   deps = [
-    "//ui/views",
+    ":sidebar_icons",
+    "//cc/paint",
+    "//components/vector_icons",
+    "//skia",
+    "//ui/gfx",
+    "//ui/menus",
   ]
 }

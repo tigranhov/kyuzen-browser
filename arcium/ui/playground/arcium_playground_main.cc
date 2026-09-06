@@ -10,9 +10,12 @@
 #include <utility>
 
 #include "arcium/ui/playground/sidebar_example.h"
+#include "arcium/ui/sidebar/sidebar_colors.h"
 #include "base/at_exit.h"
 #include "base/command_line.h"
+#include "base/functional/bind.h"
 #include "base/test/test_timeouts.h"
+#include "ui/color/color_provider_manager.h"
 #include "ui/views/examples/example_base.h"
 #include "ui/views/examples/examples_main_proc.h"
 
@@ -21,6 +24,10 @@ int main(int argc, char** argv) {
   // ExamplesMainProc uses base::test::TaskEnvironment, which needs these.
   TestTimeouts::Initialize();
   base::AtExitManager at_exit;
+
+  // The browser registers this through a hook (patch 0080); here directly.
+  ui::ColorProviderManager::Get().AppendColorProviderInitializer(
+      base::BindRepeating(&arcium::AddArciumColorMixer));
 
   views::examples::ExampleVector examples;
   examples.push_back(std::make_unique<arcium::SidebarExample>());

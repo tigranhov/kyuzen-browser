@@ -5,10 +5,13 @@
 #include "arcium/ui/playground/sidebar_example.h"
 
 #include <memory>
+#include <utility>
 
 #include "arcium/ui/playground/snapshot.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
+#include "base/functional/bind.h"
+#include "base/logging.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/background.h"
@@ -56,8 +59,19 @@ void SidebarExample::CreateExampleView(views::View* container) {
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetCrossAxisAlignment(views::LayoutAlignment::kStretch);
 
-  auto* sidebar =
-      container->AddChildView(std::make_unique<SidebarView>(model_.get()));
+  // Window actions have no window here; log them so clicks are visible.
+  auto log = [](const char* what) {
+    return base::BindRepeating([](const char* w) { LOG(ERROR) << "sidebar: " << w; },
+                               what);
+  };
+  SidebarView::Delegate delegate;
+  delegate.toggle_sidebar = log("toggle sidebar");
+  delegate.back = log("back");
+  delegate.forward = log("forward");
+  delegate.reload = log("reload");
+  delegate.edit_url = log("edit url");
+  auto* sidebar = container->AddChildView(
+      std::make_unique<SidebarView>(model_.get(), std::move(delegate)));
   sidebar->SetCaptionButtonWidth(metrics::kDefaultCaptionButtonWidth);
 
   auto* page = container->AddChildView(std::make_unique<views::View>());
@@ -69,7 +83,8 @@ void SidebarExample::CreateExampleView(views::View* container) {
                                       metrics::kContentInset));
   page->SetProperty(
       views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
+                               views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
 
   MaybeScheduleSnapshot(container);
