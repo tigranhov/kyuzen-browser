@@ -79,6 +79,7 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   model_->AddObserver(this);
   UpdateNavButtons();
   MaybeScheduleSnapshot();
+  MaybeShowQuickEntryForDebugging();
 }
 
 BrowserSidebarController::~BrowserSidebarController() {
@@ -233,6 +234,18 @@ void BrowserSidebarController::MaybeScheduleSnapshot() {
                      weak_factory_.GetWeakPtr(),
                      command_line->GetSwitchValuePath(features::kSnapshotSwitch)),
       base::Seconds(delay_seconds > 0 ? delay_seconds : 4));
+}
+
+void BrowserSidebarController::MaybeShowQuickEntryForDebugging() {
+  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
+          features::kQuickEntrySwitch)) {
+    return;
+  }
+  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+      FROM_HERE,
+      base::BindOnce(&BrowserSidebarController::ShowQuickEntry,
+                     weak_factory_.GetWeakPtr()),
+      base::Seconds(2));
 }
 
 void BrowserSidebarController::WriteSnapshot(const base::FilePath& path) {

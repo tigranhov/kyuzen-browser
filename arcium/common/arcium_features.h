@@ -23,6 +23,11 @@ inline constexpr char kSnapshotSwitch[] = "arcium-snapshot";
 // tabs over DevTools first.
 inline constexpr char kSnapshotDelaySwitch[] = "arcium-snapshot-delay";
 
+// Debugging: --arcium-quick-entry opens the Cmd+T quick entry once the window
+// is up, so the bubble can be exercised where synthetic key presses are not
+// available (macOS withholds them from automated sessions).
+inline constexpr char kQuickEntrySwitch[] = "arcium-quick-entry";
+
 // True when the sidebar layout should be used for normal tabbed windows.
 bool IsSidebarEnabled();
 

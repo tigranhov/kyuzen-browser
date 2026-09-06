@@ -73,6 +73,7 @@ class BrowserSidebarController : public SidebarModel::Observer {
   void ExecuteCommand(int command_id);
   void UpdateNavButtons();
   void MaybeScheduleSnapshot();
+  void MaybeShowQuickEntryForDebugging();
   void WriteSnapshot(const base::FilePath& path);
   void OnQuickEntrySubmitted(const std::u16string& text);
   void OnQuickEntryClosed(views::Widget::ClosedReason reason);
