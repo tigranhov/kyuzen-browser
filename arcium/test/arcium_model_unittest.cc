@@ -4,6 +4,9 @@
 
 #include "arcium/browser/model/arcium_model.h"
 
+#include <algorithm>
+#include <vector>
+
 #include "arcium/browser/model/tab_entry.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -150,6 +153,66 @@ TEST_F(ArciumModelTest, MutatingAnUnknownIdIsANoOpNotACrash) {
   model_.ReorderEntry(missing, 0);
   model_.RemoveEntry(missing);
   EXPECT_FALSE(model_.GetEntry(missing));
+}
+
+TEST_F(ArciumModelTest, FolderPositionsStayContiguousAcrossRemoveAndAdd) {
+  const FolderId a = model_.AddFolder(u"A");
+  const FolderId b = model_.AddFolder(u"B");
+  const FolderId c = model_.AddFolder(u"C");
+  model_.RemoveFolder(b);
+  const FolderId d = model_.AddFolder(u"D");
+
+  // Positions must be 0..n-1 with no duplicates, or Task 7's folder list
+  // orders headers arbitrarily.
+  std::vector<int> positions;
+  for (const Folder& folder : model_.folders()) {
+    positions.push_back(folder.position);
+  }
+  std::sort(positions.begin(), positions.end());
+  EXPECT_EQ((std::vector<int>{0, 1, 2}), positions);
+  EXPECT_NE(model_.GetFolder(c)->position, model_.GetFolder(d)->position);
+  EXPECT_EQ(3u, model_.folders().size());
+  EXPECT_TRUE(model_.GetFolder(a));
+}
+
+TEST_F(ArciumModelTest, ReplaceAllSwapsTheWholeModelAndNotifies) {
+  CountingObserver observer;
+  model_.AddEntry(EntryKind::kPinned, GURL("https://old.example/"), u"Old");
+  model_.AddObserver(&observer);
+
+  Space space;
+  space.id = SpaceId::Generate();
+  space.name = u"Loaded";
+  TabEntry entry;
+  entry.id = EntryId::Generate();
+  entry.kind = EntryKind::kFavorite;
+  entry.space_id = space.id;
+  entry.url = GURL("https://new.example/");
+  entry.last_title = u"New";
+
+  model_.ReplaceAll({space}, {}, {entry});
+
+  EXPECT_EQ(1, observer.count);
+  ASSERT_EQ(1u, model_.entries().size());
+  EXPECT_EQ(GURL("https://new.example/"), model_.entries()[0].url);
+  EXPECT_EQ(space.id, model_.default_space_id());
+  model_.RemoveObserver(&observer);
+}
+
+TEST_F(ArciumModelTest, ReplaceAllWithNoSpacesStillLeavesOneUsableSpace) {
+  model_.ReplaceAll({}, {}, {});
+  EXPECT_EQ(1u, model_.spaces().size());
+  EXPECT_TRUE(model_.default_space_id().is_valid());
+}
+
+TEST_F(ArciumModelTest, FromStringRejectsAnythingNotAWellFormedUuid) {
+  EXPECT_FALSE(EntryId::FromString("").is_valid());
+  EXPECT_FALSE(EntryId::FromString("not-a-uuid").is_valid());
+  EXPECT_FALSE(EntryId::FromString("00000000-0000-4000-8000").is_valid());
+  const EntryId generated = EntryId::Generate();
+  const EntryId parsed = EntryId::FromString(generated.value());
+  EXPECT_TRUE(parsed.is_valid());
+  EXPECT_EQ(generated, parsed);
 }
 
 }  // namespace

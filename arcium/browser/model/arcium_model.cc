@@ -185,7 +185,10 @@ FolderId ArciumModel::AddFolder(const std::u16string& name) {
   folder.id = FolderId::Generate();
   folder.space_id = default_space_id();
   folder.name = name;
-  folder.position = static_cast<int>(folders_.size());
+  folder.position = static_cast<int>(std::count_if(
+      folders_.begin(), folders_.end(), [&folder](const Folder& existing) {
+        return existing.space_id == folder.space_id;
+      }));
   const FolderId id = folder.id;
   folders_.push_back(std::move(folder));
   Notify();
@@ -204,6 +207,7 @@ void ArciumModel::RemoveFolder(FolderId id) {
       entry.folder_id.reset();
     }
   }
+  NormalisePositions();
   Notify();
 }
 
@@ -283,6 +287,23 @@ void ArciumModel::NormalisePositions() {
       for (size_t i = 0; i < ordered.size(); ++i) {
         FindEntry(ordered[i]->id)->position = static_cast<int>(i);
       }
+    }
+
+    // Folders are not split by kind, so renumber them as a single sequence
+    // per space, the same way RemoveFolder and AddFolder must agree on
+    // "the next free position" within that space.
+    std::vector<Folder*> folders_in_space;
+    for (Folder& folder : folders_) {
+      if (folder.space_id == space.id) {
+        folders_in_space.push_back(&folder);
+      }
+    }
+    std::sort(folders_in_space.begin(), folders_in_space.end(),
+              [](const Folder* a, const Folder* b) {
+                return a->position < b->position;
+              });
+    for (size_t i = 0; i < folders_in_space.size(); ++i) {
+      folders_in_space[i]->position = static_cast<int>(i);
     }
   }
 }
