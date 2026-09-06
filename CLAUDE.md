@@ -68,7 +68,11 @@ Chromium keys by file name.
 
 ### Coding conventions
 
-- Chromium C++ style, enforced with `git cl format` / clang-format from the checkout.
+- Chromium C++ style, enforced with `scripts/format`. `git cl format` does NOT work in this
+  setup: it formats files tracked by the Chromium repo, while Arcium's sources live in this repo
+  and are reached through the `chromium/src/arcium` symlink, and it wants a merge base against
+  `origin/main` that a shallow checkout pinned to a tag does not have. `scripts/format` calls the
+  same two formatters directly.
 - Files small and single-purpose. A file over ~500 lines is a smell; split it.
 - Names are user-facing concepts: `Space`, `ArciumProfile`, `Favorite`, `PinnedTab`, `TodayTab`, `Folder`.
 - Feature flags for anything user-visible and unfinished: `arcium/common/features.h`.
@@ -94,6 +98,7 @@ scripts/sync                  # idempotent: symlinks into the tree, dependency i
 scripts/build <config> [tgt]  # dev | perf | release; args from build/common.gni + build/<config>.gn
 scripts/run [flags] [url]     # launch out/dev with user-data-dir "Application Support/Arcium-dev"
 scripts/playground            # build + launch arcium_playground, the standalone sidebar host
+scripts/format [files...]     # clang-format + gn format; see below, git cl format does not work here
 scripts/netaudit [seconds]    # idle network audit against docs/netaudit-allowlist.txt
 scripts/perf [--runs N] [--idle S] [--label L]   # startup, idle RSS, process count -> docs/perf/
 out/dev/arcium_unittests      # model and adapter tests (scripts/build dev arcium_unittests)

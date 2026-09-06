@@ -1,0 +1,42 @@
+#!/usr/bin/env bash
+# Formats Arcium sources the way the Chromium tree expects.
+#
+# `git cl format` does not work here: it formats files tracked by the Chromium
+# repo, and Arcium's sources live in this repo, reached through the
+# chromium/src/arcium symlink. It also needs a merge base against origin/main,
+# which a shallow checkout pinned to a tag does not have. So call the same two
+# formatters that git cl format would call, directly.
+#
+# With no arguments, formats everything git reports as changed here.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+source scripts/lib.sh 2>/dev/null || true
+
+CLANG_FORMAT="${CHROMIUM_ROOT:-/Volumes/Texternal/chromium}/src/buildtools/mac_arm64-format/clang-format"
+GN="${CHROMIUM_ROOT:-/Volumes/Texternal/chromium}/src/buildtools/mac/gn"
+
+# bash 3.2 on macOS has no mapfile, so collect with a plain read loop.
+if [ $# -gt 0 ]; then
+  files=$(printf '%s\n' "$@")
+else
+  files=$( { git diff --name-only HEAD; git ls-files --others --exclude-standard; } | sort -u )
+fi
+
+cpp=() gnf=()
+while IFS= read -r f; do
+  [ -n "$f" ] || continue
+  [ -f "$f" ] || continue
+  case "$f" in
+    *.cc|*.h|*.mm) cpp+=("$f") ;;
+    *.gn|*.gni) gnf+=("$f") ;;
+  esac
+done <<< "$files"
+
+if [ ${#cpp[@]} -gt 0 ]; then
+  "$CLANG_FORMAT" -i --style=Chromium "${cpp[@]}"
+  echo "clang-format: ${#cpp[@]} file(s)"
+fi
+if [ ${#gnf[@]} -gt 0 ]; then
+  "$GN" format "${gnf[@]}"
+  echo "gn format: ${#gnf[@]} file(s)"
+fi
