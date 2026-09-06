@@ -62,6 +62,23 @@ once. Reads at startup on a background sequence.
 `url, title, space_id, archived_at`, indexed on `archived_at` and on `space_id`. Inserted on
 archive, queried by the archive list and by search.
 
+**Corrected 2026-09-07, after Task 4's review.** An earlier draft of this section said a file that
+will not open is razed and recreated, on the grounds that an unreadable archive must not stop a
+window opening. That reason is sound and the conclusion did not follow from it: failing open —
+returning no archive for the session, so the list and search come back empty — satisfies it
+completely, and deleting is a strictly stronger act the reason does not reach. It also mattered
+more than the draft assumed, because a busy database is indistinguishable from a corrupt one unless
+the code asks: `sql::Database::Execute` runs with a zero busy timeout, so ordinary contention
+between two connections surfaced as a plain failure and took the delete path.
+
+So: raze only when `sql::IsErrorCatastrophic(db.GetErrorCode())` says the file is genuinely
+unusable, and fail open otherwise. Razing uses `sql::Database`'s own delete, not `base::DeleteFile`,
+which leaves SQLite's journal sidecars behind for the new database to trip over.
+
+The archive is the only store here that cannot be reconstructed from anything else — for an
+Arc-model browser it is weeks of the user's "I'll get back to it" pile. Treating it as disposable
+was an assertion about the data, not a property of it.
+
 Schema versioning from the first commit in both stores, because Stage 3 adds spaces and Stage 6
 adds the library.
 
@@ -119,7 +136,10 @@ the same never-archive rules as the idle timeout.
 ### 4.7 Search (R2.6)
 
 `TabSearchService` queries three sources — live tabs, entries, and the archive — and returns ranked
-results over title and URL. Unit-tested, with no UI this stage; Stage 4's command bar becomes its
+results over title and URL. Matching is case- and diacritic-insensitive on all three, which the
+archive achieves with a folded shadow column written through `base::i18n::FoldCase`: SQLite's
+`lower()` is ASCII-only, so a German, Greek or Cyrillic user searching their own archive would
+otherwise get nothing back for a case-mismatched query. Unit-tested, with no UI this stage; Stage 4's command bar becomes its
 front end. This avoids building a search surface twice.
 
 ### 4.8 Archive UI
