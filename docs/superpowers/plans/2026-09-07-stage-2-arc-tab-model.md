@@ -24,6 +24,17 @@
 - Commit messages say why. Commit small. Never commit Chromium sources or build output.
 - Every commit message ends with `Co-Authored-By: Claude Opus 5 <noreply@anthropic.com>`.
 
+## Notes that apply to every task
+
+- Test snippets in this plan name `base::NumberToString`, `base::WriteFile`
+  and `content::WebContentsTester` without repeating their includes each
+  time. Add `base/strings/string_number_conversions.h`,
+  `base/files/file_util.h` and `content/public/test/web_contents_tester.h`
+  as each file needs them.
+- Run `git cl format` from `/Volumes/Texternal/chromium/src` before every
+  commit; include ordering in this plan's snippets is indicative, not
+  authoritative.
+
 ## Build and test commands
 
 ```
@@ -1527,7 +1538,8 @@ namespace arcium {
 // Persists ArciumModel as one JSON file, atomically and off the UI thread.
 // Modelled on components/bookmarks/browser/bookmark_storage.h, which the
 // master spec names as the precedent.
-class ModelStore : public ArciumModel::Observer {
+class ModelStore : public ArciumModel::Observer,
+                   public base::ImportantFileWriter::BackgroundDataSerializer {
  public:
   // Matches BookmarkStorage. Long enough that a drag reordering ten rows
   // writes once, short enough that a crash loses almost nothing.
@@ -1552,10 +1564,13 @@ class ModelStore : public ArciumModel::Observer {
   // ArciumModel::Observer:
   void OnArciumModelChanged() override;
 
+  // base::ImportantFileWriter::BackgroundDataSerializer:
+  base::ImportantFileWriter::BackgroundDataProducerCallback
+  GetSerializedDataProducerForBackgroundSequence() override;
+
  private:
   void OnLoaded(base::OnceClosure done,
                 std::optional<base::Value::Dict> dict);
-  void WriteNow();
 
   raw_ptr<ArciumModel> model_;
   scoped_refptr<base::SequencedTaskRunner> background_runner_;
@@ -1644,23 +1659,27 @@ void ModelStore::OnLoaded(base::OnceClosure done,
 }
 
 void ModelStore::OnArciumModelChanged() {
+  // One scheduled save per burst: the counter only moves when there was no
+  // pending write, which is what ABurstOfMutationsWritesOnce asserts.
   if (!writer_.HasPendingWrite()) {
     ++scheduled_saves_;
   }
   writer_.ScheduleWriteWithBackgroundDataSerializer(this);
-  WriteNow();
 }
 
-void ModelStore::WriteNow() {
-  // Serialisation happens on the calling sequence but the write does not:
-  // ImportantFileWriter hands the string to its background runner.
-  std::optional<std::string> json = base::WriteJson(SerializeModel(*model_));
-  if (!json) {
-    return;
-  }
-  writer_.ScheduleWrite(this);
+// ImportantFileWriter::BackgroundDataSerializer. Called when the debounce
+// timer fires, NOT on every mutation. Snapshots the model on this sequence
+// and serialises on the background sequence, so the UI thread never does the
+// JSON work.
+base::ImportantFileWriter::BackgroundDataProducerCallback
+ModelStore::GetSerializedDataProducerForBackgroundSequence() {
   last_save_time_ = base::Time::Now();
   ++completed_saves_;
+  return base::BindOnce(
+      [](base::Value::Dict snapshot) -> std::optional<std::string> {
+        return base::WriteJson(snapshot);
+      },
+      SerializeModel(*model_));
 }
 
 }  // namespace arcium
@@ -2774,7 +2793,7 @@ EOF
 
 **Interfaces:**
 - Consumes: `ArciumModel`, `ArchiveStore`, `TabBinding`, `ModelStore::last_save_time()`.
-- Produces: `arcium::ArchiveService` with `void OnTabActivated(tabs::TabHandle)`, `void ArchiveAllToday()`, `bool MayArchive(tabs::TabHandle) const`, `std::optional<base::Time> next_expiry_for_testing() const`, `int scheduled_timer_count_for_testing() const`; `SidebarModel` gains `void SetArchiveTimeout(ArchiveTimeout)` and `ArchiveTimeout archive_timeout() const`.
+- Produces: `arcium::ArchiveService` with `void OnTabActivated(tabs::TabHandle)`, `void ArchiveAllToday()`, `bool MayArchive(tabs::TabHandle) const`, `std::optional<base::Time> next_expiry_for_testing() const`, `int live_timer_count_for_testing() const`; `SidebarModel` gains `void SetArchiveTimeout(ArchiveTimeout)` and `ArchiveTimeout archive_timeout() const`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2845,8 +2864,11 @@ TEST_F(ArchiveServiceTest, OneTimerServesEveryTab) {
   for (int i = 0; i < 20; ++i) {
     AddTab(browser(), GURL("https://example.com/" + base::NumberToString(i)));
   }
-  // The contract is one scheduled expiry for the whole browser, not twenty.
-  EXPECT_EQ(1, service_->scheduled_timer_count_for_testing());
+  // The contract is one live timer for the whole browser, not one per tab.
+  // It is restarted as tabs come and go; what must never grow is the count.
+  EXPECT_EQ(1, service_->live_timer_count_for_testing());
+  // And it is aimed at the earliest expiry among archivable tabs.
+  ASSERT_TRUE(service_->next_expiry_for_testing().has_value());
 }
 
 TEST_F(ArchiveServiceTest, ActivityPushesTheExpiryOut) {
@@ -2996,9 +3018,30 @@ The query engine only. Stage 4's command bar becomes its front end, so no UI is 
 
 - [ ] **Step 1: Write the failing test**
 
+`BrowserWithTestWindowTest::AddTab(Browser*, const GURL&)` takes no title, so
+the fixture needs a helper — search ranks on titles and every test below
+depends on controlling them:
+
 ```cpp
+class TabSearchServiceTest : public BrowserWithTestWindowTest {
+ protected:
+  void AddTabWithTitle(const GURL& url, const std::u16string& title) {
+    AddTab(browser(), url);
+    content::WebContentsTester::For(browser()->tab_strip_model()
+                                        ->GetWebContentsAt(0))
+        ->SetTitle(title);
+  }
+  // Built in SetUp() over the same profile the browser uses.
+  ArciumModel model_;
+  TabBinding binding_;
+  ArchiveStore archive_;
+  std::unique_ptr<SidebarTabModel> sidebar_model_;
+  std::unique_ptr<TabSearchService> service_;
+  base::ScopedTempDir dir_;
+};
+
 TEST_F(TabSearchServiceTest, MatchesTitleAndUrlAcrossAllThreeSources) {
-  AddTab(browser(), GURL("https://live.example/"), u"Live page");
+  AddTabWithTitle(GURL("https://live.example/"), u"Live page");
   model_.AddEntry(EntryKind::kPinned, GURL("https://entry.example/"), u"Entry");
   archive_.Add(MakeArchived("https://archived.example/", u"Archived"));
 
@@ -3009,7 +3052,7 @@ TEST_F(TabSearchServiceTest, MatchesTitleAndUrlAcrossAllThreeSources) {
 }
 
 TEST_F(TabSearchServiceTest, LiveTabsOutrankEntriesWhichOutrankTheArchive) {
-  AddTab(browser(), GURL("https://match.example/live"), u"match");
+  AddTabWithTitle(GURL("https://match.example/live"), u"match");
   model_.AddEntry(EntryKind::kPinned, GURL("https://match.example/entry"),
                   u"match");
   archive_.Add(MakeArchived("https://match.example/archive", u"match"));
@@ -3022,33 +3065,32 @@ TEST_F(TabSearchServiceTest, LiveTabsOutrankEntriesWhichOutrankTheArchive) {
 }
 
 TEST_F(TabSearchServiceTest, ATitlePrefixOutranksAMidWordMatch) {
-  AddTab(browser(), GURL("https://a.example/"), u"Chromium docs");
-  AddTab(browser(), GURL("https://b.example/"), u"The Chromium project");
+  AddTabWithTitle(GURL("https://a.example/"), u"Chromium docs");
+  AddTabWithTitle(GURL("https://b.example/"), u"The Chromium project");
   std::vector<SearchResult> results = service_->Search(u"chromium", 10);
   ASSERT_EQ(2u, results.size());
   EXPECT_EQ(u"Chromium docs", results[0].title);
 }
 
 TEST_F(TabSearchServiceTest, AWarmEntryIsReportedOnceNotTwice) {
-  AddTab(browser(), GURL("https://both.example/"), u"Both");
+  AddTabWithTitle(GURL("https://both.example/"), u"Both");
   sidebar_model_->PinTab(0);
   EXPECT_EQ(1u, service_->Search(u"both", 10).size());
 }
 
 TEST_F(TabSearchServiceTest, MatchingIsCaseAndDiacriticInsensitive) {
-  AddTab(browser(), GURL("https://a.example/"), u"Café");
+  AddTabWithTitle(GURL("https://a.example/"), u"Café");
   EXPECT_EQ(1u, service_->Search(u"CAFE", 10).size());
 }
 
 TEST_F(TabSearchServiceTest, AnEmptyQueryReturnsNothing) {
-  AddTab(browser(), GURL("https://a.example/"), u"A");
+  AddTabWithTitle(GURL("https://a.example/"), u"A");
   EXPECT_TRUE(service_->Search(u"", 10).empty());
 }
 
 TEST_F(TabSearchServiceTest, TheLimitIsHonouredAcrossSources) {
   for (int i = 0; i < 5; ++i) {
-    AddTab(browser(), GURL("https://x.example/" + base::NumberToString(i)),
-           u"x");
+    AddTabWithTitle(GURL("https://x.example/" + base::NumberToString(i)), u"x");
   }
   archive_.Add(MakeArchived("https://x.example/archived", u"x"));
   EXPECT_EQ(3u, service_->Search(u"x", 3).size());
