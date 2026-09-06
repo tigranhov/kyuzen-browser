@@ -33,6 +33,7 @@
 | Patch | Seam | Purpose |
 |---|---|---|
 | `0010-gn-arcium-ui.patch` | `chrome/browser/ui/BUILD.gn` | Dependency on `//arcium/ui/browser` with circular includes allowed |
+| `0011-gn-all-arcium.patch` | root `BUILD.gn`, `group("gn_all")` | Reference `//arcium:all` so GN loads the test and playground targets (found during Task 4) |
 | `0015-resource-ids-arcium-strings.patch` | `tools/gritsettings/resource_ids.spec` | Message id ranges for the renamed string tables (found during Task 2: grit keys ranges by .grd path) |
 | `0020-api-keys-infobar.patch` | `chrome/browser/ui/startup/infobar_utils.cc` | Suppress the missing-API-keys infobar |
 | `0030-signin-not-allowed.patch` | `chrome/browser/signin/account_consistency_mode_manager.cc` | Sign-in disabled, which hides the settings controls |

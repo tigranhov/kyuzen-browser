@@ -1,9 +1,17 @@
-# Chromium-side adapters for the Arcium sidebar. Depends on //chrome/browser/ui,
-# which depends back on this target; chrome/browser/ui/BUILD.gn allows the cycle.
+# Chromium-side adapters for the Arcium sidebar. Includes chrome/browser/ui
+# headers without depending on that target: //chrome/browser/ui:ui depends on
+# this one and lists it in allow_circular_includes_from (patch 0010). A dep in
+# both directions would be a GN dependency cycle.
 source_set("browser") {
-  sources = []
+  sources = [
+    "sidebar_tab_model.cc",
+    "sidebar_tab_model.h",
+  ]
   deps = [
     "//arcium/common",
+    "//arcium/ui/sidebar",
     "//base",
+    "//components/tabs:public",
+    "//content/public/browser",
   ]
 }

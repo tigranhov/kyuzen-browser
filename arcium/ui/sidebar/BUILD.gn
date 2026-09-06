@@ -1,0 +1,17 @@
+import("//components/vector_icons/vector_icons.gni")
+
+# Pure Views. Must not depend on //chrome/browser so the playground stays small.
+source_set("sidebar") {
+  sources = [
+    "sidebar_metrics.h",
+    "sidebar_model.h",
+  ]
+  public_deps = [
+    "//base",
+    "//ui/base",
+    "//url",
+  ]
+  deps = [
+    "//ui/views",
+  ]
+}

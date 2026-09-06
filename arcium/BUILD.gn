@@ -1,0 +1,7 @@
+# Everything Arcium builds that nothing in Chromium references: tests and the
+# playground. The root gn_all group depends on this (patch 0011) so GN loads
+# these BUILD.gn files.
+group("all") {
+  testonly = true
+  deps = [ "//arcium/test:arcium_unittests" ]
+}

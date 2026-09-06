@@ -1,0 +1,18 @@
+Seam: BUILD.gn (root), group("gn_all").
+Why: GN only loads BUILD.gn files that something references. Arcium tests and
+     the playground are not reachable from chrome, so gn_all lists //arcium:all.
+Delegates to: arcium/BUILD.gn.
+
+diff --git a/BUILD.gn b/BUILD.gn
+index 0bd5d40ff7..6de8a71e27 100644
+--- a/BUILD.gn
++++ b/BUILD.gn
+@@ -97,6 +97,8 @@ group("gn_all") {
+     }
+   } else {
+     deps = [
++      # Arcium: tests and playground; GN loads a BUILD.gn only when referenced.
++      "//arcium:all",
+       "//base:base_perftests",
+       "//base:base_unittests",
+       "//build/modules",
