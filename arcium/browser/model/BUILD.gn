@@ -1,0 +1,16 @@
+# The persistent sidebar model. No Chromium UI or browser dependencies, so it
+# unit-tests without a browser and the playground could host it directly.
+source_set("model") {
+  sources = [
+    "arcium_model.cc",
+    "arcium_model.h",
+    "entry_id.h",
+    "folder.h",
+    "space.h",
+    "tab_entry.h",
+  ]
+  deps = [
+    "//base",
+    "//url",
+  ]
+}
