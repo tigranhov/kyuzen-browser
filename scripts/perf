@@ -1,0 +1,104 @@
+#!/usr/bin/env python3
+"""Cheap, dependency-free perf baseline for Arcium.
+
+Usage: scripts/perf [--runs N] [--idle SECONDS] [--label NAME] [--config dev|perf]
+Measures per run: startup_ms (spawn -> DevTools endpoint answers), idle_rss_mb (sum over all
+browser processes after the idle period), process_count. Writes docs/perf/<date>-<label>.md.
+"""
+import argparse, datetime, json, os, pathlib, shutil, statistics, subprocess, sys, tempfile, time, urllib.request
+
+ROOT = pathlib.Path(__file__).resolve().parent.parent
+CHROMIUM_ROOT = pathlib.Path(os.environ.get("CHROMIUM_ROOT", "/Volumes/Texternal/chromium"))
+
+
+def app_path(config):
+    return CHROMIUM_ROOT / "src" / "out" / config / "Arcium.app"
+
+
+def processes(app):
+    out = subprocess.run(["ps", "-axo", "pid=,rss=,command="], capture_output=True, text=True).stdout
+    rows = []
+    for line in out.splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) == 3 and str(app) in parts[2]:
+            rows.append((int(parts[0]), int(parts[1])))
+    return rows
+
+
+def one_run(app, idle):
+    profile = tempfile.mkdtemp(prefix="arcium-perf-")
+    binary = app / "Contents" / "MacOS" / "Arcium"
+    start = time.monotonic()
+    # --remote-debugging-port=0 makes Chromium pick a free port and write it to
+    # <profile>/DevToolsActivePort once the browser is serving, so no fixed port can collide.
+    proc = subprocess.Popen([str(binary), f"--user-data-dir={profile}", "--no-first-run",
+                             "--no-default-browser-check", "--remote-debugging-port=0",
+                             "about:blank"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    port_file = pathlib.Path(profile) / "DevToolsActivePort"
+    startup_ms = None
+    deadline = start + 60
+    while time.monotonic() < deadline:
+        try:
+            port = int(port_file.read_text().splitlines()[0])
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=0.2).read()
+            startup_ms = round((time.monotonic() - start) * 1000)
+            break
+        except Exception:
+            time.sleep(0.02)
+    if startup_ms is None:
+        proc.kill()
+        raise SystemExit("browser did not come up within 60 s")
+    time.sleep(idle)
+    rows = processes(app)
+    rss_mb = round(sum(r for _, r in rows) / 1024)
+    subprocess.run(["osascript", "-e", 'tell application "Arcium" to quit'],
+                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    try:
+        proc.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+    shutil.rmtree(profile, ignore_errors=True)
+    return {"startup_ms": startup_ms, "idle_rss_mb": rss_mb, "process_count": len(rows)}
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--runs", type=int, default=3)
+    ap.add_argument("--idle", type=int, default=60)
+    ap.add_argument("--label", default="baseline")
+    ap.add_argument("--config", default=os.environ.get("ARCIUM_CONFIG", "dev"))
+    a = ap.parse_args()
+    app = app_path(a.config)
+    if not app.exists():
+        raise SystemExit(f"no app at {app}; run scripts/build {a.config}")
+    if processes(app):
+        raise SystemExit("Arcium is already running from this out dir; quit it first")
+    results = []
+    for i in range(a.runs):
+        r = one_run(app, a.idle)
+        print(f"run {i + 1}: {r}", file=sys.stderr)
+        results.append(r)
+        time.sleep(2)
+    med = {k: statistics.median(r[k] for r in results) for k in results[0]}
+    date = datetime.date.today().isoformat()
+    tag = (ROOT / "CHROMIUM_VERSION").read_text().strip()
+    rev = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, capture_output=True, text=True).stdout.strip()
+    out = ROOT / "docs" / "perf" / f"{date}-{a.label}.md"
+    out.write_text(f"""# Perf: {a.label} ({date})
+
+Config `{a.config}`, Chromium `{tag}`, arcium `{rev}`, {a.runs} runs, {a.idle} s idle, fresh profile, about:blank.
+Method: see scripts/perf. Numbers are medians.
+
+| Metric | Median |
+|---|---|
+| Startup to DevTools endpoint (ms) | {med['startup_ms']:.0f} |
+| Idle RSS, all processes (MB) | {med['idle_rss_mb']:.0f} |
+| Process count | {med['process_count']:.0f} |
+
+Raw runs: `{json.dumps(results)}`
+""")
+    print(f"wrote {out}")
+
+
+if __name__ == "__main__":
+    main()
