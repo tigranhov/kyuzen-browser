@@ -5,6 +5,8 @@ source_set("sidebar") {
   sources = [
     "sidebar_metrics.h",
     "sidebar_model.h",
+    "sidebar_view.cc",
+    "sidebar_view.h",
   ]
   public_deps = [
     "//base",

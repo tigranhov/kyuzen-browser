@@ -1,0 +1,33 @@
+# Standalone Views host for Arcium's sidebar components. No //chrome deps.
+executable("arcium_playground") {
+  testonly = true
+  sources = [
+    "arcium_playground_main.cc",
+    "fake_sidebar_model.cc",
+    "fake_sidebar_model.h",
+    "sidebar_example.cc",
+    "sidebar_example.h",
+    "snapshot.cc",
+    "snapshot.h",
+  ]
+  deps = [
+    "//arcium/ui/sidebar",
+    "//base",
+    "//base/test:test_support",
+    "//cc/paint",
+    "//skia",
+    "//ui/base",
+    "//ui/compositor",
+    "//ui/gfx",
+    "//ui/gfx/codec",
+    "//ui/views",
+    "//ui/views/examples:views_examples_lib",
+    "//ui/views/examples:views_examples_proc",
+  ]
+  # ExamplesMainProc loads ui_test.pak and views_examples_resources.pak from
+  # the output directory.
+  data_deps = [
+    "//ui/resources:ui_test_pak",
+    "//ui/views/examples:views_examples_resources_pak",
+  ]
+}

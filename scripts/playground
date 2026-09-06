@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
-# Build and launch the standalone Views examples binary for fast UI iteration.
-# Stage 1 registers Arcium's sidebar components here. Pass --enable-examples=NAME to open one directly.
+# Build and launch arcium_playground, the standalone Views host for Arcium's sidebar
+# components, for fast UI iteration. Pass --enable-examples=NAME to open one example directly.
 source "$(dirname "$0")/lib.sh"
 need_src
 config="${ARCIUM_CONFIG:-dev}"
-"$ARCIUM_ROOT/scripts/build" "$config" views_examples
-# On macOS the target produces an app bundle, not a bare executable.
-bin="$SRC/out/$config/Views Examples.app/Contents/MacOS/Views Examples"
-[ -x "$bin" ] || die "views_examples did not produce $bin"
+"$ARCIUM_ROOT/scripts/build" "$config" arcium_playground
+bin="$SRC/out/$config/arcium_playground"
+[ -x "$bin" ] || die "arcium_playground did not produce $bin"
 exec "$bin" "$@"

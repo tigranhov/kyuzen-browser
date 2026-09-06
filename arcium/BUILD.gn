@@ -3,5 +3,8 @@
 # these BUILD.gn files.
 group("all") {
   testonly = true
-  deps = [ "//arcium/test:arcium_unittests" ]
+  deps = [
+    "//arcium/test:arcium_unittests",
+    "//arcium/ui/playground:arcium_playground",
+  ]
 }
