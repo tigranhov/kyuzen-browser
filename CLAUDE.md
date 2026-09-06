@@ -40,6 +40,13 @@ The four questions above always apply; they cost nothing to answer.
   Never write on the UI thread.
 - Background spaces do nothing: no timers, no polling, no thumbnails.
 
+Hooks. Every upstream change is a numbered patch in `patches/`, applied by `scripts/sync` in
+lexical order. A patch starts with a plain-text header naming the seam, the reason, and the
+`arcium/` function it delegates to, before the first `diff --git` line. A hook is a few lines that
+call into `arcium/`; if a patch starts to carry logic, move the logic into `arcium/`. Two kinds of
+patch carry no call at all and say so in their header: GN wiring and registration tables that
+Chromium keys by file name.
+
 ### Development workflow
 
 1. Brainstorm and get approval before implementing (superpowers:brainstorming). No code before a yes.
@@ -86,9 +93,19 @@ scripts/bootstrap             # one-time: depot_tools + shallow checkout at the 
 scripts/sync                  # idempotent: symlinks into the tree, dependency integrity check, apply patches
 scripts/build <config> [tgt]  # dev | perf | release; args from build/common.gni + build/<config>.gn
 scripts/run [flags] [url]     # launch out/dev with user-data-dir "Application Support/Arcium-dev"
-scripts/playground            # build + launch "Views Examples.app" for UI iteration
+scripts/playground            # build + launch arcium_playground, the standalone sidebar host
 scripts/netaudit [seconds]    # idle network audit against docs/netaudit-allowlist.txt
 scripts/perf [--runs N] [--idle S] [--label L]   # startup, idle RSS, process count -> docs/perf/
+out/dev/arcium_unittests      # model and adapter tests (scripts/build dev arcium_unittests)
+```
+
+Verifying UI without screen capture: `arcium_playground --snapshot=<png>` and
+`scripts/run --arcium-snapshot=<png> [--arcium-snapshot-delay=<seconds>]` paint the Views tree
+offscreen at 2x, write a PNG, and log every view's class, bounds and visibility. Web contents come
+out blank. `--arcium-no-sidebar` runs a window without the sidebar, which is how a Chromium
+regression is told apart from an Arcium one.
+
+```
 scripts/rebase <tag>          # move to a new Chromium tag, resync, reapply patches
 ```
 
@@ -108,7 +125,7 @@ busy; touching one Views file and rebuilding 17 s; rebase no-op 29 s; views_exam
 | Stage | State |
 |---|---|
 | 0 Foundation | done, see docs/stage0-carryover.md and docs/perf/ |
-| 1 Visual MVP | not started |
+| 1 Visual MVP | done, see docs/stage1-findings.md and docs/perf/ |
 | 2 Arc tab model | not started |
 | 3 Spaces and profiles | not started |
 | 4 Command bar and navigation | not started |

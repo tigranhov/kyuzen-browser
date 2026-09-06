@@ -112,6 +112,26 @@ The tint is a two-stop gradient rendered once per size change and cached as a sh
 - Playground screenshots of every component in `docs/screens/stage1/`.
 - Acceptance A1.1 to A1.3 from the master spec, plus `scripts/netaudit` and `scripts/perf --label stage1`.
 
+## 6a. Deviations, decided while building
+
+1. **Reuse list narrowed.** `TabIcon` and `ToolbarButton` live in `chrome/browser/ui` and would drag
+   the browser into the playground binary. The sidebar draws its own favicon and throbber and uses
+   `views::ImageButton` with vector icons in `arcium/ui/sidebar/icons/`.
+2. **Browser test deferred to Stage 2.** Building Chromium's browser-test target costs hours.
+   Stage 1 verification is `arcium_unittests` plus the checklist in `docs/stage1-findings.md`,
+   executed over the DevTools protocol against the real browser.
+3. **No Cmd+S sidebar toggle.** The nav row's toggle button hides and shows the sidebar within the
+   session; a keyboard shortcut arrives with collapse in Stage 5.
+4. **The URL pill hosts the real location bar** (section 4.2's preferred path). Reparenting worked:
+   the omnibox, its popup, the security chip and the page-action icons all came with it.
+5. **Fullscreen is plain, not immersive, on macOS.** Immersive fullscreen moves top chrome into an
+   overlay window sized from the tab strip and toolbar; with both hidden that window is zero-sized,
+   which macOS does not support. Patch 0100 opts Arcium windows out.
+6. **The Today list scrolls.** Beyond about twenty tabs the rows would otherwise be laid out past the
+   bottom of the column at zero height and disappear.
+7. **Screenshots come from an offscreen paint,** not screen capture, which needs a macOS permission
+   an automated session does not have. Both binaries take a `--snapshot` switch.
+
 ## 7. Risks
 
 | Risk | Mitigation |
