@@ -9,7 +9,7 @@ acceptance; each is an input to the Stage 1 plan.
 | "Google API keys are missing" infobar on every window | first window | One-line hook patch at the infobar creation site (`chrome/browser/ui/startup/`), delegating the decision to `arcium/`. First patch of the project |
 | Sign-in controls visible in Settings > You and Google; they cannot work without OAuth keys | `chrome://settings/people` | Hide the section via a pref default or a hook; Sync already reports "disabled by your administrator" |
 | Web Store shows a "Switch to Chrome?" banner with an "Install Chrome" button, though "Add to Chrome" works | Web Store detail page | The store reads the user-agent client-hints brand list, which says "Chromium" not "Google Chrome". Decide whether to present a Chrome brand in client hints (Brave does). Install itself is confirmed working |
-| Default search engine and `www.google.com` contact at idle, if the net audit shows it | `scripts/netaudit` | Search-engine choice is a product decision for Stage 1 or 4 (command bar) |
+| Idle network: `accounts.google.com`, `android.clients.google.com` (GCM push check-in), `www.google.com` (default search) | `scripts/netaudit`, see `docs/netaudit-findings.md` | Sign-in pref default and search-engine decision in Stage 1; GCM is a keep-or-drop product decision |
 | Two `objc` "class implemented in both" warnings at launch (ANGLESwapCGLLayer) | stderr | Component-build artefact, harmless, disappears in non-component builds |
 
 ## Verified working, no action

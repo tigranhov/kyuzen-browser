@@ -1,0 +1,12 @@
+# Hosts Arcium is allowed to contact at idle with a fresh profile (spec D6).
+# Subdomains of a listed host are allowed.
+# Component updater (Widevine, CRLSet, certificate transparency, etc.)
+update.googleapis.com
+clients2.google.com
+edgedl.me.gvt1.com
+dl.google.com
+# Safe Browsing (user toggle, on by default)
+safebrowsing.googleapis.com
+# Chrome Web Store, only when the user visits it
+chromewebstore.google.com
+clients2.googleusercontent.com
