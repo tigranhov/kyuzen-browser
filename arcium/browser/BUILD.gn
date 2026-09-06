@@ -5,8 +5,6 @@ source_set("browser") {
     "model_store.cc",
     "model_store.h",
   ]
-  deps = [
-    "//arcium/browser/model",
-    "//base",
-  ]
+  public_deps = [ "//arcium/browser/model" ]
+  deps = [ "//base" ]
 }
