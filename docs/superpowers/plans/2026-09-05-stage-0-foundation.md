@@ -1063,7 +1063,8 @@ source "$(dirname "$0")/lib.sh"
 need_src
 config="${ARCIUM_CONFIG:-dev}"
 "$ARCIUM_ROOT/scripts/build" "$config" views_examples
-bin="$SRC/out/$config/views_examples"
+# On macOS the target produces an app bundle, not a bare executable.
+bin="$SRC/out/$config/Views Examples.app/Contents/MacOS/Views Examples"
 [ -x "$bin" ] || die "views_examples did not produce $bin"
 exec "$bin" "$@"
 EOF
