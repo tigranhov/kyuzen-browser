@@ -12,6 +12,10 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
+namespace views {
+class ScrollView;
+}
+
 namespace arcium {
 
 class NavRowView;
@@ -78,6 +82,7 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   raw_ptr<FavoritesGridView> favorites_ = nullptr;
   raw_ptr<TabListView> pinned_ = nullptr;
   raw_ptr<SectionDividerView> divider_ = nullptr;
+  raw_ptr<views::ScrollView> today_scroll_ = nullptr;
   raw_ptr<TabListView> today_ = nullptr;
   raw_ptr<SpaceBarView> space_bar_ = nullptr;
 };

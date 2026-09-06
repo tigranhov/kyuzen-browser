@@ -60,6 +60,9 @@ TabRowView::TabRowView(Delegate delegate)
 
   title_ = AddChildView(std::make_unique<views::Label>());
   title_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  // Rows live inside a ScrollView, which is layer-backed on macOS, and the
+  // sidebar's gradient means that layer is not opaque.
+  title_->SetSubpixelRenderingEnabled(false);
   title_->SetElideBehavior(gfx::ELIDE_TAIL);
   title_->SetProperty(
       views::kFlexBehaviorKey,

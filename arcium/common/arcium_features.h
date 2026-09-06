@@ -19,6 +19,9 @@ inline constexpr char kNoSidebarSwitch[] = "arcium-no-sidebar";
 // Views (not the page) to a PNG a few seconds after it opens, then continues.
 // Screen capture needs a macOS permission that automated runs do not have.
 inline constexpr char kSnapshotSwitch[] = "arcium-snapshot";
+// Seconds to wait before the snapshot (default 4), so a script can set up
+// tabs over DevTools first.
+inline constexpr char kSnapshotDelaySwitch[] = "arcium-snapshot-delay";
 
 // True when the sidebar layout should be used for normal tabbed windows.
 bool IsSidebarEnabled();

@@ -22,6 +22,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
+#include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -222,12 +223,16 @@ void BrowserSidebarController::MaybeScheduleSnapshot() {
   if (!command_line->HasSwitch(features::kSnapshotSwitch)) {
     return;
   }
+  int delay_seconds = 4;
+  base::StringToInt(
+      command_line->GetSwitchValueASCII(features::kSnapshotDelaySwitch),
+      &delay_seconds);
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
       base::BindOnce(&BrowserSidebarController::WriteSnapshot,
                      weak_factory_.GetWeakPtr(),
                      command_line->GetSwitchValuePath(features::kSnapshotSwitch)),
-      base::Seconds(4));
+      base::Seconds(delay_seconds > 0 ? delay_seconds : 4));
 }
 
 void BrowserSidebarController::WriteSnapshot(const base::FilePath& path) {

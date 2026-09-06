@@ -40,6 +40,8 @@ TabListView::TabListView(SidebarModel* model, SidebarSection section)
     new_tab_->SetMinSize(gfx::Size(0, metrics::kRowHeight));
     new_tab_->SetImageLabelSpacing(metrics::kRowIconTextGap);
     new_tab_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    // See the note in TabRowView: the Today list is inside a ScrollView.
+    new_tab_->SetTextSubpixelRenderingEnabled(false);
   }
 }
 
