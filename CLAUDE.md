@@ -78,21 +78,36 @@ The four questions above always apply; they cost nothing to answer.
 
 ## Commands
 
-Filled in during Stage 0. Until then, nothing here is runnable.
+All scripts read `CHROMIUM_VERSION` and put depot_tools on PATH themselves. They are bash; the
+interactive shell is zsh, so for ad-hoc checks use `bash -c 'source scripts/lib.sh && ...'`.
 
 ```
-scripts/sync            # fetch the pinned tag, apply patches, refresh symlink
-scripts/build <config>  # dev | perf | release
-scripts/run             # launch the dev build with a scratch user-data-dir
-scripts/rebase <tag>    # move CHROMIUM_VERSION, reapply patches, report conflicts
-scripts/perf            # startup, idle memory, process count vs vanilla; writes docs/perf/
+scripts/bootstrap             # one-time: depot_tools + shallow checkout at the pinned tag (needs git-lfs)
+scripts/sync                  # idempotent: symlinks into the tree, dependency integrity check, apply patches
+scripts/build <config> [tgt]  # dev | perf | release; args from build/common.gni + build/<config>.gn
+scripts/run [flags] [url]     # launch out/dev with user-data-dir "Application Support/Arcium-dev"
+scripts/playground            # build + launch "Views Examples.app" for UI iteration
+scripts/netaudit [seconds]    # idle network audit against docs/netaudit-allowlist.txt
+scripts/perf [--runs N] [--idle S] [--label L]   # startup, idle RSS, process count -> docs/perf/
+scripts/rebase <tag>          # move to a new Chromium tag, resync, reapply patches
 ```
+
+Environment knobs: `ARCIUM_JOBS` (ninja parallelism, default all cores; lower it when the machine is
+busy), `GCLIENT_JOBS` (default 3; higher trips Google's anonymous rate limit), `ARCIUM_CONFIG`
+(dev by default), `ARCIUM_USER_DATA_DIR`, `CHROMIUM_ROOT`.
+
+Long builds: `nohup scripts/build dev > /Volumes/Texternal/chromium/build.log 2>&1 &` and tail the log.
+Siso prints dots instead of step counters under this agent environment; progress is best read by
+counting `out/dev/obj/**/*.o` against the total from `ninja -C out/dev -t commands chrome | grep -ac clang`.
+
+Reference timings on this machine (M1 Pro, USB SSD): first build 5.5 h with the machine otherwise
+busy; touching one Views file and rebuilding 17 s; rebase no-op 29 s; views_examples 3 min.
 
 ## Stage status
 
 | Stage | State |
 |---|---|
-| 0 Foundation | not started |
+| 0 Foundation | done, see docs/stage0-carryover.md and docs/perf/ |
 | 1 Visual MVP | not started |
 | 2 Arc tab model | not started |
 | 3 Spaces and profiles | not started |
