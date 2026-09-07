@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -289,6 +290,39 @@ TEST_F(SidebarTabModelTest, TodayTabsStillFollowStripOrder) {
   ASSERT_EQ(2u, rows.size());
   EXPECT_EQ(GURL("https://b.example/"), rows[0].url);
   EXPECT_EQ(GURL("https://a.example/"), rows[1].url);
+}
+
+// I2: activating an entry from the window that does not hold its tab must
+// raise the window that does, not open a second tab and steal the entry.
+TEST_F(SidebarTabModelTest, ActivatingAnEntryHeldByAnotherWindowDoesNotSteal) {
+  AddTab(browser(), GURL("https://other.example/"));
+  AddTab(browser(), GURL("https://pinned.example/"));
+  std::unique_ptr<SidebarTabModel> model_a = MakeModel();
+  model_a->PinTab(0);
+  const EntryId id = model_a->rows()[0].entry_id;
+  const tabs::TabHandle pinned_tab = strip()->GetTabAtIndex(0)->GetHandle();
+  strip()->ActivateTabAt(1);
+  ASSERT_EQ(1, strip()->active_index());
+
+  std::unique_ptr<Browser> browser_b =
+      CreateBrowser(profile(), browser()->type(), /*hosted_app=*/false);
+  AddTab(browser_b.get(), GURL("https://b.example/"));
+  SidebarTabModel model_b(browser_b->tab_strip_model(), &arcium_model_,
+                          &binding_);
+  const int b_count_before = browser_b->tab_strip_model()->count();
+
+  model_b.ActivateEntry(id);
+  task_environment()->RunUntilIdle();
+
+  // A's tab is now A's active tab...
+  EXPECT_EQ(0, strip()->active_index());
+  EXPECT_EQ(2, strip()->count());
+  // ...B gained nothing, and the entry still points at A's tab.
+  EXPECT_EQ(b_count_before, browser_b->tab_strip_model()->count());
+  ASSERT_TRUE(binding_.TabForEntry(id).has_value());
+  EXPECT_EQ(pinned_tab, binding_.TabForEntry(id).value());
+
+  browser_b->tab_strip_model()->CloseAllTabs();
 }
 
 }  // namespace

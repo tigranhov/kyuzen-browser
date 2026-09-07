@@ -86,8 +86,12 @@ class SidebarTabModel : public SidebarModel,
   void OnArciumModelChanged() override;
 
  private:
+  // The entry's tab if it is live, in whichever window's strip it sits.
+  tabs::TabInterface* BoundTabAnywhere(EntryId id) const;
   // The entry's tab if it is live and in this window's strip, else null.
   tabs::TabInterface* LiveTabForEntry(EntryId id) const;
+  // Selects `tab` in the strip that actually holds it and raises its window.
+  void ActivateTabInItsOwnWindow(tabs::TabInterface* tab);
   SidebarRow RowForEntry(const TabEntry& entry) const;
   SidebarRow RowForTab(int index, tabs::TabInterface* tab) const;
   // Creates an entry of `kind` from the tab at `tab_index` and binds it.

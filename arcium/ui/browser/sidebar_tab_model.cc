@@ -15,6 +15,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/tab_list/tab_removed_reason.h"
+#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -25,6 +26,7 @@
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/base_window.h"
 #include "ui/base/page_transition_types.h"
 
 namespace arcium {
@@ -88,22 +90,46 @@ std::vector<SidebarRow> SidebarTabModel::rows() const {
   return rows;
 }
 
+tabs::TabInterface* SidebarTabModel::BoundTabAnywhere(EntryId id) const {
+  const std::optional<tabs::TabHandle> handle = binding_->TabForEntry(id);
+  // The handle is weak, so a closed tab reads as null and the entry is cold.
+  return handle.has_value() ? handle->Get() : nullptr;
+}
+
 tabs::TabInterface* SidebarTabModel::LiveTabForEntry(EntryId id) const {
   if (!tab_strip_model_) {
     return nullptr;
   }
-  const std::optional<tabs::TabHandle> handle = binding_->TabForEntry(id);
-  if (!handle.has_value()) {
-    return nullptr;
-  }
-  // The handle is weak, so a closed tab reads as null. A tab living in
-  // another window's strip is not this window's to draw, so it reads cold
-  // here too.
-  tabs::TabInterface* tab = handle->Get();
+  // A tab living in another window's strip is not this window's to draw, so
+  // it reads cold here. Activating it is still that window's job, not a
+  // reason to open a second tab: see ActivateEntry().
+  tabs::TabInterface* tab = BoundTabAnywhere(id);
   if (!tab || tab_strip_model_->GetIndexOfTab(tab) == TabStripModel::kNoTab) {
     return nullptr;
   }
   return tab;
+}
+
+void SidebarTabModel::ActivateTabInItsOwnWindow(tabs::TabInterface* tab) {
+  const int index = tab_strip_model_->GetIndexOfTab(tab);
+  if (index != TabStripModel::kNoTab) {
+    tab_strip_model_->ActivateTabAt(index);
+    return;
+  }
+  BrowserWindowInterface* window = tab->GetBrowserWindowInterface();
+  if (!window) {
+    return;  // Detached mid-drag; leave the binding alone rather than steal.
+  }
+  TabStripModel* strip = window->GetTabStripModel();
+  const int other_index =
+      strip ? strip->GetIndexOfTab(tab) : TabStripModel::kNoTab;
+  if (other_index == TabStripModel::kNoTab) {
+    return;
+  }
+  strip->ActivateTabAt(other_index);
+  if (ui::BaseWindow* base_window = window->GetWindow()) {
+    base_window->Activate();
+  }
 }
 
 SidebarRow SidebarTabModel::RowForEntry(const TabEntry& entry) const {
@@ -230,8 +256,13 @@ void SidebarTabModel::ActivateEntry(EntryId id) {
   if (!entry || !tab_strip_model_) {
     return;
   }
-  if (tabs::TabInterface* tab = LiveTabForEntry(id)) {
-    tab_strip_model_->ActivateTabAt(tab_strip_model_->GetIndexOfTab(tab));
+  // Consult the *global* binding, not just this window's strip. An entry
+  // whose tab lives in another window is that window's to show: opening a
+  // second tab here would rebind the entry, silently blank the other
+  // window's row and orphan its tab in neither Pinned nor Today. Only a dead
+  // handle falls through to open-and-bind.
+  if (tabs::TabInterface* tab = BoundTabAnywhere(id)) {
+    ActivateTabInItsOwnWindow(tab);
     return;
   }
   if (!entry->url.is_valid()) {
