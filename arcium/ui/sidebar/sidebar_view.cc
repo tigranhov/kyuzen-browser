@@ -81,6 +81,12 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
                                views::MaximumFlexSizeRule::kUnbounded));
   space_bar_ = AddChildView(std::make_unique<SpaceBarView>());
 
+  // Every section is a drag source, and the two that can be empty are targets
+  // that only exist while a drag is running; see RowDragSession.
+  favorites_->SetDragSession(&row_drag_session_);
+  pinned_->SetDragSession(&row_drag_session_);
+  today_->SetDragSession(&row_drag_session_);
+
   // Cmd+Shift+Backspace returns the active pinned entry to its pinned URL,
   // the same command the row's revert button issues. It is an accelerator
   // rather than a key handler on the row because sidebar rows are only
@@ -93,7 +99,14 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   Rebuild();
 }
 
-SidebarView::~SidebarView() = default;
+SidebarView::~SidebarView() {
+  // ~View destroys the children, and it runs after this object's own members
+  // are gone. The sections must stop observing the session while it is still
+  // there.
+  favorites_->SetDragSession(nullptr);
+  pinned_->SetDragSession(nullptr);
+  today_->SetDragSession(nullptr);
+}
 
 void SidebarView::SetCaptionButtonWidth(int width) {
   caption_button_width_ = width;

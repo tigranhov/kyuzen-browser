@@ -5,6 +5,7 @@
 #ifndef ARCIUM_UI_SIDEBAR_SIDEBAR_VIEW_H_
 #define ARCIUM_UI_SIDEBAR_SIDEBAR_VIEW_H_
 
+#include "arcium/ui/sidebar/row_drag_session.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
@@ -85,6 +86,10 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   raw_ptr<views::ScrollView> today_scroll_ = nullptr;
   raw_ptr<TabListView> today_ = nullptr;
   raw_ptr<SpaceBarView> space_bar_ = nullptr;
+  // Shared by the grid and both lists, and detached from all three in the
+  // destructor: members are destroyed before ~View destroys the children, so
+  // a section still observing this when it goes would be a dangling observer.
+  RowDragSession row_drag_session_;
 };
 
 }  // namespace arcium

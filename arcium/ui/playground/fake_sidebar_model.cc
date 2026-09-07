@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <iterator>
+#include <limits>
 #include <utility>
 
 #include "cc/paint/paint_flags.h"
@@ -206,11 +207,24 @@ void FakeSidebarModel::ClearToday() {
 }
 
 void FakeSidebarModel::AddToFavorites(int tab_index) {
-  MakeEntry(tab_index, SidebarSection::kFavorites);
+  MakeEntry(tab_index, SidebarSection::kFavorites,
+            std::numeric_limits<int>::max());
 }
 
 void FakeSidebarModel::PinTab(int tab_index) {
-  MakeEntry(tab_index, SidebarSection::kPinned);
+  MakeEntry(tab_index, SidebarSection::kPinned,
+            std::numeric_limits<int>::max());
+}
+
+void FakeSidebarModel::MoveTabToSection(int tab_index,
+                                        SidebarSection section,
+                                        int position) {
+  // Today is where the tab already is; the drop that would mean it is
+  // MoveTab.
+  if (section == SidebarSection::kToday) {
+    return;
+  }
+  MakeEntry(tab_index, section, position);
 }
 
 void FakeSidebarModel::UnpinEntry(EntryId id) {
@@ -301,7 +315,10 @@ void FakeSidebarModel::MoveEntryToSection(EntryId id,
     moved.is_cold = false;
     moved.can_return_to_pinned_url = false;
     moved.folder_id.reset();
-    rows_.push_back(std::move(moved));
+    // Where the insertion line was drawn, not the end: Today's order is the
+    // tab strip's, so a drop into it places the tab. The entry's own row was
+    // erased above, so this walk counts exactly the rows `position` counted.
+    rows_.insert(SlotIn(SidebarSection::kToday, position), std::move(moved));
     Reindex();
     Notify();
     return;
@@ -313,6 +330,14 @@ void FakeSidebarModel::MoveEntryToSection(EntryId id,
   if (section == SidebarSection::kFavorites) {
     moved.folder_id.reset();
   }
+  rows_.insert(SlotIn(section, position), std::move(moved));
+  Reindex();
+  Notify();
+}
+
+std::vector<SidebarRow>::iterator FakeSidebarModel::SlotIn(
+    SidebarSection section,
+    int position) {
   // Walk to the `position`-th row of `section`, or to the end of the section
   // if it holds fewer, which is what ArciumModel::ReorderEntry's clamp does.
   int seen = 0;
@@ -325,9 +350,7 @@ void FakeSidebarModel::MoveEntryToSection(EntryId id,
     }
     ++it;
   }
-  rows_.insert(it, std::move(moved));
-  Reindex();
-  Notify();
+  return it;
 }
 
 std::vector<SidebarFolder> FakeSidebarModel::folders() const {
@@ -504,7 +527,9 @@ bool FakeSidebarModel::HasFolder(FolderId id) const {
   return false;
 }
 
-void FakeSidebarModel::MakeEntry(int tab_index, SidebarSection section) {
+void FakeSidebarModel::MakeEntry(int tab_index,
+                                 SidebarSection section,
+                                 int position) {
   SidebarRow* found = FindByTabIndex(tab_index);
   if (!found) {
     return;
@@ -515,10 +540,11 @@ void FakeSidebarModel::MakeEntry(int tab_index, SidebarSection section) {
   std::erase_if(rows_, [tab_index](const SidebarRow& r) {
     return !r.is_cold && r.tab_index == tab_index;
   });
-  auto pos = std::find_if(rows_.begin(), rows_.end(), [&](const SidebarRow& r) {
-    return static_cast<int>(r.section) > static_cast<int>(section);
-  });
-  rows_.insert(pos, std::move(row));
+  // The tab's row is gone before the walk, so `position` counts the entries
+  // that were already in the section — the gap the insertion indicator was
+  // drawn in. SidebarTabModel gets the same answer by appending and then
+  // reordering.
+  rows_.insert(SlotIn(section, position), std::move(row));
   Reindex();
   Notify();
 }

@@ -326,6 +326,31 @@ TEST_F(SidebarTabModelTest, MoveEntryToSectionReordersWithinASection) {
   EXPECT_EQ(last, model->rows()[0].entry_id);
 }
 
+// The other direction. `position` is where the entry ends up once it has been
+// lifted out, not a gap in the section as it stands, and the two readings
+// only differ when the entry moves down — which is what every reorder test in
+// Task 8 avoided asking.
+TEST_F(SidebarTabModelTest, MoveEntryToSectionReordersDownwardsWithinASection) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  AddTab(browser(), GURL("https://c.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  model->PinTab(1);
+  model->PinTab(2);
+  const EntryId first = model->rows()[0].entry_id;
+  const EntryId second = model->rows()[1].entry_id;
+  const EntryId third = model->rows()[2].entry_id;
+
+  model->MoveEntryToSection(first, SidebarSection::kPinned, /*position=*/2);
+
+  std::vector<SidebarRow> rows = model->rows();
+  ASSERT_EQ(3u, rows.size());
+  EXPECT_EQ(second, rows[0].entry_id);
+  EXPECT_EQ(third, rows[1].entry_id);
+  EXPECT_EQ(first, rows[2].entry_id);
+}
+
 // The kind change and the reorder are two ArciumModel writes; the sidebar
 // must still see one change, or a rebuild lands on the intermediate state.
 TEST_F(SidebarTabModelTest, MoveEntryToSectionNotifiesOnce) {
@@ -346,6 +371,71 @@ TEST_F(SidebarTabModelTest, MoveEntryToSectionNotifiesOnce) {
   task_environment()->RunUntilIdle();
   EXPECT_EQ(1, observer.count);
   model->RemoveObserver(&observer);
+}
+
+// A drop into Favourites or Pinned drew an insertion indicator before it was
+// taken. AddToFavorites and PinTab append, which makes that indicator a lie
+// wherever it was not drawn at the end, so a drop issues this instead.
+TEST_F(SidebarTabModelTest, MoveTabToSectionPutsTheNewEntryWhereTheDropAsked) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  AddTab(browser(), GURL("https://c.example/"));
+  // AddTab inserts at index 0, so the strip is c, b, a.
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  model->PinTab(1);
+
+  model->MoveTabToSection(2, SidebarSection::kPinned, /*position=*/0);
+
+  std::vector<SidebarRow> rows = model->rows();
+  ASSERT_EQ(3u, rows.size());
+  EXPECT_EQ(GURL("https://a.example/"), rows[0].url);
+  EXPECT_EQ(GURL("https://c.example/"), rows[1].url);
+  EXPECT_EQ(GURL("https://b.example/"), rows[2].url);
+  for (const SidebarRow& row : rows) {
+    EXPECT_EQ(SidebarSection::kPinned, row.section);
+  }
+}
+
+// And appending is the same command with no position asked for, which is what
+// the menu items mean.
+TEST_F(SidebarTabModelTest, MoveTabToSectionPastTheEndAppends) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+
+  model->MoveTabToSection(1, SidebarSection::kPinned, /*position=*/99);
+
+  std::vector<SidebarRow> rows = model->rows();
+  ASSERT_EQ(2u, rows.size());
+  EXPECT_EQ(GURL("https://b.example/"), rows[0].url);
+  EXPECT_EQ(GURL("https://a.example/"), rows[1].url);
+}
+
+// Today's order *is* the tab-strip order, so the insertion line drawn while
+// an entry is dragged into Today is a promise about where its tab goes.
+TEST_F(SidebarTabModelTest, MovingAnEntryToTodayPutsItsTabWhereTheLineWas) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  AddTab(browser(), GURL("https://c.example/"));
+  // The strip is c, b, a; pinning b leaves Today holding c then a.
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(1);
+  const EntryId id = model->rows()[0].entry_id;
+  ASSERT_TRUE(id.is_valid());
+
+  model->MoveEntryToSection(id, SidebarSection::kToday, /*position=*/0);
+
+  // First in the strip, which is first in Today.
+  EXPECT_EQ(GURL("https://b.example/"),
+            strip()->GetWebContentsAt(0)->GetVisibleURL());
+  std::vector<SidebarRow> rows = model->rows();
+  ASSERT_EQ(3u, rows.size());
+  EXPECT_EQ(GURL("https://b.example/"), rows[0].url);
+  EXPECT_EQ(GURL("https://c.example/"), rows[1].url);
+  EXPECT_EQ(GURL("https://a.example/"), rows[2].url);
+  EXPECT_TRUE(arcium_model_.entries().empty());
 }
 
 // Dropping a warm entry into Today drops the entry, not the page: nothing

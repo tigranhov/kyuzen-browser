@@ -59,6 +59,10 @@ class TabRowView : public views::Button,
                                  const SidebarRow& row,
                                  const gfx::Point& point)>
         show_context_menu;
+    // This row is about to be dragged. Views has no ambient "a drag is
+    // running" signal and the sidebar's empty sections need one, so the
+    // source says so; see RowDragSession.
+    base::RepeatingClosure drag_started;
   };
 
   // Ids for the two hover buttons, so a test can ask which one has the slot.

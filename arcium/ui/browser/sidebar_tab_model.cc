@@ -266,9 +266,9 @@ void SidebarTabModel::ClearToday() {
   }
 }
 
-void SidebarTabModel::AddEntryForTab(int tab_index, EntryKind kind) {
+EntryId SidebarTabModel::AddEntryForTab(int tab_index, EntryKind kind) {
   if (tab_index < 0 || tab_index >= tab_strip_model_->count()) {
-    return;
+    return EntryId();
   }
   tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(tab_index);
   const tabs::TabData data = tabs::TabData::FromTabInterface(tab);
@@ -278,6 +278,7 @@ void SidebarTabModel::AddEntryForTab(int tab_index, EntryKind kind) {
       arcium_model_->AddEntry(kind, data.visible_url, data.title);
   binding_->Bind(id, tab->GetHandle());
   NotifyChanged();
+  return id;
 }
 
 void SidebarTabModel::AddToFavorites(int tab_index) {
@@ -286,6 +287,68 @@ void SidebarTabModel::AddToFavorites(int tab_index) {
 
 void SidebarTabModel::PinTab(int tab_index) {
   AddEntryForTab(tab_index, EntryKind::kPinned);
+}
+
+void SidebarTabModel::MoveTabToSection(int tab_index,
+                                       SidebarSection section,
+                                       int position) {
+  if (section == SidebarSection::kToday || !tab_strip_model_) {
+    return;
+  }
+  const EntryKind kind = section == SidebarSection::kFavorites
+                             ? EntryKind::kFavorite
+                             : EntryKind::kPinned;
+  const EntryId id = AddEntryForTab(tab_index, kind);
+  if (!id.is_valid()) {
+    return;
+  }
+  // AddEntry appends, so the new entry is already lifted out of the order
+  // `position` counted: `position` is the gap the insertion indicator was
+  // drawn in, measured over the entries that were there before this one, and
+  // that is exactly what ReorderEntry inserts at. A position past the end
+  // clamps, which is the append AddToFavorites and PinTab mean.
+  //
+  // Two ArciumModel writes, one sidebar notification: NotifyChanged coalesces
+  // the burst, so no observer sees the entry appended before it is placed.
+  arcium_model_->ReorderEntry(id, position);
+  NotifyChanged();
+}
+
+int SidebarTabModel::TodayStripIndexForPosition(int position) const {
+  if (position < 0 || !tab_strip_model_) {
+    return -1;
+  }
+  int seen = 0;
+  const int count = tab_strip_model_->count();
+  for (int i = 0; i < count; ++i) {
+    if (IsClaimedByEntry(tab_strip_model_->GetTabAtIndex(i))) {
+      continue;
+    }
+    if (seen == position) {
+      return i;
+    }
+    ++seen;
+  }
+  return -1;
+}
+
+void SidebarTabModel::MoveTabBeforeStripIndex(int from, int before) {
+  const int count = tab_strip_model_->count();
+  if (from < 0 || from >= count || count == 0) {
+    return;
+  }
+  int to = before < 0 ? count - 1 : before;
+  // Lifting the tab out first shifts everything below it up one, so landing
+  // before a tab that is already below it means one index less. The same
+  // correction MoveTabToDropIndex applies in the view, and the one the entry
+  // reorder paths need.
+  if (before >= 0 && from < to) {
+    --to;
+  }
+  to = std::clamp(to, 0, count - 1);
+  if (to != from) {
+    tab_strip_model_->MoveWebContentsAt(from, to, /*select_after_move=*/false);
+  }
 }
 
 void SidebarTabModel::UnpinEntry(EntryId id) {
@@ -382,14 +445,29 @@ void SidebarTabModel::MoveEntryToSection(EntryId id,
     // window still has a page behind it, and opening a second copy here
     // would duplicate it.
     const bool cold = BoundTabAnywhere(id) == nullptr;
-    if (cold && url.is_valid()) {
-      // Background: a drop rearranges the sidebar, it does not ask to read
-      // the page. Deliberately unbound — the entry is about to go, and a
-      // binding to a removed entry is what ATabWhoseEntryVanishes covers.
-      tab_strip_model_->delegate()->AddTabAt(url, -1, /*foreground=*/false);
+    // Read before the entry goes, while `position` still counts the Today
+    // rows it was dropped between — this entry is not one of them, and
+    // removing it is what puts its tab among them.
+    const int before = TodayStripIndexForPosition(position);
+    int from = -1;
+    if (cold) {
+      if (url.is_valid()) {
+        // Background: a drop rearranges the sidebar, it does not ask to read
+        // the page. Deliberately unbound — the entry is about to go, and a
+        // binding to a removed entry is what ATabWhoseEntryVanishes covers.
+        tab_strip_model_->delegate()->AddTabAt(url, -1, /*foreground=*/false);
+        // Appended, so it is the last tab; nothing above it moved.
+        from = tab_strip_model_->count() - 1;
+      }
+    } else if (tabs::TabInterface* tab = LiveTabForEntry(id)) {
+      from = tab_strip_model_->GetIndexOfTab(tab);
     }
     binding_->UnbindEntry(id);
     arcium_model_->RemoveEntry(id);
+    // Today's order is the tab strip's, so putting the row where the
+    // insertion line was drawn is a strip move. A tab in another window's
+    // strip has `from` -1 and stays where it is: that window owns it.
+    MoveTabBeforeStripIndex(from, before);
     NotifyChanged();
     return;
   }

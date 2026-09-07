@@ -276,6 +276,16 @@ void TabRowView::OnMouseReleased(const ui::MouseEvent& event) {
     // The press opened the field; the release must not also fire the button,
     // which would activate the row underneath the edit.
     rename_began_on_press_ = false;
+    // View::ProcessMousePressed computed the drag operations, and so set
+    // `possible_drag`, before OnMousePressed opened the field. So a hand that
+    // moved during the double-click still reached ProcessMouseDragged;
+    // CanStartDragForView refused it and the else branch handed the move to
+    // Button::OnMouseDragged, which paints the row pressed. This release is
+    // the last thing that will ever touch it, so it is where the paint has to
+    // come back — under an open rename field is where it would show most.
+    // Where ButtonController::OnMouseReleased would have put it, which is the
+    // whole point: the release puts the button back without firing it.
+    SetState(HitTestPoint(event.location()) ? STATE_HOVERED : STATE_NORMAL);
     return;
   }
   views::Button::OnMouseReleased(event);
@@ -288,6 +298,10 @@ void TabRowView::WriteDragDataForView(views::View* sender,
   payload.entry_id = row_.entry_id;
   payload.tab_index = row_.tab_index;
   payload.Write(data);
+  // Once per drag, at the one moment a source knows one is starting.
+  if (delegate_.drag_started) {
+    delegate_.drag_started.Run();
+  }
 }
 
 int TabRowView::GetDragOperationsForView(views::View* sender,

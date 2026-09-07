@@ -56,6 +56,15 @@ class FolderHeaderView : public views::Button,
     // A row dropped on this header: the entry it names goes into the folder.
     base::RepeatingCallback<void(EntryId id, const SidebarFolder& folder)>
         drop_entry;
+    // Whether a folder may hold `id` at all. A header cannot tell a favourite
+    // from a pinned entry — the payload carries an id and nothing else — and
+    // MoveEntryToFolder no-ops for a favourite, so without this the drop is
+    // accepted, the header highlights, and the gesture is silently discarded.
+    // A predicate rather than a wider payload: the delegate is the owning
+    // list, which holds the model, and it also refuses an id the model has
+    // dropped since the drag began, which nothing written into the payload at
+    // drag-start could.
+    base::RepeatingCallback<bool(EntryId id)> can_accept_entry;
   };
 
   explicit FolderHeaderView(Delegate delegate);
@@ -104,6 +113,10 @@ class FolderHeaderView : public views::Button,
   bool is_drop_target_for_testing() const { return drop_target_; }
 
  private:
+  // Whether this header would take `data`: an entry, and one the owning list
+  // says a folder may hold. CanDrop and GetDropCallback must agree, or a
+  // header refuses the highlight and then takes the drop anyway.
+  bool CanAccept(const ui::OSExchangeData& data) const;
   void UpdateVisuals();
   // Takes the field away without an outcome, for when this header stops being
   // the header for the folder the edit was started on.

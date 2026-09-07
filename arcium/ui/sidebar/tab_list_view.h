@@ -12,9 +12,11 @@
 #include <vector>
 
 #include "arcium/ui/sidebar/row_drag_data.h"
+#include "arcium/ui/sidebar/row_drag_session.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/view.h"
@@ -37,7 +39,7 @@ class TabRowView;
 // A vertical list for one section: folder headers, each followed by its
 // entries, then the entries in no folder. Only the Pinned section has
 // folders. The Today list also shows the "New tab" row at its end.
-class TabListView : public views::View {
+class TabListView : public views::View, public RowDragSession::Observer {
   METADATA_HEADER(TabListView, views::View)
 
  public:
@@ -48,6 +50,12 @@ class TabListView : public views::View {
 
   // Filters `rows` to this section and updates children, reusing views.
   void SetRows(const std::vector<SidebarRow>& rows);
+
+  // The shared "a sidebar row is being dragged" signal. This list is both a
+  // source — its rows announce their drags — and, when it is empty, a target
+  // that only exists while one is running. Null detaches, which is what
+  // SidebarView does before the session it owns goes away.
+  void SetDragSession(RowDragSession* session);
 
   size_t row_count() const { return rows_.size(); }
   size_t folder_count() const { return headers_.size(); }
@@ -67,8 +75,31 @@ class TabListView : public views::View {
   views::View::DropCallback GetDropCallback(
       const ui::DropTargetEvent& event) override;
   void OnPaint(gfx::Canvas* canvas) override;
+  gfx::Size CalculatePreferredSize(
+      const views::SizeBounds& available_size) const override;
+
+  // RowDragSession::Observer:
+  void OnRowDragInFlightChanged() override;
 
  private:
+  // What a drop is aimed at, said in the model's terms rather than in the
+  // view's. A drag runs a nested loop and another window on the same profile
+  // can rebuild this list inside it, so an index names a slot that may hold
+  // something else by the time the drop runs. Resolved once, in
+  // GetDropCallback, off the rows the pointer was actually over.
+  struct DropAnchor {
+    // Entry sections: the entry the dragged row lands before. Invalid means
+    // the end of the section, which is also what an anchor the model has
+    // since dropped falls back to.
+    EntryId before_entry;
+    // Today: the tab it lands before, or -1 for the end. Today's order is the
+    // tab strip's, so a strip index is the stable name for a place in it.
+    int before_tab = -1;
+    // Today: the same boundary counted in rows, which is the position an
+    // entry dropped into Today asks for its tab to be put at.
+    int today_position = 0;
+  };
+
   // Where one child of this list sits in the laid-out order.
   struct PlanItem {
     bool is_header = false;
@@ -94,27 +125,47 @@ class TabListView : public views::View {
                         const gfx::Point& point);
   // A row dropped on one of this list's folder headers.
   void OnDropOnFolder(EntryId id, const SidebarFolder& folder);
+  // Whether one of this list's folders could hold `id` at all. Folders hold
+  // pinned entries only — Task 7's rule — so a favourite dropped on a header
+  // has to be refused rather than accepted and silently discarded by
+  // MoveEntryToFolder. The header asks its owner because the owner is the
+  // one that knows which section it draws and which entries it holds.
+  bool CanFolderAcceptEntry(EntryId id) const;
+  // One of this list's rows started a drag.
+  void OnRowDragStarted();
 
   // Where in the laid-out rows a drop at `y` would insert: 0..rows_.size().
   size_t DropRowIndex(int y) const;
   // The y of the boundary the insertion line is drawn on for `index`.
   int DropLineY(size_t index) const;
-  // The drop index turned into a position among this section's entries.
-  // `rows_` is in laid-out order — a folder's members come before the top
-  // level — which is not the order the model keeps positions in, so this
-  // reads the position each row carries rather than assuming its own index
-  // is one.
-  int EntryPositionForDropIndex(size_t index) const;
-  // Today only: turns the drop index into a tab-strip move.
-  void MoveTabToDropIndex(int from_index, size_t index);
+  // The row at `index`, named by what the model calls it.
+  DropAnchor AnchorForDropIndex(size_t index) const;
+  // The anchor turned into a position among this section's entries. `rows_`
+  // is in laid-out order — a folder's members come before the top level —
+  // which is not the order the model keeps positions in, so this reads the
+  // position the anchoring row carries rather than assuming a slot is one.
+  int PositionForAnchor(const DropAnchor& anchor) const;
+  // The position `id` holds among this section's entries right now, or
+  // nothing when this section does not hold it.
+  std::optional<int> EntryPositionInSection(EntryId id) const;
+  // The drop boundary `to` turned into the position ReorderEntry wants, which
+  // differ by one whenever the entry is moving down inside its own section.
+  int ReorderPosition(EntryId id, int to) const;
+  // Today only: turns the anchor into a tab-strip move.
+  void MoveTabBeforeTab(int from_index, int before_tab);
   void SetDropIndex(std::optional<size_t> index);
-  // Bound at drop time with the payload and index already resolved, because
-  // the drop runs after the event that produced it.
+  // Bound at drop time with the payload and the anchor already resolved,
+  // because the drop runs after the event that produced it.
   void PerformDrop(RowDragData payload,
-                   size_t index,
+                   DropAnchor anchor,
                    const ui::DropTargetEvent& event,
                    ui::mojom::DragOperation& output_drag_op,
                    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
+  // An empty section has nothing to hit, so while a row drag is running it
+  // reserves a band to aim at. Only while one is running: idle layout, and
+  // Stage 1's snapshot baselines with it, must not move.
+  bool ReservesDropBand() const;
+  void UpdateVisibility();
 
   TabRowView* MakeRow();
   FolderHeaderView* MakeHeader();
@@ -140,6 +191,8 @@ class TabListView : public views::View {
   // arrives on every pixel of pointer motion.
   std::optional<RowDragData> drag_payload_;
   std::optional<size_t> drop_index_;
+  base::ScopedObservation<RowDragSession, RowDragSession::Observer>
+      drag_session_{this};
   base::WeakPtrFactory<TabListView> weak_factory_{this};
 };
 

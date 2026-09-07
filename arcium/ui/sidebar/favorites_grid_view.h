@@ -11,9 +11,11 @@
 #include <vector>
 
 #include "arcium/ui/sidebar/row_drag_data.h"
+#include "arcium/ui/sidebar/row_drag_session.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/scoped_observation.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -41,7 +43,8 @@ class RowContextMenu;
 // grid already holds that mapping.
 class FavoritesGridView : public views::View,
                           public views::ContextMenuController,
-                          public views::DragController {
+                          public views::DragController,
+                          public RowDragSession::Observer {
   METADATA_HEADER(FavoritesGridView, views::View)
 
  public:
@@ -51,6 +54,11 @@ class FavoritesGridView : public views::View,
   ~FavoritesGridView() override;
 
   void SetRows(const std::vector<SidebarRow>& rows);
+
+  // The shared "a sidebar row is being dragged" signal. The grid is both a
+  // source and, while it holds no tiles, a target that only exists during a
+  // drag. Null detaches; see TabListView::SetDragSession.
+  void SetDragSession(RowDragSession* session);
 
   // Where the gap indicator sits, or nothing when no drag is over the grid.
   // An index into the tiles; tile count means "after the last one".
@@ -89,6 +97,9 @@ class FavoritesGridView : public views::View,
                            const gfx::Point& press_pt,
                            const gfx::Point& p) override;
 
+  // RowDragSession::Observer:
+  void OnRowDragInFlightChanged() override;
+
  private:
   void OnTileActivated(EntryId entry_id, int tab_index);
 
@@ -96,11 +107,25 @@ class FavoritesGridView : public views::View,
   std::optional<size_t> IndexOfTile(const views::View* sender) const;
   // Where in the tiles a drop at `p` would insert: 0..tiles_.size().
   size_t DropTileIndex(const gfx::Point& p) const;
+  // The entry the drop lands before, or an invalid id for the end of the
+  // grid. Tiles are pooled by index and another window on the same profile
+  // can rebuild this grid inside the drag's nested loop, so a slot outlives
+  // what it holds and an index is not a safe thing to carry to the drop.
+  EntryId AnchorForDropIndex(size_t index) const;
+  // That anchor read back against the grid as it now stands.
+  int PositionForAnchor(EntryId before) const;
+  // Where `id` sits among the tiles now, or nothing when it is not one.
+  std::optional<size_t> IndexOfEntry(EntryId id) const;
+  // While a row drag is running an empty grid reserves a band to aim at:
+  // hidden, it is skipped by GetEventHandlerForPoint, and "Today tab ->
+  // Favourites" is unreachable on a fresh profile. Only while one is running,
+  // so idle layout does not move.
+  bool ReservesDropBand() const;
   // The gap the indicator fills for `index`, in this view's coordinates.
   gfx::Rect DropIndicatorBounds(size_t index) const;
   void SetDropIndex(std::optional<size_t> index);
   void PerformDrop(RowDragData payload,
-                   size_t index,
+                   EntryId anchor,
                    const ui::DropTargetEvent& event,
                    ui::mojom::DragOperation& output_drag_op,
                    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
@@ -139,6 +164,8 @@ class FavoritesGridView : public views::View,
   // TabListView for why.
   std::optional<RowDragData> drag_payload_;
   std::optional<size_t> drop_index_;
+  base::ScopedObservation<RowDragSession, RowDragSession::Observer>
+      drag_session_{this};
   base::WeakPtrFactory<FavoritesGridView> weak_factory_{this};
 };
 

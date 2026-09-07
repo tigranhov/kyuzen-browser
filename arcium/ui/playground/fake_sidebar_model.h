@@ -56,6 +56,9 @@ class FakeSidebarModel : public SidebarModel {
   void ClearToday() override;
   void AddToFavorites(int tab_index) override;
   void PinTab(int tab_index) override;
+  void MoveTabToSection(int tab_index,
+                        SidebarSection section,
+                        int position) override;
   void UnpinEntry(EntryId id) override;
   void ActivateEntry(EntryId id) override;
   void CloseEntryTab(EntryId id) override;
@@ -98,8 +101,15 @@ class FakeSidebarModel : public SidebarModel {
   SidebarRow* FindByEntry(EntryId id);
   SidebarRow* FindByTitle(const std::u16string& title);
   bool HasFolder(FolderId id) const;
-  // Turns the tab at `tab_index` into an entry in `section`.
-  void MakeEntry(int tab_index, SidebarSection section);
+  // Turns the tab at `tab_index` into an entry in `section`, at `position`
+  // among that section's rows. A position past the section's end appends,
+  // which is what AddToFavorites and PinTab ask for.
+  void MakeEntry(int tab_index, SidebarSection section, int position);
+  // The iterator for the `position`-th row of `section`, or the place a new
+  // one would go when the section holds fewer — the walk ArciumModel's clamp
+  // and SidebarTabModel's insert both come out at.
+  std::vector<SidebarRow>::iterator SlotIn(SidebarSection section,
+                                           int position);
 
   std::vector<SidebarRow> rows_;
   std::vector<FakeFolder> folders_;

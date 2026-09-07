@@ -75,8 +75,19 @@ class SidebarModel {
   // Entry commands. A row backed by an entry routes through these instead of
   // the tab-index commands above: the entry outlives the tab, so identity has
   // to be the entry's, not a position in the strip.
+  // Both append, which is what a menu item means by them.
   virtual void AddToFavorites(int tab_index) = 0;
   virtual void PinTab(int tab_index) = 0;
+  // Makes an entry for the tab at `tab_index` and puts it at `position` among
+  // `section`'s entries. What a drop does, and the reason it is not the two
+  // commands above: a drop drew an insertion indicator at a place before it
+  // was taken, and appending would make that indicator a lie. A position past
+  // the end of the section appends, so AddToFavorites and PinTab are this
+  // command with no position asked for. kToday is a no-op — the tab is
+  // already there, and the drop that would mean it is MoveTab.
+  virtual void MoveTabToSection(int tab_index,
+                                SidebarSection section,
+                                int position) = 0;
   // Drops the entry. Its tab, if any, falls back into Today.
   virtual void UnpinEntry(EntryId id) = 0;
   // Focuses the entry's tab, or opens the entry's URL when it is cold.
@@ -91,15 +102,25 @@ class SidebarModel {
   // drop does, and one command rather than a kind change followed by a
   // reorder: a drop changes both at once, so two calls would let an observer
   // see the entry in its new section still holding its old position, and a
-  // failure between them would strand it mid-move. `position` is ignored for
-  // kToday, whose order is the tab strip's.
+  // failure between them would strand it mid-move.
+  //
+  // `position` is where the entry ends up once it has been lifted out of
+  // wherever it was, not a gap in the section as it stands. The two readings
+  // differ by one whenever an entry moves *down* inside its own section, and
+  // it is the caller — the view that drew the insertion indicator — that
+  // knows which of its rows was being dragged, so the conversion belongs
+  // there.
   //
   // kToday drops the entry rather than moving it — Today is tabs, and a tab
   // is not an entry — but never the page: a warm entry's tab stays behind,
   // and a cold entry's URL is opened as a tab first, so nothing is lost and
-  // the drop needs no undo. Naming an id the model does not have, or a
-  // section it cannot reach, is a no-op rather than a crash, because the
-  // drag that issued this began from a snapshot of rows().
+  // the drop needs no undo. `position` still counts, because Today's order is
+  // the tab strip's: the tab left behind moves to the `position`-th place
+  // among Today's rows, which is what the insertion line promised.
+  //
+  // Naming an id the model does not have, or a section it cannot reach, is a
+  // no-op rather than a crash, because the drag that issued this began from a
+  // snapshot of rows().
   virtual void MoveEntryToSection(EntryId id,
                                   SidebarSection section,
                                   int position) = 0;

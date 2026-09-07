@@ -12,6 +12,7 @@
 #include "arcium/ui/sidebar/favorites_grid_view.h"
 #include "arcium/ui/sidebar/folder_header_view.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
+#include "arcium/ui/sidebar/row_drag_session.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "arcium/ui/sidebar/tab_list_view.h"
@@ -23,10 +24,14 @@
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/compositor/layer_tree_owner.h"
+#include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/vector2d.h"
+#include "ui/views/controls/button/button.h"
 #include "ui/views/drag_controller.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/test/views_test_base.h"
@@ -87,6 +92,11 @@ class SidebarDragTest : public views::ViewsTestBase {
     widget_->Activate();
     generator_ = std::make_unique<ui::test::EventGenerator>(
         views::GetRootWindow(widget_.get()));
+    // ui::MouseEvent counts repeats against a process-wide "last click", so a
+    // test that clicks where the test before it clicked, soon enough after,
+    // inherits its count — and a count of 1 *clears* EF_IS_DOUBLE_CLICK. Every
+    // gesture test here would otherwise depend on what ran before it.
+    ui::MouseEvent::ResetLastClickForTest();
     rebuilder_ = std::make_unique<RebuildOnChange>(&model_);
   }
 
@@ -105,6 +115,7 @@ class SidebarDragTest : public views::ViewsTestBase {
   FavoritesGridView* MakeGrid() {
     grid_ =
         contents_->AddChildView(std::make_unique<FavoritesGridView>(&model_));
+    grid_->SetDragSession(&session_);
     rebuilder_->Watch(grid_.get());
     return grid_;
   }
@@ -112,6 +123,7 @@ class SidebarDragTest : public views::ViewsTestBase {
   TabListView* MakePinned() {
     pinned_ = contents_->AddChildView(
         std::make_unique<TabListView>(&model_, SidebarSection::kPinned));
+    pinned_->SetDragSession(&session_);
     rebuilder_->Watch(pinned_.get());
     return pinned_;
   }
@@ -119,6 +131,7 @@ class SidebarDragTest : public views::ViewsTestBase {
   TabListView* MakeToday() {
     today_ = contents_->AddChildView(
         std::make_unique<TabListView>(&model_, SidebarSection::kToday));
+    today_->SetDragSession(&session_);
     rebuilder_->Watch(today_.get());
     return today_;
   }
@@ -203,6 +216,10 @@ class SidebarDragTest : public views::ViewsTestBase {
   ui::test::EventGenerator& generator() { return *generator_; }
 
   FakeSidebarModel model_;
+  // What SidebarView owns and hands to every section. A unit test has no
+  // nested platform loop to end the drag, so End() is called by hand where a
+  // real drag would have the widget report it.
+  RowDragSession session_;
   std::unique_ptr<views::Widget> widget_;
   std::unique_ptr<ui::test::EventGenerator> generator_;
   std::unique_ptr<RebuildOnChange> rebuilder_;
@@ -277,10 +294,32 @@ TEST_F(SidebarDragTest, ATodayTabDroppedOnFavouritesBecomesOne) {
   TabRowView* row = RowIn(today_, 0);
   ASSERT_TRUE(row);
 
+  // The gap before the first tile, which is where the gap indicator was
+  // drawn: the new favourite lands there rather than at the end. Appending
+  // would make the indicator a promise the command does not keep.
   DropOn(grid_, *DragDataFrom(row, row), gfx::Point(0, 0));
 
-  EXPECT_EQ((std::vector<std::u16string>{u"Fav", u"Loose"}),
+  EXPECT_EQ((std::vector<std::u16string>{u"Loose", u"Fav"}),
             TitlesInSection(SidebarSection::kFavorites));
+  EXPECT_TRUE(TitlesInSection(SidebarSection::kToday).empty());
+}
+
+// The same promise on the Pinned side, which is the one pinning depends on.
+TEST_F(SidebarDragTest, ATodayTabDroppedOnPinnedLandsWhereTheLineWas) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Loose", "https://loose.example/", SidebarSection::kToday,
+                true);
+  MakePinned();
+  MakeToday();
+  Refresh();
+  TabRowView* loose = RowIn(today_, 0);
+  ASSERT_TRUE(loose);
+
+  DropOn(pinned_, *DragDataFrom(loose, loose), JustAbove(RowIn(pinned_, 1)));
+
+  EXPECT_EQ((std::vector<std::u16string>{u"One", u"Loose", u"Two"}),
+            TitlesInSection(SidebarSection::kPinned));
   EXPECT_TRUE(TitlesInSection(SidebarSection::kToday).empty());
 }
 
@@ -395,6 +434,70 @@ TEST_F(SidebarDragTest, AFavouriteDroppedInTheGridReorders) {
             TitlesInSection(SidebarSection::kFavorites));
 }
 
+// The other direction, which is the common one and which every reorder test
+// in Task 8 missed. The drop index counts the section as it looks now, with
+// the dragged entry still in it; ReorderEntry is lift-then-insert, so an
+// entry already above the gap it is dropped into shifts everything below it
+// up one when it is lifted out. Without the correction this lands "One" after
+// "Three" instead of between "Two" and "Three".
+TEST_F(SidebarDragTest, AFavouriteDraggedDownLandsInTheGapItWasDroppedIn) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kFavorites,
+                false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kFavorites,
+                false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kFavorites,
+                false);
+  MakeGrid();
+  Refresh();
+  views::View* one = grid_->children()[0];
+  // The gap before the third tile, which is the gap between "Two" and
+  // "Three".
+  const int gap_x = grid_->children()[2]->x();
+
+  DropOn(grid_, *DragDataFrom(grid_.get(), one), gfx::Point(gap_x, 4));
+
+  EXPECT_EQ((std::vector<std::u16string>{u"Two", u"One", u"Three"}),
+            TitlesInSection(SidebarSection::kFavorites));
+}
+
+// The same overshoot in a list rather than the grid.
+TEST_F(SidebarDragTest, APinnedEntryDraggedDownLandsInTheGapItWasDroppedIn) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kPinned,
+                false);
+  MakePinned();
+  Refresh();
+  TabRowView* one = RowIn(pinned_, 0);
+  ASSERT_TRUE(one);
+  ASSERT_EQ(u"One", one->row().title);
+
+  // The gap just above "Three", which is the gap between "Two" and "Three".
+  DropOn(pinned_, *DragDataFrom(one, one), JustAbove(RowIn(pinned_, 2)));
+
+  EXPECT_EQ((std::vector<std::u16string>{u"Two", u"One", u"Three"}),
+            TitlesInSection(SidebarSection::kPinned));
+}
+
+// And upward in the same shape, so the pair reads as one fact rather than two
+// tests that happen to disagree about direction.
+TEST_F(SidebarDragTest, APinnedEntryDraggedUpLandsInTheGapItWasDroppedIn) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kPinned,
+                false);
+  MakePinned();
+  Refresh();
+  TabRowView* three = RowIn(pinned_, 2);
+  ASSERT_TRUE(three);
+  ASSERT_EQ(u"Three", three->row().title);
+
+  DropOn(pinned_, *DragDataFrom(three, three), JustAbove(RowIn(pinned_, 1)));
+
+  EXPECT_EQ((std::vector<std::u16string>{u"One", u"Three", u"Two"}),
+            TitlesInSection(SidebarSection::kPinned));
+}
+
 // Entry -> Folder header: SetEntryFolder, through MoveEntryToFolder.
 TEST_F(SidebarDragTest, AnEntryDroppedOnAFolderHeaderJoinsTheFolder) {
   model_.AddTab(u"Inside", "https://inside.example/", SidebarSection::kPinned,
@@ -446,6 +549,63 @@ TEST_F(SidebarDragTest, AFolderHeaderRefusesATodayTab) {
   EXPECT_TRUE(pinned_->CanDrop(*data));
 }
 
+// A folder holds pinned entries only — Task 7's rule, which
+// MoveEntryToFolder enforces by doing nothing. Accepting the drop and then
+// discarding it highlights the header and eats the gesture, so the header
+// refuses instead.
+TEST_F(SidebarDragTest, AFolderHeaderRefusesAFavourite) {
+  model_.AddTab(u"Inside", "https://inside.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Fav", "https://fav.example/", SidebarSection::kFavorites,
+                false);
+  MakeGrid();
+  MakePinned();
+  model_.AddFolderWith(u"Work", {u"Inside"});
+  Refresh();
+
+  FolderHeaderView* header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  ASSERT_TRUE(header);
+  views::View* tile = grid_->children()[0];
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFrom(grid_.get(), tile);
+
+  EXPECT_FALSE(header->CanDrop(*data));
+  // No highlight either: a header the drop cannot land in must not look like
+  // one it can.
+  ui::DropTargetEvent event(*data, gfx::PointF(10, 10), gfx::PointF(10, 10),
+                            ui::DragDropTypes::DRAG_MOVE);
+  EXPECT_FALSE(header->GetDropCallback(event));
+  EXPECT_FALSE(header->is_drop_target_for_testing());
+  EXPECT_EQ(1, model_.folders()[0].entry_count);
+}
+
+// The predicate asks the list, not the payload, so it also refuses an id the
+// model has dropped since the drag began — which is what no field written
+// into the payload at drag-start could do.
+TEST_F(SidebarDragTest, AFolderHeaderRefusesAnEntryTheModelNoLongerHas) {
+  model_.AddTab(u"Inside", "https://inside.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Outside", "https://outside.example/", SidebarSection::kPinned,
+                false);
+  MakePinned();
+  model_.AddFolderWith(u"Work", {u"Inside"});
+  Refresh();
+  FolderHeaderView* header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  TabRowView* outside = RowIn(pinned_, 2);
+  ASSERT_TRUE(header);
+  ASSERT_TRUE(outside);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFrom(outside, outside);
+  ASSERT_TRUE(header->CanDrop(*data));
+
+  // Another window unpins it while the drag is still running.
+  const EntryId id = outside->row().entry_id;
+  model_.UnpinEntry(id);
+  Refresh();
+
+  EXPECT_FALSE(header->CanDrop(*data));
+}
+
 // Entry -> Today, warm: the entry goes, its tab stays.
 TEST_F(SidebarDragTest, AWarmEntryDroppedOnTodayLeavesItsTab) {
   model_.AddTab(u"Pin", "https://pin.example/", SidebarSection::kPinned, false);
@@ -467,6 +627,27 @@ TEST_F(SidebarDragTest, AWarmEntryDroppedOnTodayLeavesItsTab) {
   ASSERT_TRUE(moved);
   EXPECT_FALSE(moved->entry_id.is_valid());
   EXPECT_FALSE(moved->is_cold);
+}
+
+// Today's order *is* the tab-strip order, so the line drawn while an entry is
+// dragged into Today is a promise about where its tab goes. The warm and cold
+// tests above drop below every row, which is the one place appending and
+// placing agree.
+TEST_F(SidebarDragTest, AnEntryDroppedIntoTodayLandsWhereTheLineWas) {
+  model_.AddTab(u"Pin", "https://pin.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, true);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kToday, false);
+  MakePinned();
+  MakeToday();
+  Refresh();
+  TabRowView* pin = RowIn(pinned_, 0);
+  ASSERT_TRUE(pin);
+
+  DropOn(today_, *DragDataFrom(pin, pin), JustAbove(RowIn(today_, 0)));
+
+  EXPECT_EQ((std::vector<std::u16string>{u"Pin", u"One", u"Two"}),
+            TitlesInSection(SidebarSection::kToday));
+  EXPECT_TRUE(TitlesInSection(SidebarSection::kPinned).empty());
 }
 
 // Entry -> Today, cold: nothing lives behind it, so its URL is opened as a
@@ -526,6 +707,123 @@ TEST_F(SidebarDragTest, TheDropIndexIsAPositionNotAPlanSlot) {
 
   EXPECT_EQ((std::vector<std::u16string>{u"Two", u"One", u"Three"}),
             TitlesInSection(SidebarSection::kPinned));
+}
+
+// The rows are pooled by index and the model is shared by every window on the
+// profile, so between the pointer coming to rest and the drop running a slot
+// can be handed a different entry. The drop is aimed at an entry, not at a
+// slot: "One" going away must not move where "Four" lands.
+TEST_F(SidebarDragTest, ADropLandsOnTheEntryItWasAimedAtEvenAfterARebuild) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Four", "https://four.example/", SidebarSection::kPinned,
+                false);
+  MakePinned();
+  Refresh();
+  TabRowView* four = RowIn(pinned_, 3);
+  TabRowView* three = RowIn(pinned_, 2);
+  ASSERT_TRUE(four);
+  ASSERT_TRUE(three);
+  ASSERT_EQ(u"Four", four->row().title);
+  ASSERT_EQ(u"Three", three->row().title);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFrom(four, four);
+
+  // Aimed just above "Three".
+  const gfx::Point at = JustAbove(three);
+  ui::DropTargetEvent event(*data, gfx::PointF(at), gfx::PointF(at),
+                            ui::DragDropTypes::DRAG_MOVE);
+  ASSERT_TRUE(pinned_->CanDrop(*data));
+  pinned_->OnDragEntered(event);
+  pinned_->OnDragUpdated(event);
+  views::View::DropCallback callback = pinned_->GetDropCallback(event);
+  ASSERT_TRUE(callback);
+
+  // Another window unpins "One" before the drop runs. Every row below it
+  // slides up a slot; slot 2 now holds "Four" itself.
+  const EntryId one = RowIn(pinned_, 0)->row().entry_id;
+  model_.UnpinEntry(one);
+  Refresh();
+
+  auto operation = ui::mojom::DragOperation::kNone;
+  std::move(callback).Run(event, operation, nullptr);
+
+  // Before "Three", which is what the line was drawn above. Reading the slot
+  // back instead would ask for the place "Four" already sits and move
+  // nothing.
+  EXPECT_EQ((std::vector<std::u16string>{u"Two", u"Four", u"Three"}),
+            TitlesInSection(SidebarSection::kPinned));
+}
+
+// ---------------------------------------------------------------------------
+// An empty section, which is a section with nothing to hit
+// ---------------------------------------------------------------------------
+
+// On a fresh profile the Pinned list holds nothing, hides itself, and is
+// skipped by GetEventHandlerForPoint — so pinning by drag, the central Arc
+// gesture, is unreachable. It reserves a band while a row drag is running,
+// and only then: idle layout is Stage 1's and its snapshots depend on it.
+TEST_F(SidebarDragTest, AnEmptyPinnedListReservesADropBandOnlyDuringADrag) {
+  model_.AddTab(u"Loose", "https://loose.example/", SidebarSection::kToday,
+                true);
+  MakePinned();
+  MakeToday();
+  Refresh();
+  ASSERT_EQ(0u, pinned_->row_count());
+  EXPECT_FALSE(pinned_->GetVisible());
+
+  TabRowView* loose = RowIn(today_, 0);
+  ASSERT_TRUE(loose);
+  // Written through the row's own DragController, which is what announces the
+  // drag; nothing else in Views does.
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFrom(loose, loose);
+  views::test::RunScheduledLayout(widget_.get());
+
+  EXPECT_TRUE(session_.in_flight());
+  EXPECT_TRUE(pinned_->GetVisible());
+  EXPECT_GT(pinned_->height(), 0);
+  EXPECT_TRUE(pinned_->CanDrop(*data));
+
+  // The drag ends without a drop: the band goes and the sidebar looks exactly
+  // as it did.
+  session_.End();
+  views::test::RunScheduledLayout(widget_.get());
+  EXPECT_FALSE(pinned_->GetVisible());
+
+  // And with the drag running again, the drop actually lands.
+  data = DragDataFrom(loose, loose);
+  DropOn(pinned_, *data, gfx::Point(10, 4));
+  EXPECT_EQ((std::vector<std::u16string>{u"Loose"}),
+            TitlesInSection(SidebarSection::kPinned));
+}
+
+// The grid has the same guard, and it is the one the Task 8 report flagged.
+TEST_F(SidebarDragTest, AnEmptyFavouritesGridReservesADropBandOnlyDuringADrag) {
+  model_.AddTab(u"Loose", "https://loose.example/", SidebarSection::kToday,
+                true);
+  MakeGrid();
+  MakeToday();
+  Refresh();
+  EXPECT_FALSE(grid_->GetVisible());
+
+  TabRowView* loose = RowIn(today_, 0);
+  ASSERT_TRUE(loose);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFrom(loose, loose);
+  views::test::RunScheduledLayout(widget_.get());
+
+  EXPECT_TRUE(grid_->GetVisible());
+  EXPECT_GT(grid_->height(), 0);
+  EXPECT_TRUE(grid_->CanDrop(*data));
+
+  session_.End();
+  views::test::RunScheduledLayout(widget_.get());
+  EXPECT_FALSE(grid_->GetVisible());
+
+  data = DragDataFrom(loose, loose);
+  DropOn(grid_, *data, gfx::Point(0, 4));
+  EXPECT_EQ((std::vector<std::u16string>{u"Loose"}),
+            TitlesInSection(SidebarSection::kFavorites));
 }
 
 // A guard, not a regression: no gesture can drop a tab into a Today list with
@@ -695,6 +993,45 @@ TEST_F(SidebarDragTest, TheDoubleClicksPressDoesNotAlsoStartADrag) {
   // And the field owns the row for as long as it is up.
   EXPECT_EQ(ui::DragDropTypes::DRAG_NONE,
             row->GetDragOperationsForView(row, press));
+}
+
+// View::ProcessMousePressed records `possible_drag` from GetDragOperations,
+// which it computes *before* this row's OnMousePressed opens the rename. So a
+// hand that moves during the double-click still reaches ProcessMouseDragged,
+// CanStartDragForView refuses it, and the else branch hands the move to
+// Button::OnMouseDragged, which paints the row pressed. The release that
+// follows is the one OnMouseReleased returns early from, so nothing else will
+// ever put the row back — and it sits under an open rename field, which is
+// where it is most visible.
+TEST_F(SidebarDragTest, ADoubleClickThatDragsDoesNotLeaveTheRowPressed) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  MakePinned();
+  Refresh();
+  TabRowView* row = RowIn(pinned_, 0);
+  ASSERT_TRUE(row);
+  const gfx::Rect bounds = row->GetBoundsInScreen();
+
+  generator().MoveMouseTo(bounds.CenterPoint());
+  generator().ClickLeftButton();
+  generator().set_flags(ui::EF_IS_DOUBLE_CLICK);
+  generator().PressLeftButton();
+  // Only the double-click bit goes: the left button is still down, and
+  // EventGenerator reads that flag to decide a move is a drag.
+  generator().set_flags(ui::EF_LEFT_MOUSE_BUTTON);
+  ASSERT_TRUE(row->is_renaming());
+
+  // Well past the drag threshold but still inside the row, which is what puts
+  // Button::OnMouseDragged into STATE_PRESSED rather than STATE_NORMAL.
+  generator().MoveMouseTo(bounds.CenterPoint() + gfx::Vector2d(60, 0));
+  ASSERT_EQ(views::Button::STATE_PRESSED, row->GetState());
+  generator().ReleaseLeftButton();
+
+  // The pointer is still over the row, so this is where a release that had
+  // gone to the button would have left it.
+  EXPECT_EQ(views::Button::STATE_HOVERED, row->GetState());
+  // And the rename the double-click opened is still open: clearing the paint
+  // must not clear the edit.
+  EXPECT_TRUE(row->is_renaming());
 }
 
 TEST_F(SidebarDragTest, ADragDoesNotStartInsideTheThreshold) {

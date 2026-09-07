@@ -82,6 +82,8 @@ TabRowView* TabListView::MakeRow() {
       base::BindRepeating(&TabListView::OnRevertRow, base::Unretained(this));
   delegate.show_context_menu =
       base::BindRepeating(&TabListView::OnShowRowMenu, base::Unretained(this));
+  delegate.drag_started = base::BindRepeating(&TabListView::OnRowDragStarted,
+                                              base::Unretained(this));
   return AddChildView(std::make_unique<TabRowView>(std::move(delegate)));
 }
 
@@ -95,6 +97,8 @@ FolderHeaderView* TabListView::MakeHeader() {
       &TabListView::OnShowFolderMenu, base::Unretained(this));
   delegate.drop_entry =
       base::BindRepeating(&TabListView::OnDropOnFolder, base::Unretained(this));
+  delegate.can_accept_entry = base::BindRepeating(
+      &TabListView::CanFolderAcceptEntry, base::Unretained(this));
   return AddChildView(std::make_unique<FolderHeaderView>(std::move(delegate)));
 }
 
@@ -194,8 +198,53 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
     ReorderChildView(view, child_index++);
   }
 
-  SetVisible(!rows_.empty() || !headers_.empty() || new_tab_);
+  UpdateVisibility();
   InvalidateLayout();
+}
+
+void TabListView::SetDragSession(RowDragSession* session) {
+  drag_session_.Reset();
+  if (session) {
+    drag_session_.Observe(session);
+  }
+  OnRowDragInFlightChanged();
+}
+
+void TabListView::OnRowDragInFlightChanged() {
+  UpdateVisibility();
+  PreferredSizeChanged();
+}
+
+bool TabListView::ReservesDropBand() const {
+  // Only a section with nothing in it needs one: anything with a row already
+  // has a boundary to aim between. Today always has the "New tab" row, so
+  // this is the Pinned list on a fresh profile — the unreachable half of the
+  // central Arc gesture.
+  return drag_session_.IsObserving() &&
+         drag_session_.GetSource()->in_flight() && rows_.empty() &&
+         headers_.empty() && !new_tab_;
+}
+
+void TabListView::UpdateVisibility() {
+  SetVisible(!rows_.empty() || !headers_.empty() || new_tab_ ||
+             ReservesDropBand());
+}
+
+gfx::Size TabListView::CalculatePreferredSize(
+    const views::SizeBounds& available_size) const {
+  gfx::Size size = views::View::CalculatePreferredSize(available_size);
+  if (ReservesDropBand()) {
+    size.SetToMax(
+        gfx::Size(available_size.width().value_or(metrics::kSidebarWidth),
+                  metrics::kRowHeight));
+  }
+  return size;
+}
+
+void TabListView::OnRowDragStarted() {
+  if (drag_session_.IsObserving()) {
+    drag_session_.GetSource()->Begin(GetWidget());
+  }
 }
 
 void TabListView::OnActivateRow(const SidebarRow& row) {
@@ -215,7 +264,7 @@ void TabListView::OnCloseRow(const SidebarRow& row) {
   }
 }
 
-void TabListView::MoveTabToDropIndex(int from_index, size_t index) {
+void TabListView::MoveTabBeforeTab(int from_index, int before_tab) {
   // Clamp to this section's range in tab-index space. `rows_` is in laid-out
   // order — a folder's entries come before the top level — so the first and
   // last row are not the smallest and largest tab index, and a cold row has
@@ -239,10 +288,10 @@ void TabListView::MoveTabToDropIndex(int from_index, size_t index) {
     return;
   }
   int to = hi;
-  if (index < rows_.size() && rows_[index]->tab_index() >= 0) {
-    to = rows_[index]->tab_index();
-    // The drop index names the row the dragged one lands *before*. Lifting
-    // the dragged row out first shifts everything after it up one, so landing
+  if (before_tab >= 0) {
+    to = before_tab;
+    // The anchor names the row the dragged one lands *before*. Lifting the
+    // dragged row out first shifts everything after it up one, so landing
     // before a row that is already below it means one index less.
     if (from_index < to) {
       --to;
@@ -296,10 +345,27 @@ void TabListView::OnShowFolderMenu(FolderHeaderView* source,
 }
 
 void TabListView::OnDropOnFolder(EntryId id, const SidebarFolder& folder) {
-  // The model is the authority on what a folder may hold — a favourite is a
-  // tile in the grid with nowhere to be indented to — so this refuses
-  // nothing and lets MoveEntryToFolder no-op.
   model_->MoveEntryToFolder(id, folder.id);
+}
+
+bool TabListView::CanFolderAcceptEntry(EntryId id) const {
+  // A folder holds this list's own entries. A favourite is drawn as a tile in
+  // the grid and MoveEntryToFolder no-ops for it, so accepting the drop would
+  // highlight the header and then discard the gesture; and an id the model
+  // has dropped since the drag began is not a thing to file either. Both read
+  // the same way here: no row of this list carries that id.
+  //
+  // A walk over the built rows, with no allocation: CanDrop is asked again
+  // every time the pointer crosses a row boundary.
+  if (section_ != SidebarSection::kPinned) {
+    return false;
+  }
+  for (const TabRowView* row : rows_) {
+    if (row->row().entry_id == id) {
+      return true;
+    }
+  }
+  return false;
 }
 
 size_t TabListView::DropRowIndex(int y) const {
@@ -326,14 +392,45 @@ int TabListView::DropLineY(size_t index) const {
   return rows_.back()->bounds().bottom();
 }
 
-int TabListView::EntryPositionForDropIndex(size_t index) const {
-  if (index < row_positions_.size()) {
-    return row_positions_[index];
+TabListView::DropAnchor TabListView::AnchorForDropIndex(size_t index) const {
+  DropAnchor anchor;
+  anchor.today_position = static_cast<int>(index);
+  if (index < rows_.size()) {
+    anchor.before_entry = rows_[index]->row().entry_id;
+    anchor.before_tab = rows_[index]->tab_index();
   }
-  // Past the last row that was built. A collapsed folder's members are real
-  // entries that no row was made for, so the end of the section is the count
-  // the model gave, not the number of views.
+  return anchor;
+}
+
+int TabListView::PositionForAnchor(const DropAnchor& anchor) const {
+  // No anchor is the end of the section. A collapsed folder's members are
+  // real entries that no row was made for, so that end is the count the model
+  // gave, not the number of views.
+  if (!anchor.before_entry.is_valid()) {
+    return section_row_count_;
+  }
+  for (size_t i = 0; i < rows_.size() && i < row_positions_.size(); ++i) {
+    if (rows_[i]->row().entry_id == anchor.before_entry) {
+      return row_positions_[i];
+    }
+  }
+  // The row the drop was aimed at is gone — another window unpinned it while
+  // the nested loop was running. The geometry the pointer came to rest on is
+  // stale with it, so the end of the section is the honest answer rather than
+  // a slot that now holds something the user never saw.
   return section_row_count_;
+}
+
+std::optional<int> TabListView::EntryPositionInSection(EntryId id) const {
+  if (!id.is_valid()) {
+    return std::nullopt;
+  }
+  for (size_t i = 0; i < rows_.size() && i < row_positions_.size(); ++i) {
+    if (rows_[i]->row().entry_id == id) {
+      return row_positions_[i];
+    }
+  }
+  return std::nullopt;
 }
 
 void TabListView::SetDropIndex(std::optional<size_t> index) {
@@ -391,46 +488,63 @@ views::View::DropCallback TabListView::GetDropCallback(
   if (!payload) {
     payload = RowDragData::Read(event.data());
   }
-  const size_t index = DropRowIndex(event.location().y());
+  const DropAnchor anchor =
+      AnchorForDropIndex(DropRowIndex(event.location().y()));
   drag_payload_.reset();
   SetDropIndex(std::nullopt);
   if (!payload) {
     return base::NullCallback();
   }
-  // Weak, and with the payload and index already resolved: the drop runs
+  // Weak, and with the payload and the anchor already resolved: the drop runs
   // after the event that produced it, and a model change from another window
-  // can rebuild — or destroy — this list in between.
+  // can rebuild — or destroy — this list in between. The anchor is an entry
+  // id rather than a row index because the rows are pooled by index, so a
+  // slot survives a rebuild while what it holds does not.
   return base::BindOnce(&TabListView::PerformDrop, weak_factory_.GetWeakPtr(),
-                        *payload, index);
+                        *payload, anchor);
 }
 
 void TabListView::PerformDrop(
     RowDragData payload,
-    size_t index,
+    DropAnchor anchor,
     const ui::DropTargetEvent& event,
     ui::mojom::DragOperation& output_drag_op,
     std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
   output_drag_op = ui::mojom::DragOperation::kMove;
   if (section_ == SidebarSection::kPinned) {
+    const int to = PositionForAnchor(anchor);
     if (payload.is_entry()) {
       model_->MoveEntryToSection(payload.entry_id, SidebarSection::kPinned,
-                                 EntryPositionForDropIndex(index));
+                                 ReorderPosition(payload.entry_id, to));
     } else {
       // A Today tab becomes a pinned entry bound to that same tab. The
-      // section decides the kind; the position is where AddEntry puts it,
-      // which is the end.
-      model_->PinTab(payload.tab_index);
+      // section decides the kind, and the drop index decides the place — the
+      // insertion line was drawn there before the gesture was taken.
+      model_->MoveTabToSection(payload.tab_index, SidebarSection::kPinned, to);
     }
     return;
   }
   if (payload.is_entry()) {
     // Today holds tabs. The entry goes and its page stays; see
-    // SidebarModel::MoveEntryToSection for why that needs no undo.
+    // SidebarModel::MoveEntryToSection for why that needs no undo. The tab it
+    // leaves behind lands where the line was drawn, because Today's order is
+    // the tab strip's and this is a strip move like any other.
     model_->MoveEntryToSection(payload.entry_id, SidebarSection::kToday,
-                               /*position=*/0);
+                               anchor.today_position);
     return;
   }
-  MoveTabToDropIndex(payload.tab_index, index);
+  MoveTabBeforeTab(payload.tab_index, anchor.before_tab);
+}
+
+int TabListView::ReorderPosition(EntryId id, int to) const {
+  // The drop boundary counts this section as it looks now, with the dragged
+  // entry still in it. ReorderEntry is lift-then-insert, so an entry already
+  // *above* the boundary shifts everything below it up one when it is lifted
+  // out and would overshoot by a slot — which is every downward drag, the
+  // commonest one there is. An entry arriving from another section is not in
+  // this count and needs no correction.
+  const std::optional<int> from = EntryPositionInSection(id);
+  return from && *from < to ? to - 1 : to;
 }
 
 void TabListView::OnPaint(gfx::Canvas* canvas) {

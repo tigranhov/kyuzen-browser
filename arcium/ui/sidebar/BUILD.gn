@@ -32,6 +32,8 @@ source_set("sidebar") {
     "row_context_menu.h",
     "row_drag_data.cc",
     "row_drag_data.h",
+    "row_drag_session.cc",
+    "row_drag_session.h",
     "section_divider_view.cc",
     "section_divider_view.h",
     "sidebar_colors.cc",

@@ -63,6 +63,9 @@ class SidebarTabModel : public SidebarModel,
   void ClearToday() override;
   void AddToFavorites(int tab_index) override;
   void PinTab(int tab_index) override;
+  void MoveTabToSection(int tab_index,
+                        SidebarSection section,
+                        int position) override;
   void UnpinEntry(EntryId id) override;
   void ActivateEntry(EntryId id) override;
   void CloseEntryTab(EntryId id) override;
@@ -113,7 +116,16 @@ class SidebarTabModel : public SidebarModel,
   SidebarRow RowForEntry(const TabEntry& entry) const;
   SidebarRow RowForTab(int index, tabs::TabInterface* tab) const;
   // Creates an entry of `kind` from the tab at `tab_index` and binds it.
-  void AddEntryForTab(int tab_index, EntryKind kind);
+  // Returns the new entry, or an invalid id when there was no such tab.
+  EntryId AddEntryForTab(int tab_index, EntryKind kind);
+  // The strip index of the `position`-th Today row — the tabs no entry claims,
+  // in strip order — or -1 for past the last one. Today's order *is* the
+  // strip's, so a drop into it is a strip move and this is how a place in the
+  // list becomes a place in the strip.
+  int TodayStripIndexForPosition(int position) const;
+  // Moves the tab at `from` so it lands before the tab at `before`, or to the
+  // end when `before` is -1.
+  void MoveTabBeforeStripIndex(int from, int before);
   // The entry, if it exists and is one a folder may hold.
   const TabEntry* FolderableEntry(EntryId id) const;
   // Copies the live page title of every warm entry into the model, so a row

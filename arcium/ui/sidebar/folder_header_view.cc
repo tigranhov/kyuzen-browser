@@ -236,12 +236,21 @@ bool FolderHeaderView::AreDropTypesRequired() {
   return true;
 }
 
-bool FolderHeaderView::CanDrop(const ui::OSExchangeData& data) {
-  // Entries only. A Today tab has no entry to put in a folder, and refusing
-  // it here is what lets DropHelper walk up to the Pinned list, which turns
-  // it into one.
+bool FolderHeaderView::CanAccept(const ui::OSExchangeData& data) const {
+  // Entries only, and only entries a folder may hold. A Today tab has no
+  // entry to put in a folder; a favourite is a tile in the grid with nowhere
+  // to be indented to. Refusing either here is what lets DropHelper walk up
+  // to the Pinned list — for a tab that is how it becomes an entry, and for a
+  // favourite it is at worst the same landing a drop a few pixels above or
+  // below the header already gives.
   std::optional<RowDragData> payload = RowDragData::Read(data);
-  return payload.has_value() && payload->is_entry();
+  return payload.has_value() && payload->is_entry() &&
+         delegate_.can_accept_entry &&
+         delegate_.can_accept_entry.Run(payload->entry_id);
+}
+
+bool FolderHeaderView::CanDrop(const ui::OSExchangeData& data) {
+  return CanAccept(data);
 }
 
 void FolderHeaderView::OnDragEntered(const ui::DropTargetEvent& event) {
@@ -262,7 +271,7 @@ views::View::DropCallback FolderHeaderView::GetDropCallback(
     const ui::DropTargetEvent& event) {
   SetDropTarget(false);
   std::optional<RowDragData> payload = RowDragData::Read(event.data());
-  if (!payload || !payload->is_entry() || !delegate_.drop_entry) {
+  if (!payload || !CanAccept(event.data()) || !delegate_.drop_entry) {
     return base::NullCallback();
   }
   return base::BindOnce(&FolderHeaderView::PerformDrop,

@@ -110,8 +110,26 @@ void FavoritesGridView::SetRows(const std::vector<SidebarRow>& rows) {
   if (is_renaming()) {
     SetRowTilesVisible(renaming_tile_index_, false);
   }
-  SetVisible(!tiles_.empty());
+  SetVisible(!tiles_.empty() || ReservesDropBand());
   InvalidateLayout();
+}
+
+void FavoritesGridView::SetDragSession(RowDragSession* session) {
+  drag_session_.Reset();
+  if (session) {
+    drag_session_.Observe(session);
+  }
+  OnRowDragInFlightChanged();
+}
+
+void FavoritesGridView::OnRowDragInFlightChanged() {
+  SetVisible(!tiles_.empty() || ReservesDropBand());
+  PreferredSizeChanged();
+}
+
+bool FavoritesGridView::ReservesDropBand() const {
+  return tiles_.empty() && drag_session_.IsObserving() &&
+         drag_session_.GetSource()->in_flight();
 }
 
 void FavoritesGridView::OnTileActivated(EntryId entry_id, int tab_index) {
@@ -162,6 +180,11 @@ void FavoritesGridView::WriteDragDataForView(views::View* sender,
   payload.entry_id = rows_[*index].entry_id;
   payload.tab_index = rows_[*index].tab_index;
   payload.Write(data);
+  // Once per drag, at the one moment a source knows a drag is starting: the
+  // empty sections need a band to be droppable at all.
+  if (drag_session_.IsObserving()) {
+    drag_session_.GetSource()->Begin(GetWidget());
+  }
 }
 
 int FavoritesGridView::GetDragOperationsForView(views::View* sender,
@@ -193,6 +216,35 @@ size_t FavoritesGridView::DropTileIndex(const gfx::Point& p) const {
                            static_cast<size_t>(metrics::kFavoritesPerRow) +
                        static_cast<size_t>(column);
   return std::min(index, tiles_.size());
+}
+
+EntryId FavoritesGridView::AnchorForDropIndex(size_t index) const {
+  return index < rows_.size() ? rows_[index].entry_id : EntryId();
+}
+
+int FavoritesGridView::PositionForAnchor(EntryId before) const {
+  if (before.is_valid()) {
+    for (size_t i = 0; i < rows_.size(); ++i) {
+      if (rows_[i].entry_id == before) {
+        return static_cast<int>(i);
+      }
+    }
+  }
+  // No anchor, or an anchor the model dropped while the nested loop was
+  // running: the end of the grid, which is the one place that is still there.
+  return static_cast<int>(rows_.size());
+}
+
+std::optional<size_t> FavoritesGridView::IndexOfEntry(EntryId id) const {
+  if (!id.is_valid()) {
+    return std::nullopt;
+  }
+  for (size_t i = 0; i < rows_.size(); ++i) {
+    if (rows_[i].entry_id == id) {
+      return i;
+    }
+  }
+  return std::nullopt;
 }
 
 gfx::Rect FavoritesGridView::DropIndicatorBounds(size_t index) const {
@@ -268,32 +320,43 @@ views::View::DropCallback FavoritesGridView::GetDropCallback(
   if (!payload) {
     payload = RowDragData::Read(event.data());
   }
-  const size_t index = DropTileIndex(event.location());
+  const EntryId anchor = AnchorForDropIndex(DropTileIndex(event.location()));
   drag_payload_.reset();
   SetDropIndex(std::nullopt);
   if (!payload) {
     return base::NullCallback();
   }
   return base::BindOnce(&FavoritesGridView::PerformDrop,
-                        weak_factory_.GetWeakPtr(), *payload, index);
+                        weak_factory_.GetWeakPtr(), *payload, anchor);
 }
 
 void FavoritesGridView::PerformDrop(
     RowDragData payload,
-    size_t index,
+    EntryId anchor,
     const ui::DropTargetEvent& event,
     ui::mojom::DragOperation& output_drag_op,
     std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
   output_drag_op = ui::mojom::DragOperation::kMove;
+  const int to = PositionForAnchor(anchor);
   if (payload.is_entry()) {
     // Favourites have no folders, so a tile's index is the position the model
     // orders by; reordering inside the grid is the same command as arriving
     // from Pinned, with the kind change turning into a no-op.
-    model_->MoveEntryToSection(payload.entry_id, SidebarSection::kFavorites,
-                               static_cast<int>(index));
+    //
+    // The gap the tile was dropped in counts the grid as it looks now, with
+    // the dragged tile still in it, while ReorderEntry is lift-then-insert.
+    // A tile already left of the gap shifts everything after it one place
+    // left when it is lifted out, so it would overshoot — which is every
+    // drag to the right, half of all of them.
+    const std::optional<size_t> from = IndexOfEntry(payload.entry_id);
+    model_->MoveEntryToSection(
+        payload.entry_id, SidebarSection::kFavorites,
+        from && static_cast<int>(*from) < to ? to - 1 : to);
     return;
   }
-  model_->AddToFavorites(payload.tab_index);
+  // A Today tab becomes a favourite where the gap indicator was drawn, not at
+  // the end: the indicator promised a place before the gesture was taken.
+  model_->MoveTabToSection(payload.tab_index, SidebarSection::kFavorites, to);
 }
 
 void FavoritesGridView::OnPaint(gfx::Canvas* canvas) {
@@ -385,9 +448,13 @@ gfx::Size FavoritesGridView::CalculatePreferredSize(
       (static_cast<int>(tiles_.size()) + metrics::kFavoritesPerRow - 1) /
       metrics::kFavoritesPerRow;
   const int size = TileSize(width);
-  return gfx::Size(
-      width,
-      rows == 0 ? 0 : rows * size + (rows - 1) * metrics::kFavoriteTileGap);
+  if (rows == 0) {
+    // One tile row while a drag is running, nothing at all otherwise: an
+    // empty grid must be droppable without changing what the sidebar looks
+    // like at rest.
+    return gfx::Size(width, ReservesDropBand() ? size : 0);
+  }
+  return gfx::Size(width, rows * size + (rows - 1) * metrics::kFavoriteTileGap);
 }
 
 BEGIN_METADATA(FavoritesGridView)
