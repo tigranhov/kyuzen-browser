@@ -15,6 +15,7 @@
 #include "arcium/browser/model/space.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
+#include "arcium/common/arcium_features.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/files/scoped_temp_dir.h"
@@ -27,6 +28,7 @@
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
+#include "base/time/clock.h"
 #include "base/time/time.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
@@ -111,8 +113,14 @@ class ArchiveServiceTest : public BrowserWithTestWindowTest {
     ASSERT_EQ(0, strip()->count());
     service_ = std::make_unique<ArchiveService>(
         strip(), &model_, &binding_, &archive_,
-        base::SequencedTaskRunner::GetCurrentDefault());
+        base::SequencedTaskRunner::GetCurrentDefault(), ServiceClock());
   }
+
+  // The clock the service is built with. Null is what every window without
+  // --arcium-fake-clock-offset gets: base::Time::Now(), which under this
+  // fixture is the mock clock PassTime() drives. The fake-clock fixture at
+  // the bottom of this file overrides it.
+  virtual const base::Clock* ServiceClock() { return nullptr; }
 
   void TearDown() override {
     // Both observe the strip, which the base class is about to tear down.
@@ -720,6 +728,61 @@ TEST_F(ArchiveServiceTest, AWindowWithAStoreHasAnArchive) {
   EXPECT_TRUE(service_->has_store());
   sidebar_model_->SetArchiveService(service_.get());
   EXPECT_TRUE(sidebar_model_->has_archive());
+}
+
+// What --arcium-fake-clock-offset=13h builds: BrowserSidebarController hands
+// the window's service a clock reading that far ahead, and nothing else in
+// the browser is told a thing. Half a day of waiting is not an acceptance
+// step anyone can perform, and moving base::Time::Now() for the whole process
+// would move it under the model stores and under the archive's own row
+// timestamps — the very things the acceptance pass is checking.
+class ArchiveServiceFakeClockTest : public ArchiveServiceTest {
+ protected:
+  const base::Clock* ServiceClock() override { return &clock_; }
+
+  static constexpr base::TimeDelta kOffset = base::Hours(13);
+  features::OffsetClock clock_{kOffset};
+};
+
+// The offset shifts what the service considers idle: a tab opened a moment
+// ago, with no time passed at all, is already past a twelve-hour timeout.
+TEST_F(ArchiveServiceFakeClockTest, TheOffsetMakesAFreshTabIdle) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://keep.example/"));  // active, never archived
+  ASSERT_EQ(ArchiveTimeout::kTwelveHours, model_.spaces()[0].archive_timeout);
+
+  // No PassTime: the point is that the offset alone is enough.
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(1, strip()->count());
+  EXPECT_EQ(1u, archive_.ListRecent(model_.default_space_id(), 10).size());
+}
+
+// The guards still hold. The offset makes tabs look idle; it does not make
+// them archivable, which is a different question and the one that decides
+// whether the acceptance pass proves anything.
+TEST_F(ArchiveServiceFakeClockTest, TheOffsetDoesNotOverrideTheGuards) {
+  AddTab(browser(), GURL("https://pinned.example/"));
+  AddTab(browser(), GURL("https://active.example/"));
+  sidebar_model_->PinTab(1);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(2, strip()->count());
+}
+
+// The row's own timestamp is real time. An archive written under the switch
+// must still say when it was written, or the archive list the acceptance pass
+// reads back is dated thirteen hours into the future.
+TEST_F(ArchiveServiceFakeClockTest, TheOffsetDoesNotReachTheArchivedTimestamp) {
+  const base::Time before = base::Time::Now();
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://keep.example/"));
+
+  task_environment()->RunUntilIdle();
+  const std::vector<ArchivedTab> rows =
+      archive_.ListRecent(model_.default_space_id(), 10);
+  ASSERT_EQ(1u, rows.size());
+  EXPECT_GE(rows[0].archived_at, before);
+  EXPECT_LE(rows[0].archived_at, base::Time::Now());
+  EXPECT_LT(rows[0].archived_at, before + kOffset);
 }
 
 }  // namespace

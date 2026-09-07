@@ -15,6 +15,7 @@
 #include "arcium/browser/model/space.h"
 #include "base/memory/raw_ptr.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/clock.h"
 #include "base/time/time.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
@@ -71,11 +72,18 @@ class ArchiveService : public TabStripModelObserver,
   // on `store_runner`, never here: sql::Database blocks and is sequence-
   // affine, and this runs on the UI thread.
   //
+  // `clock` answers the one question "what time is it for deciding whether a
+  // tab has been idle long enough", and nothing else — the timestamps this
+  // service writes into archive rows are always base::Time::Now(). Null means
+  // base::Time::Now() for that question too, which is every window without
+  // --arcium-fake-clock-offset. It must outlive this object;
+  // BrowserSidebarController owns the one it passes.
   ArchiveService(TabStripModel* tab_strip_model,
                  ArciumModel* model,
                  TabBinding* binding,
                  ArchiveStore* store,
-                 scoped_refptr<base::SequencedTaskRunner> store_runner);
+                 scoped_refptr<base::SequencedTaskRunner> store_runner,
+                 const base::Clock* clock = nullptr);
   ArchiveService(const ArchiveService&) = delete;
   ArchiveService& operator=(const ArchiveService&) = delete;
   ~ArchiveService() override;
@@ -192,6 +200,8 @@ class ArchiveService : public TabStripModelObserver,
   // write posted here always runs before the deletion behind it.
   raw_ptr<ArchiveStore> store_;
   scoped_refptr<base::SequencedTaskRunner> store_runner_;
+  // Read for "is this tab idle enough yet", never for a stored timestamp.
+  raw_ptr<const base::Clock> clock_;
 
   // When a tab this service has watched stopped being visible. Only tabs the
   // strip has told us about hold an entry; every other tab — one restored into

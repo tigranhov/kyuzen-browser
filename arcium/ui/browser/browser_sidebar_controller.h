@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "arcium/common/arcium_features.h"
 #include "arcium/ui/browser/archive_service.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
@@ -81,6 +82,11 @@ class BrowserSidebarController : public SidebarModel::Observer {
 
   raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<SidebarTabModel> model_;
+  // What --arcium-fake-clock-offset offsets, and the only thing it does: the
+  // clock the archive sweep asks whether a tab has been idle long enough.
+  // Zero offset without the switch, which is base::Time::Now(). Declared
+  // before `archive_service_`, which holds a pointer to it.
+  features::OffsetClock archive_clock_{features::FakeClockOffset()};
   // One per window, because a tab is in exactly one strip. Null off the
   // record: an archive row outlives the window that wrote it, which is the one
   // thing incognito must not do. `model_` holds a bare pointer to it, which

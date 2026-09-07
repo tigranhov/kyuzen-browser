@@ -16,6 +16,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/default_clock.h"
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -29,6 +30,11 @@ constexpr uint32_t kCloseTypes = TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB;
 
 // The row `tab` would be archived as, or nullopt when there is nothing worth
 // recording. Read before the close, because afterwards the tab is gone.
+//
+// `archived_at` is base::Time::Now() and deliberately not the service's
+// clock: a row records when it was really written, whatever
+// --arcium-fake-clock-offset has told the sweep to believe. A free function
+// so there is no clock here to reach for by accident.
 std::optional<ArchivedTab> MakeRow(tabs::TabInterface* tab, SpaceId space_id) {
   const tabs::TabData data = tabs::TabData::FromTabInterface(tab);
   if (!data.visible_url.is_valid()) {
@@ -80,12 +86,14 @@ ArchiveService::ArchiveService(
     ArciumModel* model,
     TabBinding* binding,
     ArchiveStore* store,
-    scoped_refptr<base::SequencedTaskRunner> store_runner)
+    scoped_refptr<base::SequencedTaskRunner> store_runner,
+    const base::Clock* clock)
     : tab_strip_model_(tab_strip_model),
       model_(model),
       binding_(binding),
       store_(store),
-      store_runner_(std::move(store_runner)) {
+      store_runner_(std::move(store_runner)),
+      clock_(clock ? clock : base::DefaultClock::GetInstance()) {
   // No seeding loop. BrowserView builds this inside its own constructor, when
   // the strip is empty in every real launch — session restore, the startup NTP
   // and command-line URLs all insert their tabs afterwards — so a loop over
@@ -351,8 +359,11 @@ void ArchiveService::RescheduleTimer() {
     timer_.Stop();
     return;
   }
+  // The service's clock, not base::Time::Now(): under
+  // --arcium-fake-clock-offset the expiry is already behind us and this
+  // collapses to zero, which is how the switch makes the sweep immediate.
   const base::TimeDelta delay =
-      std::max(*next_expiry_ - base::Time::Now(), base::TimeDelta());
+      std::max(*next_expiry_ - clock_->Now(), base::TimeDelta());
   timer_.Start(
       FROM_HERE, delay,
       base::BindOnce(&ArchiveService::OnTimerFired, base::Unretained(this)));
@@ -362,7 +373,11 @@ void ArchiveService::OnTimerFired() {
   if (!tab_strip_model_) {
     return;
   }
-  const base::Time now = base::Time::Now();
+  // Both the comparison below and the retry stamp under it are in the
+  // service's own clock, so the two agree: a declined close restamped in real
+  // time would still read as expired under an offset clock, and the timer
+  // would spin on it.
+  const base::Time now = clock_->Now();
   std::vector<tabs::TabHandle> expired;
   for (int i = 0; i < tab_strip_model_->count(); ++i) {
     const tabs::TabHandle handle =
