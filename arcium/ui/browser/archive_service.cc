@@ -5,6 +5,7 @@
 #include "arcium/ui/browser/archive_service.h"
 
 #include <algorithm>
+#include <string>
 #include <utility>
 
 #include "arcium/browser/archive_store.h"
@@ -50,6 +51,19 @@ ArchiveReadResult ReadRecent(ArchiveStore* store, SpaceId space_id, int limit) {
   result.readable = store->is_open();
   if (result.readable) {
     result.tabs = store->ListRecent(space_id, limit);
+  }
+  return result;
+}
+
+// Runs on the store's sequence, and reads both halves in the one task for the
+// same reason ReadRecent does.
+ArchiveReadResult ReadSearch(ArchiveStore* store,
+                             const std::u16string& query,
+                             int limit) {
+  ArchiveReadResult result;
+  result.readable = store->is_open();
+  if (result.readable) {
+    result.tabs = store->Search(query, limit);
   }
   return result;
 }
@@ -114,7 +128,7 @@ void ArchiveService::ArchiveAllToday() {
 
 void ArchiveService::RequestRecent(SpaceId space_id,
                                    int limit,
-                                   RecentCallback callback) {
+                                   ReadCallback callback) {
   if (!store_ || !store_runner_) {
     // Posted rather than run here. A caller that is answered from inside its
     // own call has a second order of events to be correct in, and this branch
@@ -134,6 +148,25 @@ void ArchiveService::RequestRecent(SpaceId space_id,
   store_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
       base::BindOnce(&ReadRecent, base::Unretained(store_), space_id, limit),
+      std::move(callback));
+}
+
+void ArchiveService::RequestSearch(const std::u16string& query,
+                                   int limit,
+                                   ReadCallback callback) {
+  if (!store_ || !store_runner_) {
+    // Posted rather than run here, for the reason RequestRecent's own no-store
+    // branch is.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(std::move(callback), ArchiveReadResult()));
+    return;
+  }
+  // base::Unretained for the same reason RequestRecent's is safe: the store
+  // belongs to `store_runner_`, is only ever touched there, and its owner
+  // deletes it on that same sequence behind every task already posted.
+  store_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&ReadSearch, base::Unretained(store_), query, limit),
       std::move(callback));
 }
 

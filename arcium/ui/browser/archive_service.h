@@ -7,6 +7,7 @@
 
 #include <map>
 #include <optional>
+#include <string>
 #include <vector>
 
 #include "arcium/browser/archive_store.h"
@@ -84,7 +85,10 @@ class ArchiveService : public TabStripModelObserver,
   // hold back the automatic sweep: the user asked.
   void ArchiveAllToday();
 
-  using RecentCallback = base::OnceCallback<void(ArchiveReadResult)>;
+  // One reply from a read of the archive. Shared by every read this service
+  // offers, because every one of them answers with the same pair: the rows,
+  // and whether the file was readable at all.
+  using ReadCallback = base::OnceCallback<void(ArchiveReadResult)>;
 
   // Whether this service was given a store at all. False off the record,
   // where there is no archive file and cannot be one, and true everywhere
@@ -108,7 +112,18 @@ class ArchiveService : public TabStripModelObserver,
   // handle being answered from inside its own call. It is dropped without
   // running if whatever it is bound to has gone by then; bind through a
   // WeakPtr.
-  void RequestRecent(SpaceId space_id, int limit, RecentCallback callback);
+  void RequestRecent(SpaceId space_id, int limit, ReadCallback callback);
+
+  // The `limit` archived tabs matching `query`, newest first, over every
+  // space. Asynchronous for exactly the reason RequestRecent is, and posted
+  // onto the same sequence for exactly the reason it is: sql::Database is
+  // sequence-affine, this service owns the one sequence it is bound to, and a
+  // second async path over the same store would be a second place to get that
+  // wrong. TabSearchService is the caller; ArchiveStore::Search does the
+  // matching, on its folded shadow columns.
+  void RequestSearch(const std::u16string& query,
+                     int limit,
+                     ReadCallback callback);
 
   // Drops one archived row. Both halves of the archive's primary key are
   // needed to name it. Fire-and-forget: nothing waits on the delete, and a

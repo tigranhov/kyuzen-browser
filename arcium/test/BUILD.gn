@@ -13,6 +13,7 @@ test("arcium_unittests") {
     "sidebar_tab_model_unittest.cc",
     "sidebar_views_unittest.cc",
     "tab_binding_unittest.cc",
+    "tab_search_service_unittest.cc",
   ]
   deps = [
     "//arcium/browser",
