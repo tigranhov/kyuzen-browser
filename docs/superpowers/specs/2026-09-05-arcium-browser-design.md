@@ -274,7 +274,7 @@ Acceptance: A7.1 50 tabs across 3 spaces, idle memory below vanilla Chrome with 
 
 ### Stage 8. Distribution
 
-- R8.1 Code signing and notarisation; R8.2 auto-update; R8.3 release build and packaging script; R8.4 documented monthly rebase routine with the perf gate.
+- R8.1 Code signing and notarisation; R8.2 auto-update; R8.3 release build and packaging script; R8.4 documented monthly rebase routine with the perf gate; R8.5 decide the release policy for Arcium's development-only command-line switches — `--arcium-fake-clock-offset`, `--arcium-snapshot` and `--arcium-quick-entry` — as one decision rather than three. None is compiled out of a release build today. They are development affordances, not features, and whether they are stripped, gated behind a build flag, or left in belongs to the stage that decides what a release build contains. Not a Stage 2 regression: the switches predate it and nothing about them changed there.
 
 Acceptance: A8.1 a signed build installs on a clean Mac and updates itself to the next build.
 
