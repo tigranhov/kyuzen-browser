@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "arcium/browser/entry_claim.h"
+#include "arcium/browser/model/reorder_index.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/ui/browser/archive_service.h"
 #include "base/auto_reset.h"
@@ -163,15 +164,10 @@ void SidebarTabModel::MoveTabBeforeStripIndex(int from, int before) {
   if (from < 0 || from >= count || count == 0) {
     return;
   }
-  int to = before < 0 ? count - 1 : before;
-  // Lifting the tab out first shifts everything below it up one, so landing
-  // before a tab that is already below it means one index less. The same
-  // correction MoveTabToDropIndex applies in the view, and the one the entry
-  // reorder paths need.
-  if (before >= 0 && from < to) {
-    --to;
-  }
-  to = std::clamp(to, 0, count - 1);
+  // `before` counts the strip as it looks now, with `from` still in it; a
+  // negative one is "after everything", which is the end of the strip.
+  const int to = std::clamp(
+      before < 0 ? count - 1 : LiftThenInsertIndex(from, before), 0, count - 1);
   if (to != from) {
     tab_strip_model_->MoveWebContentsAt(from, to, /*select_after_move=*/false);
   }

@@ -441,6 +441,33 @@ TEST_F(SidebarTabModelTest, MovingAnEntryToTodayPutsItsTabWhereTheLineWas) {
   EXPECT_TRUE(arcium_model_.entries().empty());
 }
 
+// The same promise, downward: the entry's tab sits above the gap it was
+// dropped in, so lifting it out of the strip shifts that gap up one. The
+// position-0 case above never exercises that, which is why deleting the
+// correction from MoveTabBeforeStripIndex failed no test.
+TEST_F(SidebarTabModelTest, MovingAnEntryDownIntoTodayPutsItsTabInThatGap) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  AddTab(browser(), GURL("https://c.example/"));
+  // The strip is c, b, a; pinning c leaves Today holding b then a, and the
+  // entry's tab at strip index 0 — above both of them.
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  const EntryId id = model->rows()[0].entry_id;
+  ASSERT_TRUE(id.is_valid());
+
+  // Between b and a, which is Today position 1.
+  model->MoveEntryToSection(id, SidebarSection::kToday, /*position=*/1);
+
+  EXPECT_EQ(GURL("https://b.example/"),
+            strip()->GetWebContentsAt(0)->GetVisibleURL());
+  EXPECT_EQ(GURL("https://c.example/"),
+            strip()->GetWebContentsAt(1)->GetVisibleURL());
+  EXPECT_EQ(GURL("https://a.example/"),
+            strip()->GetWebContentsAt(2)->GetVisibleURL());
+  EXPECT_TRUE(arcium_model_.entries().empty());
+}
+
 // Dropping a warm entry into Today drops the entry, not the page: nothing
 // claims the tab any more, so it falls back into Today.
 TEST_F(SidebarTabModelTest, MovingAWarmEntryToTodayLeavesItsTab) {

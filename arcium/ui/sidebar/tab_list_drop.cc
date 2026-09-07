@@ -21,6 +21,7 @@
 #include <set>
 #include <utility>
 
+#include "arcium/browser/model/reorder_index.h"
 #include "arcium/ui/sidebar/folder_header_view.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
@@ -97,17 +98,12 @@ void TabListView::MoveTabBeforeTab(int from_index, int before_tab) {
   if (lo > hi || from_index < 0) {
     return;
   }
-  int to = hi;
-  if (before_tab >= 0) {
-    to = before_tab;
-    // The anchor names the row the dragged one lands *before*. Lifting the
-    // dragged row out first shifts everything after it up one, so landing
-    // before a row that is already below it means one index less.
-    if (from_index < to) {
-      --to;
-    }
-  }
-  to = std::clamp(to, lo, hi);
+  // The anchor names the row the dragged one lands *before*, counted with the
+  // dragged row still in the list; a negative anchor is "below everything",
+  // which is the end of the range.
+  const int to = std::clamp(
+      before_tab < 0 ? hi : LiftThenInsertIndex(from_index, before_tab), lo,
+      hi);
   if (to != from_index) {
     model_->MoveTab(from_index, to);
   }
@@ -307,13 +303,10 @@ void TabListView::PerformDrop(
 
 int TabListView::ReorderPosition(EntryId id, int to) const {
   // The drop boundary counts this section as it looks now, with the dragged
-  // entry still in it. ReorderEntry is lift-then-insert, so an entry already
-  // *above* the boundary shifts everything below it up one when it is lifted
-  // out and would overshoot by a slot — which is every downward drag, the
-  // commonest one there is. An entry arriving from another section is not in
-  // this count and needs no correction.
-  const std::optional<int> from = EntryPositionInSection(id);
-  return from && *from < to ? to - 1 : to;
+  // entry still in it, and MoveEntryToSection is lift-then-insert. An entry
+  // arriving from another section has no position here, which is exactly the
+  // nullopt case.
+  return LiftThenInsertIndex(EntryPositionInSection(id), to);
 }
 
 void TabListView::OnPaint(gfx::Canvas* canvas) {

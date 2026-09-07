@@ -9,6 +9,7 @@ test("arcium_unittests") {
     "arcium_profile_state_unittest.cc",
     "model_serializer_unittest.cc",
     "model_store_unittest.cc",
+    "reorder_index_unittest.cc",
     "session_tab_entry_unittest.cc",
     "sidebar_drag_unittest.cc",
     "sidebar_folders_unittest.cc",

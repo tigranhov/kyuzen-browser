@@ -8,6 +8,8 @@ source_set("model") {
     "folder.h",
     "model_serializer.cc",
     "model_serializer.h",
+    "reorder_index.cc",
+    "reorder_index.h",
     "space.h",
     "tab_entry.h",
   ]

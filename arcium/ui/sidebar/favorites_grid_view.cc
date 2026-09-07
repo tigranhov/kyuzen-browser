@@ -9,6 +9,7 @@
 #include <optional>
 #include <utility>
 
+#include "arcium/browser/model/reorder_index.h"
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
@@ -346,14 +347,17 @@ void FavoritesGridView::PerformDrop(
     // from Pinned, with the kind change turning into a no-op.
     //
     // The gap the tile was dropped in counts the grid as it looks now, with
-    // the dragged tile still in it, while ReorderEntry is lift-then-insert.
-    // A tile already left of the gap shifts everything after it one place
-    // left when it is lifted out, so it would overshoot — which is every
-    // drag to the right, half of all of them.
+    // the dragged tile still in it, while MoveEntryToSection is
+    // lift-then-insert. In a grid the shift reads as "one place left" rather
+    // than "one place up", but it is the same rule and the same function; a
+    // tile arriving from Pinned is not in this count, which is the nullopt
+    // case.
     const std::optional<size_t> from = IndexOfEntry(payload.entry_id);
     model_->MoveEntryToSection(
         payload.entry_id, SidebarSection::kFavorites,
-        from && static_cast<int>(*from) < to ? to - 1 : to);
+        LiftThenInsertIndex(
+            from ? std::optional<int>(static_cast<int>(*from)) : std::nullopt,
+            to));
     return;
   }
   // A Today tab becomes a favourite where the gap indicator was drawn, not at

@@ -439,6 +439,30 @@ TEST_F(SidebarDragTest, ATodayTabDroppedInTodayMovesTheTab) {
             TitlesInSection(SidebarSection::kToday));
 }
 
+// The downward half of the same gesture, and the one nothing pinned: every
+// other Today-reorder test here drags upward or off the end, and neither
+// touches LiftThenInsertIndex's correction. Deleting the correction from this
+// call site used to fail no test at all, while the identical rule three lines
+// away in the entry reorder was covered — which is exactly how a shared rule
+// with one test hides two live branches.
+TEST_F(SidebarDragTest, ATodayTabDraggedDownLandsInTheGapItWasDroppedIn) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, true);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kToday, false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kToday,
+                false);
+  MakeToday();
+  Refresh();
+  TabRowView* one = RowIn(today_, 0);
+  ASSERT_TRUE(one);
+  ASSERT_EQ(0, one->tab_index());
+
+  // The gap just above "Three", which is the gap between "Two" and "Three".
+  DropOn(today_, *DragDataFrom(one, one), JustAbove(RowIn(today_, 2)));
+
+  EXPECT_EQ((std::vector<std::u16string>{u"Two", u"One", u"Three"}),
+            TitlesInSection(SidebarSection::kToday));
+}
+
 TEST_F(SidebarDragTest, ATodayTabDroppedBelowEveryRowGoesToTheEnd) {
   model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, true);
   model_.AddTab(u"Two", "https://two.example/", SidebarSection::kToday, false);
