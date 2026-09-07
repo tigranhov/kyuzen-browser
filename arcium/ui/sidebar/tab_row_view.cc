@@ -37,7 +37,15 @@ constexpr int kIndicatorSize = 14;
 
 TabRowView::TabRowView(Delegate delegate)
     : views::Button(base::BindRepeating(
-          [](TabRowView* self) { self->delegate_.activate.Run(self->row_); },
+          [](TabRowView* self) {
+            // Activating rebuilds the list, which can destroy this view, so
+            // both the callback and the row it is handed are copies off the
+            // dying object rather than references into it.
+            base::RepeatingCallback<void(const SidebarRow&)> activate =
+                self->delegate_.activate;
+            const SidebarRow row = self->row_;
+            activate.Run(row);
+          },
           base::Unretained(this))),
       delegate_(std::move(delegate)) {
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
@@ -73,7 +81,13 @@ TabRowView::TabRowView(Delegate delegate)
 
   close_ = AddChildView(views::CreateVectorImageButtonWithNativeTheme(
       base::BindRepeating(
-          [](TabRowView* self) { self->delegate_.close.Run(self->row_); },
+          [](TabRowView* self) {
+            // Closing destroys this view; see the activate callback above.
+            base::RepeatingCallback<void(const SidebarRow&)> close =
+                self->delegate_.close;
+            const SidebarRow row = self->row_;
+            close.Run(row);
+          },
           base::Unretained(this)),
       kCloseIcon, kIndicatorSize));
   close_->SetVisible(false);
@@ -118,7 +132,10 @@ void TabRowView::UpdateCloseButtonVisibility() {
 
 bool TabRowView::OnMousePressed(const ui::MouseEvent& event) {
   if (event.IsOnlyMiddleMouseButton()) {
-    delegate_.close.Run(row_);
+    // Copies: the close destroys this view before Run() returns.
+    base::RepeatingCallback<void(const SidebarRow&)> close = delegate_.close;
+    const SidebarRow row = row_;
+    close.Run(row);
     return true;
   }
   drag_start_ = event.location();

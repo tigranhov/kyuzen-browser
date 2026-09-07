@@ -4,6 +4,8 @@
 
 #include "arcium/ui/browser/sidebar_tab_model.h"
 
+#include <map>
+#include <string_view>
 #include <utility>
 
 #include "arcium/browser/model/tab_entry.h"
@@ -15,6 +17,7 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/tab_list/tab_removed_reason.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
@@ -28,6 +31,7 @@
 #include "content/public/browser/web_contents.h"
 #include "ui/base/base_window.h"
 #include "ui/base/page_transition_types.h"
+#include "url/url_constants.h"
 
 namespace arcium {
 
@@ -46,6 +50,40 @@ ui::ImageModel ColdFavicon() {
 SidebarSection SectionForKind(EntryKind kind) {
   return kind == EntryKind::kFavorite ? SidebarSection::kFavorites
                                       : SidebarSection::kPinned;
+}
+
+// A path with its trailing slash dropped, so "/docs" and "/docs/" — and the
+// degenerate "" and "/" — compare equal.
+std::string_view PathWithoutTrailingSlash(const GURL& url) {
+  std::string_view path = url.path();
+  if (path.size() >= 1u && path.back() == '/') {
+    path.remove_suffix(1);
+  }
+  return path;
+}
+
+// Whether `url` is effectively the pinned target `pinned`, rather than a
+// navigation away from it. Exact GURL equality lights the "return to the
+// pinned URL" affordance up after an http -> https upgrade or a
+// trailing-slash redirect, offering to return to a URL the tab is already
+// on. Host, port, query and path must agree; the ref never matters, and an
+// http/https difference is an upgrade, not a destination.
+bool IsSamePinnedTarget(const GURL& url, const GURL& pinned) {
+  if (!url.is_valid() || !pinned.is_valid()) {
+    return url == pinned;
+  }
+  if (url.host() != pinned.host() || url.port() != pinned.port() ||
+      url.query() != pinned.query() ||
+      PathWithoutTrailingSlash(url) != PathWithoutTrailingSlash(pinned)) {
+    return false;
+  }
+  if (url.scheme() == pinned.scheme()) {
+    return true;
+  }
+  auto is_web = [](std::string_view scheme) {
+    return scheme == url::kHttpScheme || scheme == url::kHttpsScheme;
+  };
+  return is_web(url.scheme()) && is_web(pinned.scheme());
 }
 
 }  // namespace
@@ -169,7 +207,8 @@ SidebarRow SidebarTabModel::RowForEntry(const TabEntry& entry) const {
   row.is_muted = data.alert_state == tabs::TabAlert::kAudioMuting;
   row.url = data.visible_url;
   row.can_return_to_pinned_url =
-      entry.kind == EntryKind::kPinned && data.visible_url != entry.url;
+      entry.kind == EntryKind::kPinned &&
+      !IsSamePinnedTarget(data.visible_url, entry.url);
   return row;
 }
 
@@ -273,11 +312,20 @@ void SidebarTabModel::ActivateEntry(EntryId id) {
   if (!entry->url.is_valid()) {
     return;
   }
-  // AddTabAt notifies synchronously, and OnTabStripModelChanged binds the
+  BrowserWindowInterface* window =
+      tab_strip_model_->delegate()->GetBrowserWindowInterface();
+  if (!window) {
+    return;
+  }
+  // The insert notifies synchronously, and OnTabStripModelChanged binds the
   // tab it reports while `pending_bind_` is set. Clearing it straight after
   // the call means a failed insert cannot capture some later tab.
+  //
+  // AUTO_BOOKMARK, matching ReturnToPinnedUrl(): both are the browser
+  // opening a URL it stored on the user's behalf, not something typed.
   pending_bind_ = id;
-  tab_strip_model_->delegate()->AddTabAt(entry->url, -1, /*foreground=*/true);
+  chrome::AddSelectedTabWithURL(window, entry->url,
+                                ui::PAGE_TRANSITION_AUTO_BOOKMARK);
   pending_bind_ = EntryId();
 }
 
@@ -375,22 +423,39 @@ void SidebarTabModel::SyncEntryTitles() {
   if (!tab_strip_model_) {
     return;
   }
-  const SpaceId space = arcium_model_->default_space_id();
-  std::vector<EntryId> ids;
-  for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
-    for (const TabEntry* entry : arcium_model_->EntriesForKind(space, kind)) {
-      ids.push_back(entry->id);
+  // One pass over the strip builds the entry-to-tab lookup, then one pass
+  // over the entries reads it. Asking TabBinding per entry per tab made this
+  // O(entries x tabs) on every flush, and a flush happens on every burst.
+  std::map<EntryId, tabs::TabInterface*> tab_for_entry;
+  const int count = tab_strip_model_->count();
+  for (int i = 0; i < count; ++i) {
+    tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(i);
+    const std::optional<EntryId> id = binding_->EntryForTab(tab->GetHandle());
+    if (id.has_value()) {
+      tab_for_entry[*id] = tab;
     }
   }
-  for (const EntryId& id : ids) {
-    tabs::TabInterface* tab = LiveTabForEntry(id);
-    if (!tab) {
-      continue;
+  if (tab_for_entry.empty()) {
+    return;
+  }
+  // Collected first: SetLastTitle notifies, and an observer must not be able
+  // to invalidate the entry pointers this loop is walking.
+  std::vector<std::pair<EntryId, std::u16string>> updates;
+  const SpaceId space = arcium_model_->default_space_id();
+  for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
+    for (const TabEntry* entry : arcium_model_->EntriesForKind(space, kind)) {
+      auto it = tab_for_entry.find(entry->id);
+      if (it == tab_for_entry.end()) {
+        continue;
+      }
+      std::u16string title = tabs::TabData::FromTabInterface(it->second).title;
+      if (!title.empty() && title != entry->last_title) {
+        updates.emplace_back(entry->id, std::move(title));
+      }
     }
-    const std::u16string title = tabs::TabData::FromTabInterface(tab).title;
-    if (!title.empty()) {
-      arcium_model_->SetLastTitle(id, title);
-    }
+  }
+  for (auto& [id, title] : updates) {
+    arcium_model_->SetLastTitle(id, title);
   }
 }
 

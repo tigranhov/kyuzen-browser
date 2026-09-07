@@ -293,6 +293,72 @@ TEST_F(SidebarTabModelTest, TodayTabsStillFollowStripOrder) {
   EXPECT_EQ(GURL("https://a.example/"), rows[1].url);
 }
 
+// Arcium's Pinned section is entries, so a Chromium-pinned tab no entry
+// claims is an ordinary Today tab and Clear Today closes it.
+TEST_F(SidebarTabModelTest, ClearTodayClosesAnUnclaimedChromiumPinnedTab) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  strip()->SetTabPinned(0, true);
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  ASSERT_EQ(2, strip()->count());
+
+  model->ClearToday();
+  EXPECT_EQ(0, strip()->count());
+}
+
+// I3: ModelStore::Load calls ArciumModel::ReplaceAll once the window is
+// already interactive, dropping entries without touching TabBinding. A tab
+// left bound to a removed entry must fall back into Today, not vanish into
+// neither section.
+TEST_F(SidebarTabModelTest, ATabWhoseEntryVanishesFallsBackIntoToday) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  ASSERT_EQ(SidebarSection::kPinned, model->rows()[0].section);
+
+  // Exactly what a completed load does to the model.
+  std::vector<Space> spaces = arcium_model_.spaces();
+  arcium_model_.ReplaceAll(std::move(spaces), {}, {});
+
+  std::vector<SidebarRow> rows = model->rows();
+  ASSERT_EQ(1u, rows.size());
+  EXPECT_EQ(SidebarSection::kToday, rows[0].section);
+  EXPECT_EQ(0, rows[0].tab_index);
+  EXPECT_FALSE(rows[0].entry_id.is_valid());
+
+  // And it is closeable again, which it was not while it was claimed by an
+  // entry that no longer existed.
+  model->ClearToday();
+  EXPECT_EQ(0, strip()->count());
+}
+
+// I4: one model and one binding per profile, two windows over them. The
+// entry shows in both, warm where its tab lives and cold in the other.
+TEST_F(SidebarTabModelTest, TwoWindowsOverOneModelBothShowTheEntry) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model_a = MakeModel();
+  model_a->PinTab(0);
+  const EntryId id = model_a->rows()[0].entry_id;
+
+  std::unique_ptr<Browser> browser_b =
+      CreateBrowser(profile(), browser()->type(), /*hosted_app=*/false);
+  SidebarTabModel model_b(browser_b->tab_strip_model(), &arcium_model_,
+                          &binding_);
+
+  std::vector<SidebarRow> rows_a = model_a->rows();
+  ASSERT_EQ(1u, rows_a.size());
+  EXPECT_EQ(id, rows_a[0].entry_id);
+  EXPECT_FALSE(rows_a[0].is_cold);
+
+  std::vector<SidebarRow> rows_b = model_b.rows();
+  ASSERT_EQ(1u, rows_b.size());
+  EXPECT_EQ(id, rows_b[0].entry_id);
+  EXPECT_EQ(SidebarSection::kPinned, rows_b[0].section);
+  EXPECT_TRUE(rows_b[0].is_cold);
+
+  browser_b->tab_strip_model()->CloseAllTabs();
+}
+
 // I2: activating an entry from the window that does not hold its tab must
 // raise the window that does, not open a second tab and steal the entry.
 TEST_F(SidebarTabModelTest, ActivatingAnEntryHeldByAnotherWindowDoesNotSteal) {
@@ -326,30 +392,49 @@ TEST_F(SidebarTabModelTest, ActivatingAnEntryHeldByAnotherWindowDoesNotSteal) {
   browser_b->tab_strip_model()->CloseAllTabs();
 }
 
-// I3: ModelStore::Load calls ArciumModel::ReplaceAll once the window is
-// already interactive, dropping entries without touching TabBinding. A tab
-// left bound to a removed entry must fall back into Today, not vanish into
-// neither section.
-TEST_F(SidebarTabModelTest, ATabWhoseEntryVanishesFallsBackIntoToday) {
-  AddTab(browser(), GURL("https://a.example/"));
+// M7: the affordance must not offer to "return" to a URL the tab is on.
+TEST_F(SidebarTabModelTest, AnHttpsUpgradeIsNotANavigationAway) {
+  AddTab(browser(), GURL("http://pinned.example/"));
   std::unique_ptr<SidebarTabModel> model = MakeModel();
   model->PinTab(0);
-  ASSERT_EQ(SidebarSection::kPinned, model->rows()[0].section);
+  ASSERT_FALSE(model->rows()[0].can_return_to_pinned_url);
 
-  // Exactly what a completed load does to the model.
-  std::vector<Space> spaces = arcium_model_.spaces();
-  arcium_model_.ReplaceAll(std::move(spaces), {}, {});
+  NavigateAndCommitActiveTab(GURL("https://pinned.example/"));
+  task_environment()->RunUntilIdle();
+  EXPECT_FALSE(model->rows()[0].can_return_to_pinned_url);
+}
 
-  std::vector<SidebarRow> rows = model->rows();
-  ASSERT_EQ(1u, rows.size());
-  EXPECT_EQ(SidebarSection::kToday, rows[0].section);
-  EXPECT_EQ(0, rows[0].tab_index);
-  EXPECT_FALSE(rows[0].entry_id.is_valid());
+TEST_F(SidebarTabModelTest, ATrailingSlashRedirectIsNotANavigationAway) {
+  AddTab(browser(), GURL("https://pinned.example/docs"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  ASSERT_FALSE(model->rows()[0].can_return_to_pinned_url);
 
-  // And it is closeable again, which it was not while it was claimed by an
-  // entry that no longer existed.
-  model->ClearToday();
-  EXPECT_EQ(0, strip()->count());
+  NavigateAndCommitActiveTab(GURL("https://pinned.example/docs/"));
+  task_environment()->RunUntilIdle();
+  EXPECT_FALSE(model->rows()[0].can_return_to_pinned_url);
+}
+
+TEST_F(SidebarTabModelTest, AFragmentIsNotANavigationAway) {
+  AddTab(browser(), GURL("https://pinned.example/docs"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+
+  NavigateAndCommitActiveTab(GURL("https://pinned.example/docs#section"));
+  task_environment()->RunUntilIdle();
+  EXPECT_FALSE(model->rows()[0].can_return_to_pinned_url);
+}
+
+// The control for the three above: a real navigation still sets the flag.
+// A differing query is a different page, not a redirect shape.
+TEST_F(SidebarTabModelTest, ADifferentQueryStillOffersTheReturn) {
+  AddTab(browser(), GURL("https://pinned.example/docs"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+
+  NavigateAndCommitActiveTab(GURL("https://pinned.example/docs?page=2"));
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(model->rows()[0].can_return_to_pinned_url);
 }
 
 }  // namespace
