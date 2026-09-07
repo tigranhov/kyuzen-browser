@@ -131,7 +131,9 @@ busy; touching one Views file and rebuilding 17 s; rebase no-op 29 s; views_exam
 |---|---|
 | 0 Foundation | done, see docs/stage0-carryover.md and docs/perf/ |
 | 1 Visual MVP | done, see docs/stage1-findings.md and docs/perf/ |
-| 2 Arc tab model | not started |
+| 2 Arc tab model | in close-out, see docs/stage2-findings.md |
+| 2.5 Entry behaviour | not started — nested folders, model migration |
+| 2.6 Favourite home boundary | design pending, see spec section 5 |
 | 3 Spaces and profiles | not started |
 | 4 Command bar and navigation | not started |
 | 5 Layout | not started |

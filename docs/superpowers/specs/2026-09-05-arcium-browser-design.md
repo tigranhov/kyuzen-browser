@@ -155,6 +155,65 @@ Acceptance:
 - A2.2 Set 12 h timeout, fake the clock, Today tabs archive and appear in the archive list.
 - A2.3 Perf within budgets; no writes on the UI thread confirmed by the tracing script.
 
+### Stage 2.5. Entry behaviour
+
+Goal: a favourite is a place you keep, not just a tab that persists; a folder can
+hold a folder.
+
+Added after Stage 2 shipped. Neither requirement below was a deliberate omission
+— the spec simply never said anything about them, and building Stage 2 made both
+absences visible. R2.5's folders are flat because line 76 defines a Folder as
+containing pinned tabs and gives it no parent; favourites navigate anywhere
+because the spec grants that to pinned tabs explicitly (line 74) and is silent
+for favourites, so they inherited the silence.
+
+- R2.5.1 Folders nest. A `Folder` gains a parent, a folder can be dragged into
+  another folder, and a collapsed folder hides its descendants. Dragging a
+  folder into its own descendant is refused rather than accepted into a cycle.
+  Whether a folder's count includes descendants is a display decision to settle
+  in its plan, not a model one.
+- R2.5.2 The live model file gains a schema migration. It runs once, off the UI
+  thread, and a file it cannot migrate degrades to an empty model rather than
+  losing the archive — the same rule Stage 2 already applies to a corrupt file.
+
+Scheduled before Stage 3 deliberately: Stage 3 extends the same JSON schema with
+a real space dimension, and migrating the model file once is cheaper and safer
+than migrating it twice.
+
+Acceptance:
+- A2.5.1 Build a folder three deep, collapse the middle one, quit and relaunch;
+  the tree and its collapsed state are where they were.
+- A2.5.2 Drag a folder onto its own child; the drop is refused and the model is
+  unchanged.
+- A2.5.3 A Stage 2 model file opens in a Stage 2.5 build with every folder and
+  entry intact.
+
+### Stage 2.6. Favourite home boundary
+
+Goal: navigating a favourite's tab away from its home does not consume the
+favourite — it opens a tab instead, the way Arc and Zen behave.
+
+**Design pending.** This stage has a goal and no requirements on purpose. The
+mechanism is straightforward — a navigation seam behind a patch, delegating to
+`arcium/` — but the mechanism is not the feature. The policy is: which
+navigations count as leaving. A same-registrable-domain rule alone breaks
+sign-in, because `mail.google.com` to `accounts.google.com` is one session and
+so is every OAuth hop and consent interstitial; and a link click, a scripted
+navigation, a server redirect and a typed URL do not obviously deserve the same
+answer. Getting that wrong is worse than the problem it solves, so this stage
+gets its own design session before it gets requirements.
+
+Open questions for that session, recorded so they are not rediscovered:
+- What is "home" — a registrable domain, an origin, a URL prefix, or a set the
+  user can edit?
+- Do auth and consent hops get an allowance, and is it a list or a heuristic?
+- Does the boundary apply to pinned entries too, or only favourites? Line 74
+  currently grants pinned tabs free navigation with a revert affordance.
+- Where does the new tab land — Today in the current space, or a temporary
+  place that Stage 5's Little Arc might own?
+- What happens to the favourite's own tab: does it stay where it was, or return
+  home?
+
 ### Stage 3. Spaces and profiles
 
 Goal: multiple spaces, each bound to a profile with its own sign-ins, in one window.
