@@ -166,6 +166,9 @@ class ArchiveService : public TabStripModelObserver,
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
+  void OnTabChangedAt(tabs::TabInterface* tab,
+                      int index,
+                      TabChangeType change_type) override;
   void OnTabStripModelDestroyed(TabStripModel* tab_strip_model) override;
 
   // ArciumModel::Observer:
@@ -190,7 +193,9 @@ class ArchiveService : public TabStripModelObserver,
   // to close the tab. The close may finish inside this call, or arbitrarily
   // later behind a beforeunload dialog, or never. The write happens only from
   // the kRemoved branch of OnTabStripModelChanged, which is the one place the
-  // tab is known to be actually gone.
+  // tab is known to be actually gone, and the row is stamped there rather than
+  // here. A declined close drops its row at the tab's next page change; see
+  // `pending_archive_`.
   void ArchiveAndClose(tabs::TabHandle handle);
 
   raw_ptr<TabStripModel> tab_strip_model_;
@@ -213,8 +218,11 @@ class ArchiveService : public TabStripModelObserver,
   std::map<tabs::TabHandle, base::Time> last_active_;
 
   // A row already read for a tab whose close is still outstanding. It waits
-  // here until OnTabStripModelChanged reports the tab actually removed; a
-  // close the strip never completes simply leaves it parked. See
+  // here until OnTabStripModelChanged reports the tab actually removed, and is
+  // dropped by OnTabChangedAt if the tab's page changes first — which is the
+  // only sign the strip gives that the close was declined and the user went on
+  // using the tab. Those are the only two ways out: a tab that neither goes
+  // nor changes keeps its row, and the row still describes it. See
   // ArchiveAndClose().
   std::map<tabs::TabHandle, ArchivedTab> pending_archive_;
 

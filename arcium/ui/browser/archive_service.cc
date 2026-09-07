@@ -31,8 +31,11 @@ constexpr uint32_t kCloseTypes = TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB;
 // The row `tab` would be archived as, or nullopt when there is nothing worth
 // recording. Read before the close, because afterwards the tab is gone.
 //
-// `archived_at` is base::Time::Now() and deliberately not the service's
-// clock: a row records when it was really written, whatever
+// `archived_at` is deliberately left unset here and stamped where the row is
+// written, which can be arbitrarily later: a close held behind a dialog is
+// archived when the tab actually went, not when the button was pressed, and
+// ListRecent orders by that field. It is base::Time::Now() and never the
+// service's clock — a row records when it was really written, whatever
 // --arcium-fake-clock-offset has told the sweep to believe. A free function
 // so there is no clock here to reach for by accident.
 std::optional<ArchivedTab> MakeRow(tabs::TabInterface* tab, SpaceId space_id) {
@@ -44,7 +47,6 @@ std::optional<ArchivedTab> MakeRow(tabs::TabInterface* tab, SpaceId space_id) {
   row.url = data.visible_url;
   row.title = data.title;
   row.space_id = space_id;
-  row.archived_at = base::Time::Now();
   return row;
 }
 
@@ -247,6 +249,10 @@ void ArchiveService::OnTabStripModelChanged(
         if (pending == pending_archive_.end()) {
           continue;
         }
+        ArchivedTab row = pending->second;
+        pending_archive_.erase(pending);
+        // Stamped here rather than at the press. See MakeRow().
+        row.archived_at = base::Time::Now();
         // sql::Database blocks and is sequence-affine. The store belongs to
         // `store_runner_` and is only ever touched there; base::Unretained is
         // safe because its owner deletes it on that same sequence, behind
@@ -255,9 +261,8 @@ void ArchiveService::OnTabStripModelChanged(
           store_runner_->PostTask(
               FROM_HERE,
               base::BindOnce(&ArchiveStore::Add, base::Unretained(store_),
-                             pending->second));
+                             std::move(row)));
         }
-        pending_archive_.erase(pending);
       }
     }
   }
@@ -277,6 +282,25 @@ void ArchiveService::OnTabStripModelChanged(
     last_active_[selection.old_tab->GetHandle()] = base::Time::Now();
   }
   RescheduleTimer();
+}
+
+void ArchiveService::OnTabChangedAt(tabs::TabInterface* tab,
+                                    int index,
+                                    TabChangeType change_type) {
+  // The strip says nothing when a close is *declined* — a beforeunload dialog
+  // the user cancels, a TabUnloadHandler's confirmation they answer no to. It
+  // does say when the tab's page changes afterwards, and only a tab the user
+  // kept can do that. The row parked against it was read at the press and
+  // describes a page that is no longer open, so it goes.
+  //
+  // Without this the parking is unbounded: the row waits against that tab for
+  // the rest of its life, and a hand-close hours later writes it — archiving
+  // a Today tab nothing asked to archive, under a URL and title that have
+  // moved on. kAll is the committed change (a new page, a new title), not the
+  // loading flicker a close of its own can produce.
+  if (tab && change_type == TabChangeType::kAll) {
+    pending_archive_.erase(tab->GetHandle());
+  }
 }
 
 void ArchiveService::OnTabStripModelDestroyed(TabStripModel* tab_strip_model) {

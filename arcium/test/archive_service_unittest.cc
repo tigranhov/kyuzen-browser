@@ -549,6 +549,86 @@ TEST_F(ArchiveServiceTest, ARowParkedByClearIsWrittenWhenTheTabActuallyGoes) {
   EXPECT_EQ(0u, service_->pending_archive_count_for_testing());
 }
 
+// I2, the third half. A parked row used to wait against its tab for the rest
+// of that tab's life, so a Clear the user declined would be honoured hours
+// later by a close that had nothing to do with it: the user cancels the
+// dialog, browses on in that tab, closes it by hand — and the row read at the
+// Clear press is written, describing a page that is no longer open, landing
+// mid-list because ListRecent orders by archived_at. A hand-closed Today tab
+// is not archived at all, so the parked row goes when the page does.
+TEST_F(ArchiveServiceTest, AClearTheUserDeclinesDoesNotFollowTheTabAround) {
+  auto handler = std::make_unique<DecliningUnloadHandler>();
+  DecliningUnloadHandler* handler_ptr = handler.get();
+  UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  // The coalesced UI update is what carries a navigation to TabChangedAt, and
+  // this test asserts on what that delivers rather than on the wall clock.
+  browser()->set_update_ui_immediately_for_testing();
+  // A pinned tab at index 0 keeps the strip from emptying; the Today tab is
+  // appended as a TestWebContents because only that kind can be navigated by
+  // hand afterwards.
+  AddTab(browser(), GURL("https://pinned.example/"));
+  content::WebContentsTester* today =
+      AppendTestTab(GURL("https://today.example/"));
+  sidebar_model_->PinTab(0);
+  ASSERT_EQ(2, strip()->count());
+
+  service_->ArchiveAllToday();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(2, strip()->count());  // The confirmation is up; nothing closed.
+  ASSERT_EQ(1u, service_->pending_archive_count_for_testing());
+
+  // The user declines, and goes on using the tab.
+  handler_ptr->set_intercept(false);
+  today->NavigateAndCommit(GURL("https://later.example/"));
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(0u, service_->pending_archive_count_for_testing());
+
+  // Hours later they close it themselves. Nothing asked for this one to be
+  // archived, so nothing is written.
+  PassTime(base::Hours(3));
+  const int today_index = strip()->GetIndexOfTab(HandleAt(1).Get());
+  ASSERT_NE(TabStripModel::kNoTab, today_index);
+  strip()->CloseWebContentsAt(today_index, TabCloseTypes::CLOSE_USER_GESTURE);
+  task_environment()->RunUntilIdle();
+
+  ASSERT_EQ(1, strip()->count());
+  EXPECT_TRUE(archive_.ListRecent(model_.default_space_id(), 10).empty());
+}
+
+// The other end of the same rule. A row that does survive to be written is
+// stamped when the tab actually went, not when Clear was pressed — otherwise
+// a close held behind a dialog for hours sorts into ListRecent among the tabs
+// the user archived before it, which is not where they left it.
+TEST_F(ArchiveServiceTest, AParkedRowIsStampedWhenTheTabActuallyGoes) {
+  auto handler = std::make_unique<DecliningUnloadHandler>();
+  DecliningUnloadHandler* handler_ptr = handler.get();
+  UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  AddTab(browser(), GURL("https://today.example/"));
+  AddTab(browser(), GURL("https://pinned.example/"));
+  sidebar_model_->PinTab(0);
+  ASSERT_EQ(2, strip()->count());
+
+  service_->ArchiveAllToday();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(1u, service_->pending_archive_count_for_testing());
+
+  // Held for hours, then confirmed. Short of the twelve-hour timeout, so the
+  // sweep is not what closes it.
+  PassTime(base::Hours(5));
+  const base::Time confirmed_at = base::Time::Now();
+  handler_ptr->set_intercept(false);
+  const int today_index = strip()->GetIndexOfTab(HandleAt(1).Get());
+  ASSERT_NE(TabStripModel::kNoTab, today_index);
+  strip()->CloseWebContentsAt(today_index, TabCloseTypes::CLOSE_USER_GESTURE);
+  task_environment()->RunUntilIdle();
+
+  const std::vector<ArchivedTab> rows =
+      archive_.ListRecent(model_.default_space_id(), 10);
+  ASSERT_EQ(1u, rows.size());
+  EXPECT_EQ(GURL("https://today.example/"), rows[0].url);
+  EXPECT_GE(rows[0].archived_at, confirmed_at);
+}
+
 // The archive list's read path, end to end and through the real store: the
 // model asks, the service posts to the store's sequence, and the rows come
 // back converted and newest first. Reads get the same "posted, never inline"
