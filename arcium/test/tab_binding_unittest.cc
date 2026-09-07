@@ -116,6 +116,31 @@ TEST_F(TabBindingTest, AChangeIsReportedOncePerBind) {
   EXPECT_EQ(2, changes);
 }
 
+// The mirror of the unbind guard below. Rebinding the edge that is already
+// there is not a change, and reporting it costs a posted rebuild of the whole
+// session command list. A sidebar rebuild that re-asserts its bindings, or a
+// restore that runs twice over the same tab, must be free.
+TEST_F(TabBindingTest, ABindThatChangesNothingIsNotReported) {
+  AddTab(browser(), GURL("https://a.example/"));
+  const EntryId id = EntryId::Generate();
+  TabBinding binding;
+  int changes = 0;
+  binding.SetChangedCallback(
+      base::BindLambdaForTesting([&changes] { ++changes; }));
+
+  binding.Bind(id, HandleAt(0));
+  EXPECT_EQ(1, changes);
+
+  binding.Bind(id, HandleAt(0));
+  EXPECT_EQ(1, changes);
+
+  // And the binding is still there afterwards — the guard returns early, it
+  // does not fall through the release-both-sides path and drop the edge.
+  ASSERT_TRUE(binding.TabForEntry(id).has_value());
+  EXPECT_EQ(HandleAt(0), *binding.TabForEntry(id));
+  EXPECT_EQ(id, *binding.EntryForTab(HandleAt(0)));
+}
+
 // An unbind that unbinds nothing is not a change. Tab closes come through
 // here for every Today tab, which is most of them.
 TEST_F(TabBindingTest, AnUnbindThatChangesNothingIsNotReported) {

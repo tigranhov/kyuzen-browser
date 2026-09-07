@@ -1,0 +1,39 @@
+Seam: BrowserLiveTabContext::GetExtraDataForTab in
+      chrome/browser/ui/browser_live_tab_context.cc.
+Why: a tab closed while the browser is running goes to the TabRestoreService
+     with an extra_data map this function builds from scratch — the copy in
+     the session file is not consulted. It populates glic and nothing else, so
+     Arcium's entry id is dropped at the close, and reopening the tab produces
+     an unclaimed Today row beside the entry's own cold row: two sidebar rows
+     for one page.
+
+     Only the in-session close needs this. A tab closed in a *previous*
+     session carries its extra_data out of the session file
+     (tab_restore_service_impl.cc, RestoreEntry) and reaches
+     chrome::AddRestoredTab, which patch 0120 already hooks.
+
+     No GN wiring: browser_live_tab_context.cc builds in
+     //chrome/browser/ui:ui, which reaches //arcium/browser through patch
+     0010's dep on //arcium/ui/browser and that target's public_deps.
+Delegates to: arcium::PopulateTabEntryExtraData.
+
+diff --git a/chrome/browser/ui/browser_live_tab_context.cc b/chrome/browser/ui/browser_live_tab_context.cc
+--- a/chrome/browser/ui/browser_live_tab_context.cc
++++ b/chrome/browser/ui/browser_live_tab_context.cc
+@@ -9,6 +9,7 @@
+ #include <optional>
+ #include <utility>
+ 
++#include "arcium/browser/session_tab_entry.h"
+ #include "base/check_deref.h"
+ #include "base/strings/string_number_conversions.h"
+ #include "base/strings/to_string.h"
+@@ -160,6 +161,8 @@
+ 
+   glic::PopulateGlicExtraData(tab_strip_model_->GetTabAtIndex(index),
+                               &extra_data);
++  arcium::PopulateTabEntryExtraData(tab_strip_model_->GetTabAtIndex(index),
++                                   &extra_data);
+ 
+   return extra_data;
+ }

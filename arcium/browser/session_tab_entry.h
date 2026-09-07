@@ -18,6 +18,10 @@ namespace sessions {
 class CommandStorageManager;
 }
 
+namespace tabs {
+class TabInterface;
+}
+
 namespace arcium {
 
 // Carries the entry id of a pinned or favourite tab across a restart, so the
@@ -57,6 +61,18 @@ void AppendTabEntryCommand(
     sessions::CommandStorageManager* command_storage_manager,
     SessionID tab_id,
     content::WebContents* web_contents);
+
+// Save, the in-session half. A tab closed while the browser runs is handed to
+// the TabRestoreService with an extra_data map that BrowserLiveTabContext
+// builds from scratch — the session file's copy is not reused — so without a
+// contribution here the id is dropped at the close and the reopened tab comes
+// back as an unclaimed Today row beside the entry's own cold row: two sidebar
+// rows for one page. Adds nothing when no live entry claims the tab.
+//
+// Takes the tab rather than the WebContents because the one caller already
+// has it, exactly as its glic neighbour does.
+void PopulateTabEntryExtraData(tabs::TabInterface* tab,
+                               std::map<std::string, std::string>* extra_data);
 
 }  // namespace arcium
 

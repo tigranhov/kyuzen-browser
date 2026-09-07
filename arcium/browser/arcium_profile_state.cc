@@ -33,10 +33,16 @@ void OpenArchive(ArchiveStore* archive, base::FilePath path) {
 }  // namespace
 
 // static
+ArciumProfileState* ArciumProfileState::GetForBrowserContextIfExists(
+    content::BrowserContext* context) {
+  return static_cast<ArciumProfileState*>(
+      context->GetUserData(kArciumProfileStateKey));
+}
+
+// static
 ArciumProfileState* ArciumProfileState::GetForBrowserContext(
     content::BrowserContext* context) {
-  auto* state = static_cast<ArciumProfileState*>(
-      context->GetUserData(kArciumProfileStateKey));
+  auto* state = GetForBrowserContextIfExists(context);
   if (state) {
     return state;
   }

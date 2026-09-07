@@ -12,6 +12,13 @@ TabBinding::TabBinding() = default;
 TabBinding::~TabBinding() = default;
 
 void TabBinding::Bind(EntryId id, tabs::TabHandle handle) {
+  // Rebinding the edge that is already there changes nothing, and the change
+  // callback costs a posted rebuild of the whole session command list. The
+  // one-to-one invariant means this one lookup settles both maps.
+  auto existing = entry_to_tab_.find(id);
+  if (existing != entry_to_tab_.end() && existing->second == handle) {
+    return;
+  }
   // Release whatever either side was previously bound to first, so the maps
   // never grow a second edge for the same entry or the same tab.
   EraseEntry(id);

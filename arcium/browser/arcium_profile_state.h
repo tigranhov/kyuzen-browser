@@ -43,6 +43,15 @@ class ArciumProfileState : public base::SupportsUserData::Data,
   static ArciumProfileState* GetForBrowserContext(
       content::BrowserContext* context);
 
+  // The same lookup without the construction, for callers that are only ever
+  // passing through: the session-service path runs for every tab of every
+  // window on a command rebuild and on every tab close, and it has nothing to
+  // say about a profile the sidebar has not opened yet. Constructing here
+  // would post an archive open and a model load as a side effect of Chromium
+  // walking a tab strip. NULL when nothing has created the state.
+  static ArciumProfileState* GetForBrowserContextIfExists(
+      content::BrowserContext* context);
+
   // Extension-less data files beside Chromium's own `Bookmarks`.
   //
   // Never build either path from an off-the-record context's GetPath(): it

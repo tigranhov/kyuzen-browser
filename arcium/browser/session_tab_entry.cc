@@ -51,6 +51,29 @@ ArciumProfileState* StateFor(content::WebContents* web_contents) {
       web_contents->GetBrowserContext());
 }
 
+// For the two save paths, which are only ever passing through. Chromium walks
+// every tab of every window on a session command rebuild and calls the other
+// one on every tab close; neither has anything to say about a profile the
+// sidebar has not opened, and constructing the state to find that out would
+// post an archive open and a model load from inside a tab-strip walk.
+ArciumProfileState* ExistingStateFor(content::WebContents* web_contents) {
+  return ArciumProfileState::GetForBrowserContextIfExists(
+      web_contents->GetBrowserContext());
+}
+
+// The id of an entry that *still exists* and claims `handle`, or nullopt.
+//
+// IsClaimedByEntry rather than TabBinding::IsBound: a binding whose entry the
+// model has dropped is exactly the stale case, and writing its id down would
+// give a dead entry another life on the next restore.
+std::optional<EntryId> LiveEntryFor(ArciumProfileState* state,
+                                    tabs::TabHandle handle) {
+  if (!IsClaimedByEntry(*state->model(), *state->binding(), handle)) {
+    return std::nullopt;
+  }
+  return state->binding()->EntryForTab(handle);
+}
+
 }  // namespace
 
 void StashRestoredEntryId(
@@ -81,7 +104,13 @@ void BindStashedEntryId(content::WebContents* web_contents) {
   // detached, at whatever later moment something called in again.
   web_contents->RemoveUserData(RestoredEntryId::UserDataKey());
 
-  tabs::TabInterface* tab = tabs::TabInterface::GetFromContents(web_contents);
+  // MaybeGetFromContents, not GetFromContents: the latter dereferences its
+  // lookup unconditionally. This call sits in a patch, immediately after the
+  // tab-strip insertion in AddRestoredTabImpl, and a rebase that moves the
+  // hook line above that insertion is exactly the change a reviewer would
+  // wave through. Null here has to mean a cold entry, not a crashed browser.
+  tabs::TabInterface* tab =
+      tabs::TabInterface::MaybeGetFromContents(web_contents);
   if (!tab) {
     return;
   }
@@ -103,25 +132,43 @@ void AppendTabEntryCommand(
     sessions::CommandStorageManager* command_storage_manager,
     SessionID tab_id,
     content::WebContents* web_contents) {
-  tabs::TabInterface* tab = tabs::TabInterface::GetFromContents(web_contents);
+  // MaybeGetFromContents for the same reason as above: this one is called
+  // from a walk over a tab strip, so a null is not reachable today, and
+  // GetFromContents would turn a future seam that is into a crash.
+  tabs::TabInterface* tab =
+      tabs::TabInterface::MaybeGetFromContents(web_contents);
   if (!tab) {
     return;
   }
-  ArciumProfileState* state = StateFor(web_contents);
-  const tabs::TabHandle handle = tab->GetHandle();
-  // IsClaimedByEntry rather than TabBinding::IsBound: a binding whose entry
-  // the model has dropped is exactly the stale case, and writing its id down
-  // would give it another life on the next restart.
-  if (!IsClaimedByEntry(*state->model(), *state->binding(), handle)) {
+  ArciumProfileState* state = ExistingStateFor(web_contents);
+  if (!state) {
     return;
   }
-  const std::optional<EntryId> id = state->binding()->EntryForTab(handle);
+  const std::optional<EntryId> id = LiveEntryFor(state, tab->GetHandle());
   if (!id.has_value()) {
     return;
   }
   command_storage_manager->AppendRebuildCommand(
       sessions::CreateAddTabExtraDataCommand(tab_id, kEntryIdExtraDataKey,
                                              id->value()));
+}
+
+void PopulateTabEntryExtraData(tabs::TabInterface* tab,
+                               std::map<std::string, std::string>* extra_data) {
+  // Guarded because the caller's neighbour guards it: BrowserLiveTabContext
+  // hands both of us whatever GetTabAtIndex returned.
+  if (!tab) {
+    return;
+  }
+  ArciumProfileState* state = ExistingStateFor(tab->GetContents());
+  if (!state) {
+    return;
+  }
+  const std::optional<EntryId> id = LiveEntryFor(state, tab->GetHandle());
+  if (!id.has_value()) {
+    return;
+  }
+  (*extra_data)[kEntryIdExtraDataKey] = id->value();
 }
 
 }  // namespace arcium
