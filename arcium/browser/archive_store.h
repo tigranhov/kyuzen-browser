@@ -43,6 +43,13 @@ class ArchiveStore {
   // browser from opening either way.
   [[nodiscard]] bool Open(const base::FilePath& path);
 
+  // sql::Database is sequence-affine and binds to whichever sequence first
+  // touches it — which, for a store constructed on the UI thread, is the UI
+  // thread. An owner that constructs the store here and then hands it to a
+  // background sequence must call this in between, before the first posted
+  // call. See ArciumProfileState.
+  void DetachFromSequence();
+
   void Add(const ArchivedTab& tab);
   std::vector<ArchivedTab> ListRecent(SpaceId space_id, int limit);
   std::vector<ArchivedTab> Search(const std::u16string& query, int limit);

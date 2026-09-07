@@ -9,7 +9,9 @@
 #include <string_view>
 #include <utility>
 
+#include "arcium/browser/entry_claim.h"
 #include "arcium/browser/model/tab_entry.h"
+#include "arcium/ui/browser/archive_service.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "base/auto_reset.h"
@@ -150,8 +152,10 @@ tabs::TabInterface* SidebarTabModel::LiveTabForEntry(EntryId id) const {
 }
 
 bool SidebarTabModel::IsClaimedByEntry(tabs::TabInterface* tab) const {
-  const std::optional<EntryId> id = binding_->EntryForTab(tab->GetHandle());
-  return id.has_value() && arcium_model_->GetEntry(*id) != nullptr;
+  // The predicate itself lives in arcium/browser so ArchiveService uses the
+  // same one: a tab bound to an entry the model no longer has must fall into
+  // Today here *and* be archivable there.
+  return arcium::IsClaimedByEntry(*arcium_model_, *binding_, tab->GetHandle());
 }
 
 void SidebarTabModel::ActivateTabInItsOwnWindow(tabs::TabInterface* tab) {
@@ -257,8 +261,16 @@ void SidebarTabModel::NewTab() {
 }
 
 void SidebarTabModel::ClearToday() {
-  // Close from the end so indices stay valid. A tab an entry claims is not a
-  // Today tab, whatever Chromium thinks of its pinned state.
+  if (archive_service_) {
+    // The browser has an archive: clearing Today writes those tabs down
+    // before closing them, which is the whole difference between Clear and
+    // closing them by hand.
+    archive_service_->ArchiveAllToday();
+    return;
+  }
+  // No service: the playground and the model's own tests. Close from the end
+  // so indices stay valid. A tab an entry claims is not a Today tab, whatever
+  // Chromium thinks of its pinned state.
   for (int i = tab_strip_model_->count() - 1; i >= 0; --i) {
     if (!IsClaimedByEntry(tab_strip_model_->GetTabAtIndex(i))) {
       tab_strip_model_->CloseWebContentsAt(i, kCloseTypes);
@@ -555,6 +567,24 @@ void SidebarTabModel::SetFolderName(FolderId id, const std::u16string& name) {
 
 void SidebarTabModel::DeleteFolder(FolderId id) {
   arcium_model_->RemoveFolder(id);
+}
+
+void SidebarTabModel::SetArchiveService(ArchiveService* service) {
+  archive_service_ = service;
+}
+
+void SidebarTabModel::SetArchiveTimeout(ArchiveTimeout timeout) {
+  arcium_model_->SetArchiveTimeout(arcium_model_->default_space_id(), timeout);
+}
+
+ArchiveTimeout SidebarTabModel::archive_timeout() const {
+  const SpaceId id = arcium_model_->default_space_id();
+  for (const Space& space : arcium_model_->spaces()) {
+    if (space.id == id) {
+      return space.archive_timeout;
+    }
+  }
+  return ArchiveTimeout::kTwelveHours;
 }
 
 void SidebarTabModel::AddObserver(SidebarModel::Observer* observer) {

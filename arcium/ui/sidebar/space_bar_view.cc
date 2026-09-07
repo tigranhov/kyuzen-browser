@@ -5,9 +5,11 @@
 #include "arcium/ui/sidebar/space_bar_view.h"
 
 #include <memory>
+#include <optional>
 
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
+#include "arcium/ui/sidebar/sidebar_model.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
@@ -24,10 +26,29 @@
 namespace arcium {
 
 namespace {
+
 constexpr float kChipRadius = 8;
+// One radio group, so exactly one of the four is checked.
+constexpr int kTimeoutGroup = 1;
+
+std::optional<ArchiveTimeout> TimeoutForCommand(int command_id) {
+  switch (command_id) {
+    case SpaceBarView::kTimeoutTwelveHours:
+      return ArchiveTimeout::kTwelveHours;
+    case SpaceBarView::kTimeoutOneDay:
+      return ArchiveTimeout::kOneDay;
+    case SpaceBarView::kTimeoutSevenDays:
+      return ArchiveTimeout::kSevenDays;
+    case SpaceBarView::kTimeoutNever:
+      return ArchiveTimeout::kNever;
+    default:
+      return std::nullopt;
+  }
+}
+
 }  // namespace
 
-SpaceBarView::SpaceBarView() {
+SpaceBarView::SpaceBarView(SidebarModel* model) : model_(model) {
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
@@ -52,10 +73,18 @@ SpaceBarView::SpaceBarView() {
       gfx::Size(metrics::kProfileBadgeSize, metrics::kProfileBadgeSize));
   profile_badge_->SetTooltipText(u"Profile: Default");
 
+  timeout_menu_ = std::make_unique<ui::SimpleMenuModel>(this);
+  timeout_menu_->AddRadioItem(kTimeoutTwelveHours, u"12 hours", kTimeoutGroup);
+  timeout_menu_->AddRadioItem(kTimeoutOneDay, u"1 day", kTimeoutGroup);
+  timeout_menu_->AddRadioItem(kTimeoutSevenDays, u"7 days", kTimeoutGroup);
+  timeout_menu_->AddRadioItem(kTimeoutNever, u"Never", kTimeoutGroup);
+
   menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);
   menu_model_->AddItem(kRename, u"Rename space");
   menu_model_->AddItem(kEditTheme, u"Edit theme…");
   menu_model_->AddItem(kChangeIcon, u"Change icon");
+  menu_model_->AddSubMenu(kArchiveTimeout, u"Archive Today tabs after",
+                          timeout_menu_.get());
   menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_->AddItem(kDelete, u"Delete space");
 }
@@ -74,10 +103,22 @@ void SpaceBarView::ShowContextMenuForViewImpl(
 }
 
 bool SpaceBarView::IsCommandIdEnabled(int command_id) const {
-  return false;  // Stage 3 (rename, icon, delete) and Stage 6 (theme).
+  // Everything else is Stage 3 (rename, icon, delete) or Stage 6 (theme).
+  return command_id == kArchiveTimeout ||
+         TimeoutForCommand(command_id).has_value();
 }
 
-void SpaceBarView::ExecuteCommand(int command_id, int event_flags) {}
+bool SpaceBarView::IsCommandIdChecked(int command_id) const {
+  const std::optional<ArchiveTimeout> timeout = TimeoutForCommand(command_id);
+  return timeout.has_value() && *timeout == model_->archive_timeout();
+}
+
+void SpaceBarView::ExecuteCommand(int command_id, int event_flags) {
+  const std::optional<ArchiveTimeout> timeout = TimeoutForCommand(command_id);
+  if (timeout) {
+    model_->SetArchiveTimeout(*timeout);
+  }
+}
 
 void SpaceBarView::OnThemeChanged() {
   views::View::OnThemeChanged();

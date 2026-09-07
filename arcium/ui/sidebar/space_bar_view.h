@@ -20,17 +20,33 @@ class MenuRunner;
 
 namespace arcium {
 
+class SidebarModel;
+
 // Bottom bar: space chips (one, "Default", in Stage 1) and the profile badge.
-// The context menu exists with every item disabled; Stages 3 and 6 enable them.
+// Every item of the context menu bar one is disabled until Stages 3 and 6; the
+// live one is the archive timeout, which R2.3 names four values for and which
+// has nowhere else to be chosen.
 class SpaceBarView : public views::View,
                      public views::ContextMenuController,
                      public ui::SimpleMenuModel::Delegate {
   METADATA_HEADER(SpaceBarView, views::View)
 
  public:
-  enum MenuCommand { kRename = 1, kEditTheme, kChangeIcon, kDelete };
+  enum MenuCommand {
+    kRename = 1,
+    kEditTheme,
+    kChangeIcon,
+    kArchiveTimeout,
+    kDelete,
+    // The four values of R2.3, as one radio group.
+    kTimeoutTwelveHours,
+    kTimeoutOneDay,
+    kTimeoutSevenDays,
+    kTimeoutNever,
+  };
 
-  SpaceBarView();
+  // `model` must outlive this view; the sidebar owns both.
+  explicit SpaceBarView(SidebarModel* model);
   SpaceBarView(const SpaceBarView&) = delete;
   SpaceBarView& operator=(const SpaceBarView&) = delete;
   ~SpaceBarView() override;
@@ -43,14 +59,19 @@ class SpaceBarView : public views::View,
 
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdEnabled(int command_id) const override;
+  bool IsCommandIdChecked(int command_id) const override;
   void ExecuteCommand(int command_id, int event_flags) override;
 
   // views::View:
   void OnThemeChanged() override;
 
  private:
+  raw_ptr<SidebarModel> model_;
   raw_ptr<views::LabelButton> active_chip_ = nullptr;
   raw_ptr<views::View> profile_badge_ = nullptr;
+  // Declared first, so it is destroyed last: SimpleMenuModel::AddSubMenu keeps
+  // a bare pointer to it and does not own it.
+  std::unique_ptr<ui::SimpleMenuModel> timeout_menu_;
   std::unique_ptr<ui::SimpleMenuModel> menu_model_;
   std::unique_ptr<views::MenuRunner> menu_runner_;
 };

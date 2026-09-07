@@ -7,11 +7,13 @@
 
 #include <memory>
 
+#include "arcium/browser/archive_store.h"
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model_store.h"
 #include "arcium/browser/tab_binding.h"
 #include "base/files/file_path.h"
 #include "base/supports_user_data.h"
+#include "base/task/sequenced_task_runner.h"
 
 namespace content {
 class BrowserContext;
@@ -64,6 +66,22 @@ class ArciumProfileState : public base::SupportsUserData::Data,
   // writer for it. Every caller must null-check.
   ModelStore* store() { return store_.get(); }
 
+  // The profile's archive — one SQLite file, shared by every window on the
+  // profile, which is why it lives here rather than beside a window's
+  // ArchiveService.
+  //
+  // NULL off the record, for the same reason store() is: the path would be
+  // the regular profile's, and an archived incognito tab is a row that
+  // outlives the window that wrote it. Never null-check this and then fall
+  // back to the regular profile's archive; there is nothing to fall back to.
+  //
+  // Only ever touched on archive_runner(): sql::Database blocks and is
+  // sequence-affine, and this object is reached from the UI thread.
+  ArchiveStore* archive() { return archive_.get(); }
+  scoped_refptr<base::SequencedTaskRunner> archive_runner() {
+    return archive_runner_;
+  }
+
   // ArciumModel::Observer:
   void OnArciumModelChanged() override;
 
@@ -75,6 +93,10 @@ class ArciumProfileState : public base::SupportsUserData::Data,
   // Null while off the record. Declared after the two objects it observes and
   // reads, so it is destroyed first.
   std::unique_ptr<ModelStore> store_;
+  // Null while off the record. Lives on `archive_runner_` from the moment it
+  // is created and is deleted there too, behind every write already posted.
+  scoped_refptr<base::SequencedTaskRunner> archive_runner_;
+  std::unique_ptr<ArchiveStore> archive_;
 };
 
 }  // namespace arcium

@@ -6,6 +6,8 @@ source_set("browser") {
     "archive_store.h",
     "arcium_profile_state.cc",
     "arcium_profile_state.h",
+    "entry_claim.cc",
+    "entry_claim.h",
     "model_store.cc",
     "model_store.h",
     "tab_binding.cc",

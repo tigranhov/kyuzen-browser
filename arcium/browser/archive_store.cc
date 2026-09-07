@@ -108,6 +108,10 @@ bool ArchiveStore::IsFileUnusableForTesting(int sqlite_error_code) {
   return IsFileUnusable(sqlite_error_code);
 }
 
+void ArchiveStore::DetachFromSequence() {
+  db_.DetachFromSequence();
+}
+
 bool ArchiveStore::Open(const base::FilePath& path) {
   int sqlite_error = kSqliteOk;
   if (db_.Open(path) && InitSchema(&sqlite_error)) {

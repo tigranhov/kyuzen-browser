@@ -13,6 +13,7 @@
 #include "arcium/ui/sidebar/row_context_menu.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
+#include "arcium/ui/sidebar/space_bar_view.h"
 #include "arcium/ui/sidebar/tab_list_view.h"
 #include "arcium/ui/sidebar/tab_row_view.h"
 #include "base/auto_reset.h"
@@ -1305,6 +1306,27 @@ TEST_F(SidebarViewsTest, ClickingRevertIssuesTheCommand) {
 
   ASSERT_EQ(1u, model_.rows().size());
   EXPECT_FALSE(model_.rows()[0].can_return_to_pinned_url);
+}
+
+// R2.3 names four archive timeouts, and the space bar's menu is where they are
+// chosen. The rest of that menu stays disabled until Stages 3 and 6.
+TEST_F(SidebarViewsTest, TheSpaceMenuChoosesTheArchiveTimeout) {
+  SpaceBarView bar(&model_);
+  ASSERT_EQ(ArchiveTimeout::kTwelveHours, model_.archive_timeout());
+  EXPECT_TRUE(bar.IsCommandIdChecked(SpaceBarView::kTimeoutTwelveHours));
+
+  bar.ExecuteCommand(SpaceBarView::kTimeoutSevenDays, 0);
+  EXPECT_EQ(ArchiveTimeout::kSevenDays, model_.archive_timeout());
+  EXPECT_TRUE(bar.IsCommandIdChecked(SpaceBarView::kTimeoutSevenDays));
+  EXPECT_FALSE(bar.IsCommandIdChecked(SpaceBarView::kTimeoutTwelveHours));
+
+  bar.ExecuteCommand(SpaceBarView::kTimeoutNever, 0);
+  EXPECT_EQ(ArchiveTimeout::kNever, model_.archive_timeout());
+
+  // Choosing one must be possible; the Stage 3 and 6 items must not be.
+  EXPECT_TRUE(bar.IsCommandIdEnabled(SpaceBarView::kTimeoutOneDay));
+  EXPECT_FALSE(bar.IsCommandIdEnabled(SpaceBarView::kRename));
+  EXPECT_FALSE(bar.IsCommandIdEnabled(SpaceBarView::kDelete));
 }
 
 }  // namespace

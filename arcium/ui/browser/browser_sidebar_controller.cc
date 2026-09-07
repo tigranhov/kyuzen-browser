@@ -67,6 +67,16 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   model_ = std::make_unique<SidebarTabModel>(
       browser_view->browser()->tab_strip_model(), state->model(),
       state->binding());
+  // One archive per profile (it is one SQLite file), one service per window
+  // (a tab is in exactly one strip). Off the record there is neither: see
+  // ArciumProfileState::archive().
+  if (state->archive()) {
+    archive_service_ = std::make_unique<ArchiveService>(
+        browser_view->browser()->tab_strip_model(), state->model(),
+        state->binding(), state->archive(), state->archive_runner(),
+        state->store());
+    model_->SetArchiveService(archive_service_.get());
+  }
   SidebarView::Delegate delegate;
   delegate.toggle_sidebar = base::BindRepeating(
       &BrowserSidebarController::ToggleVisibility, base::Unretained(this));
@@ -91,6 +101,10 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
 
 BrowserSidebarController::~BrowserSidebarController() {
   model_->RemoveObserver(this);
+  // `model_` outlives `archive_service_` by declaration order, and holds a
+  // pointer to it. Break that before the service is freed.
+  model_->SetArchiveService(nullptr);
+  archive_service_.reset();
 }
 
 int BrowserSidebarController::width() const {

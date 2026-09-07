@@ -8,6 +8,7 @@
 #include <memory>
 #include <string>
 
+#include "arcium/ui/browser/archive_service.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
@@ -51,8 +52,7 @@ class BrowserSidebarController : public SidebarModel::Observer {
   // Layout hooks. See the patch inventory in the Stage 1 plan.
   void AdjustLayoutParams(BrowserLayoutParams& params);
   void LayoutSidebar(const gfx::Rect& host_bounds);
-  bool IsPositionInWindowCaption(
-      const gfx::Point& point_in_browser_view) const;
+  bool IsPositionInWindowCaption(const gfx::Point& point_in_browser_view) const;
 
   void ToggleVisibility();
 
@@ -81,6 +81,11 @@ class BrowserSidebarController : public SidebarModel::Observer {
 
   raw_ptr<BrowserView> browser_view_;
   std::unique_ptr<SidebarTabModel> model_;
+  // One per window, because a tab is in exactly one strip. Null off the
+  // record: an archive row outlives the window that wrote it, which is the one
+  // thing incognito must not do. `model_` holds a bare pointer to it, which
+  // the destructor clears before this is freed.
+  std::unique_ptr<ArchiveService> archive_service_;
   raw_ptr<SidebarView> view_ = nullptr;
   bool visible_ = true;
   int caption_button_width_ = -1;

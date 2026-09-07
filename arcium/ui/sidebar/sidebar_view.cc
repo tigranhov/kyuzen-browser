@@ -79,7 +79,7 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
       views::FlexSpecification(views::LayoutOrientation::kVertical,
                                views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
-  space_bar_ = AddChildView(std::make_unique<SpaceBarView>());
+  space_bar_ = AddChildView(std::make_unique<SpaceBarView>(model_));
 
   // Every section is a drag source, and the two that can be empty are targets
   // that only exist while a drag is running; see RowDragSession.

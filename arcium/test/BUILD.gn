@@ -2,6 +2,7 @@ import("//testing/test.gni")
 
 test("arcium_unittests") {
   sources = [
+    "archive_service_unittest.cc",
     "archive_store_unittest.cc",
     "arcium_model_unittest.cc",
     "arcium_profile_state_unittest.cc",

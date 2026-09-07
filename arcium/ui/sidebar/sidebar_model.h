@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "arcium/browser/model/entry_id.h"
+#include "arcium/browser/model/space.h"
 #include "base/observer_list_types.h"
 #include "ui/base/models/image_model.h"
 #include "url/gurl.h"
@@ -144,6 +145,13 @@ class SidebarModel {
   // Removes the folder. Its entries return to the top level; a folder groups
   // entries, it does not own them.
   virtual void DeleteFolder(FolderId id) = 0;
+
+  // How long a Today tab in the active space may sit idle before it is
+  // archived. On the model rather than on the service because it is a
+  // persistent property of the space, and the space bar's menu is the only
+  // place it is chosen.
+  virtual void SetArchiveTimeout(ArchiveTimeout timeout) = 0;
+  virtual ArchiveTimeout archive_timeout() const = 0;
 
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;

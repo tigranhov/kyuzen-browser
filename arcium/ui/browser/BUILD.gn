@@ -4,6 +4,8 @@
 # both directions would be a GN dependency cycle.
 source_set("browser") {
   sources = [
+    "archive_service.cc",
+    "archive_service.h",
     "browser_sidebar_controller.cc",
     "browser_sidebar_controller.h",
     "color_ids_check.cc",

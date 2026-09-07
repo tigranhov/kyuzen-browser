@@ -75,6 +75,8 @@ class FakeSidebarModel : public SidebarModel {
                          std::optional<FolderId> folder_id) override;
   void SetFolderName(FolderId id, const std::u16string& name) override;
   void DeleteFolder(FolderId id) override;
+  void SetArchiveTimeout(ArchiveTimeout timeout) override;
+  ArchiveTimeout archive_timeout() const override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
 
@@ -113,6 +115,7 @@ class FakeSidebarModel : public SidebarModel {
 
   std::vector<SidebarRow> rows_;
   std::vector<FakeFolder> folders_;
+  ArchiveTimeout archive_timeout_ = ArchiveTimeout::kTwelveHours;
   base::ObserverList<Observer> observers_;
 };
 

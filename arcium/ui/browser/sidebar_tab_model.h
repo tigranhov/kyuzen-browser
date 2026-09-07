@@ -26,6 +26,7 @@ class TabInterface;
 
 namespace arcium {
 
+class ArchiveService;
 struct TabEntry;
 
 // Merges the window's live tabs with the profile's persistent entries into
@@ -53,6 +54,12 @@ class SidebarTabModel : public SidebarModel,
   SidebarTabModel(const SidebarTabModel&) = delete;
   SidebarTabModel& operator=(const SidebarTabModel&) = delete;
   ~SidebarTabModel() override;
+
+  // The window's ArchiveService, or null in the tests and the playground that
+  // have none. Set once by BrowserSidebarController, which owns both: the
+  // service needs a built strip and this model does not, so it cannot be a
+  // constructor argument. Only ClearToday() reads it.
+  void SetArchiveService(ArchiveService* service);
 
   // SidebarModel:
   std::vector<SidebarRow> rows() const override;
@@ -82,6 +89,8 @@ class SidebarTabModel : public SidebarModel,
                          std::optional<FolderId> folder_id) override;
   void SetFolderName(FolderId id, const std::u16string& name) override;
   void DeleteFolder(FolderId id) override;
+  void SetArchiveTimeout(ArchiveTimeout timeout) override;
+  ArchiveTimeout archive_timeout() const override;
   // Qualified: ArciumModel::Observer is also in scope through the base.
   void AddObserver(SidebarModel::Observer* observer) override;
   void RemoveObserver(SidebarModel::Observer* observer) override;
@@ -139,6 +148,7 @@ class SidebarTabModel : public SidebarModel,
   raw_ptr<TabStripModel> tab_strip_model_;
   raw_ptr<ArciumModel> arcium_model_;
   raw_ptr<TabBinding> binding_;
+  raw_ptr<ArchiveService> archive_service_ = nullptr;
   base::ObserverList<SidebarModel::Observer> observers_;
   bool notification_pending_ = false;
   // Set while SyncEntryTitles() writes back into the model, so its own

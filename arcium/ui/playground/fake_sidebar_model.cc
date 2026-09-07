@@ -451,6 +451,15 @@ void FakeSidebarModel::DeleteFolder(FolderId id) {
   Notify();
 }
 
+void FakeSidebarModel::SetArchiveTimeout(ArchiveTimeout timeout) {
+  archive_timeout_ = timeout;
+  Notify();
+}
+
+ArchiveTimeout FakeSidebarModel::archive_timeout() const {
+  return archive_timeout_;
+}
+
 void FakeSidebarModel::AddObserver(Observer* observer) {
   observers_.AddObserver(observer);
 }

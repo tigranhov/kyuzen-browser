@@ -13,6 +13,7 @@
 #include "arcium/browser/model_store.h"
 #include "arcium/browser/tab_binding.h"
 #include "base/files/file_util.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -29,7 +30,17 @@ class ArciumProfileStateTest : public BrowserWithTestWindowTest {
  public:
   ArciumProfileStateTest()
       : BrowserWithTestWindowTest(
-            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {}
+            base::test::TaskEnvironment::TimeSource::MOCK_TIME) {
+    // Moving the clock wakes the segmentation platform, which parks a task
+    // runner in a process-global object and makes the next test in the binary
+    // complain about "a previous test leaving a stale task runner in a global
+    // object". Nothing here is about segmentation; turn it off.
+    scoped_feature_list_.InitFromCommandLine(
+        /*enable_features=*/"", /*disable_features=*/"SegmentationPlatform");
+  }
+
+ private:
+  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 // C1. OffTheRecordProfileImpl::GetPath() returns the *parent* profile's
@@ -56,6 +67,41 @@ TEST_F(ArciumProfileStateTest, IncognitoGetsNoStoreAndWritesNothing) {
   task_environment()->RunUntilIdle();
 
   EXPECT_FALSE(base::PathExists(model_path));
+}
+
+// The same trap, for the archive. ArchivePath() is built from the same
+// GetPath(), so an incognito ArchiveStore would write incognito tabs into the
+// regular profile's `Arcium Archive` — and unlike a live model, a database row
+// outlives the window that wrote it. Incognito gets no archive at all, which
+// is what makes BrowserSidebarController create no ArchiveService for it.
+TEST_F(ArciumProfileStateTest, IncognitoGetsNoArchive) {
+  Profile* otr = profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  ASSERT_TRUE(otr);
+  const base::FilePath archive_path =
+      ArciumProfileState::ArchivePath(otr->GetPath());
+  ASSERT_FALSE(base::PathExists(archive_path));
+
+  ArciumProfileState* state = ArciumProfileState::GetForBrowserContext(otr);
+  ASSERT_TRUE(state);
+  EXPECT_FALSE(state->archive());
+  EXPECT_FALSE(state->archive_runner());
+
+  task_environment()->RunUntilIdle();
+  EXPECT_FALSE(base::PathExists(archive_path));
+}
+
+// The positive control, and the "never write on the UI thread" half of it:
+// the regular profile has an archive, and it is not this sequence's to touch.
+TEST_F(ArciumProfileStateTest, ARegularProfileHasAnArchiveOffTheUiThread) {
+  ArciumProfileState* state =
+      ArciumProfileState::GetForBrowserContext(profile());
+  ASSERT_TRUE(state->archive());
+  ASSERT_TRUE(state->archive_runner());
+  EXPECT_FALSE(state->archive_runner()->RunsTasksInCurrentSequence());
+
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(
+      base::PathExists(ArciumProfileState::ArchivePath(profile()->GetPath())));
 }
 
 // The positive control for the test above: the regular profile does persist,
