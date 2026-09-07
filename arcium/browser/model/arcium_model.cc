@@ -119,15 +119,6 @@ void ArciumModel::SetLastTitle(EntryId id, const std::u16string& title) {
   Notify();
 }
 
-void ArciumModel::SetEntryUrl(EntryId id, const GURL& url) {
-  TabEntry* entry = FindEntry(id);
-  if (!entry || entry->url == url) {
-    return;
-  }
-  entry->url = url;
-  Notify();
-}
-
 void ArciumModel::SetEntryFolder(EntryId id,
                                  std::optional<FolderId> folder_id) {
   TabEntry* entry = FindEntry(id);

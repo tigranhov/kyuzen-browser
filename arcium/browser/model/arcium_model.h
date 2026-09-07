@@ -52,7 +52,6 @@ class ArciumModel {
   void SetEntryKind(EntryId id, EntryKind kind);
   void SetCustomTitle(EntryId id, const std::u16string& title);
   void SetLastTitle(EntryId id, const std::u16string& title);
-  void SetEntryUrl(EntryId id, const GURL& url);
   void SetEntryFolder(EntryId id, std::optional<FolderId> folder_id);
   void ReorderEntry(EntryId id, int new_position);
 
