@@ -36,8 +36,10 @@ class FolderHeaderView : public views::Button,
  public:
   struct Delegate {
     base::RepeatingCallback<void(const SidebarFolder& folder)> toggle_collapsed;
-    base::RepeatingCallback<void(const SidebarFolder& folder,
-                                 const std::u16string& name)>
+    // Against the folder the edit was started on rather than whatever this
+    // header draws when it ends: headers are pooled by position, so the two
+    // are not the same thing.
+    base::RepeatingCallback<void(FolderId id, const std::u16string& name)>
         rename;
     // `source` is this view, so the menu's Rename item can start the edit on
     // the header it was opened from. `point` is in screen coordinates.
@@ -60,9 +62,11 @@ class FolderHeaderView : public views::Button,
 
   void BeginRename();
   bool is_renaming() const { return rename_field_ != nullptr; }
+  // The folder the open edit belongs to; invalid when nothing is being renamed.
+  FolderId renaming_folder_id() const { return renaming_folder_id_; }
 
   // views::Button / View:
-  bool OnMousePressed(const ui::MouseEvent& event) override;
+  bool OnKeyPressed(const ui::KeyEvent& event) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
   void OnThemeChanged() override;
@@ -77,7 +81,10 @@ class FolderHeaderView : public views::Button,
 
  private:
   void UpdateVisuals();
-  void OnRenameFinished(bool commit, const std::u16string& name);
+  // Takes the field away without an outcome, for when this header stops being
+  // the header for the folder the edit was started on.
+  void AbandonRename();
+  void OnRenameFinished(FolderId id, bool commit, const std::u16string& name);
   void Toggle();
 
   Delegate delegate_;
@@ -88,6 +95,9 @@ class FolderHeaderView : public views::Button,
   raw_ptr<views::Label> name_ = nullptr;
   raw_ptr<views::Label> count_ = nullptr;
   raw_ptr<RenameField> rename_field_ = nullptr;
+  // Captured when the edit starts; see TabRowView for why the slot's current
+  // contents are not good enough.
+  FolderId renaming_folder_id_;
   base::WeakPtrFactory<FolderHeaderView> weak_factory_{this};
 };
 

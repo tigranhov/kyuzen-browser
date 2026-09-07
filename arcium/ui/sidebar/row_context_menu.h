@@ -40,7 +40,10 @@ class RowContextMenu : public ui::SimpleMenuModel::Delegate {
 
   // `point` is in screen coordinates. Both take a snapshot of what they are
   // shown for: the model can move while the menu is open, so every command
-  // re-checks its ids when it runs.
+  // re-checks the entry and folder ids it names when it runs. Tab indices are
+  // the exception — Pin, Add to Favorites and Close on a Today row use the
+  // snapshot's index, because a tab index is a position and there is nothing
+  // to re-check it against.
   void RunForRow(const SidebarRow& row,
                  views::View* source,
                  const gfx::Point& point,
@@ -56,6 +59,14 @@ class RowContextMenu : public ui::SimpleMenuModel::Delegate {
   void BuildForFolder(const SidebarFolder& folder,
                       base::RepeatingClosure begin_rename);
   ui::SimpleMenuModel* menu() { return menu_.get(); }
+
+  // Test seam. A context menu on macOS runs a nested native loop, so a test
+  // that right-clicked for real would hang. With a hook installed the menu is
+  // built exactly as it would be and handed over instead of being shown,
+  // which is what lets the right-click path itself be covered rather than
+  // only the builder underneath it. Pass a null callback to remove it.
+  using ShowHookForTesting = base::RepeatingCallback<void(RowContextMenu*)>;
+  static void SetShowHookForTesting(ShowHookForTesting hook);
 
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdEnabled(int command_id) const override;

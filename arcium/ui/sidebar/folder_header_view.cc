@@ -16,6 +16,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/events/event.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
@@ -63,6 +64,11 @@ FolderHeaderView::FolderHeaderView(Delegate delegate)
 FolderHeaderView::~FolderHeaderView() = default;
 
 void FolderHeaderView::SetFolder(const SidebarFolder& folder) {
+  // Headers are pooled by position, so this slot can be handed a different
+  // folder at any time. An open field belongs to the folder it was opened on.
+  if (is_renaming() && folder.id != renaming_folder_id_) {
+    AbandonRename();
+  }
   folder_ = folder;
   UpdateVisuals();
 }
@@ -97,48 +103,67 @@ void FolderHeaderView::BeginRename() {
   if (is_renaming()) {
     return;
   }
+  renaming_folder_id_ = folder_.id;
   auto field = std::make_unique<RenameField>(
-      folder_.name, base::BindOnce(&FolderHeaderView::OnRenameFinished,
-                                   weak_factory_.GetWeakPtr()));
+      folder_.name,
+      base::BindOnce(&FolderHeaderView::OnRenameFinished,
+                     weak_factory_.GetWeakPtr(), renaming_folder_id_));
   field->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::LayoutOrientation::kHorizontal,
                                views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
   rename_field_ = AddChildViewAt(std::move(field), GetIndexOf(name_).value());
+  // See TabRowView: a focusable view without a name cannot be announced.
+  rename_field_->GetViewAccessibility().SetName(u"Folder name");
   name_->SetVisible(false);
   count_->SetVisible(false);
   rename_field_->RequestFocus();
   InvalidateLayout();
 }
 
-void FolderHeaderView::OnRenameFinished(bool commit,
+void FolderHeaderView::AbandonRename() {
+  if (!rename_field_) {
+    return;
+  }
+  RenameField* field = rename_field_.ExtractAsDangling();
+  field->Abandon();
+  renaming_folder_id_ = FolderId();
+  RemoveChildViewT(field);
+  name_->SetVisible(true);
+  count_->SetVisible(true);
+  InvalidateLayout();
+}
+
+void FolderHeaderView::OnRenameFinished(FolderId id,
+                                        bool commit,
                                         const std::u16string& name) {
   if (rename_field_) {
     RemoveChildViewT(rename_field_.ExtractAsDangling());
+    renaming_folder_id_ = FolderId();
   }
   name_->SetVisible(true);
   count_->SetVisible(true);
   InvalidateLayout();
-  if (!commit || name.empty() || !delegate_.rename) {
+  // `id` is the folder the edit was started on; see TabRowView.
+  if (!commit || name.empty() || !id.is_valid() || !delegate_.rename) {
     return;
   }
-  base::RepeatingCallback<void(const SidebarFolder&, const std::u16string&)>
-      rename = delegate_.rename;
-  const SidebarFolder folder = folder_;
-  rename.Run(folder, name);
+  base::RepeatingCallback<void(FolderId, const std::u16string&)> rename =
+      delegate_.rename;
+  rename.Run(id, name);
 }
 
-bool FolderHeaderView::OnMousePressed(const ui::MouseEvent& event) {
-  // The second press of a double click renames instead of toggling again.
-  // The first press has already toggled; a header that flips once on the way
-  // into a rename is a smaller surprise than a rename that needs a menu.
-  if ((event.flags() & ui::EF_IS_DOUBLE_CLICK) &&
-      event.IsOnlyLeftMouseButton()) {
+bool FolderHeaderView::OnKeyPressed(const ui::KeyEvent& event) {
+  // F2 renames, the conventional key for renaming a thing in place. Collapse
+  // stays on the single click: delaying it by the double-click interval to
+  // free up a double click would make the common gesture feel laggy to serve
+  // a rare one, and the context menu's Rename is the discoverable path.
+  if (event.key_code() == ui::VKEY_F2) {
     BeginRename();
     return true;
   }
-  return views::Button::OnMousePressed(event);
+  return views::Button::OnKeyPressed(event);
 }
 
 void FolderHeaderView::OnMouseEntered(const ui::MouseEvent& event) {

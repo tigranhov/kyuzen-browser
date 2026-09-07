@@ -16,6 +16,11 @@ namespace arcium {
 
 // In-memory SidebarModel for the playground and view tests. Commands mutate
 // the vector the way TabStripModel would and notify observers.
+//
+// One divergence a reader has to know about: this notifies **synchronously**,
+// from inside the command. SidebarTabModel coalesces and posts, so a test
+// passing here is not proof that the posted path works — it proves the view
+// half, and the model half is covered by the tests over the real model.
 class FakeSidebarModel : public SidebarModel {
  public:
   FakeSidebarModel();
@@ -37,6 +42,10 @@ class FakeSidebarModel : public SidebarModel {
   // trip. `titles` name pinned rows already added.
   FolderId AddFolderWith(const std::u16string& name,
                          const std::vector<std::u16string>& titles);
+  // Folders come back in `position` order, exactly as they do from the real
+  // model. Nothing in the UI reorders folders yet, so this is how a test puts
+  // them in an order that disagrees with the order they were made in.
+  void SetFolderPosition(FolderId id, int position);
 
   // SidebarModel:
   std::vector<SidebarRow> rows() const override;
@@ -64,12 +73,15 @@ class FakeSidebarModel : public SidebarModel {
   void RemoveObserver(Observer* observer) override;
 
  private:
-  // Name and collapsed state; the count is derived from the rows on demand,
-  // which is what folders() hands the views precomputed.
+  // Name, collapsed state and position; the count is derived from the rows on
+  // demand, which is what folders() hands the views precomputed. `position`
+  // is here because ArciumModel has it and folders() sorts by it: a fake
+  // without it would let a folder-ordering regression pass.
   struct FakeFolder {
     FolderId id;
     std::u16string name;
     bool collapsed = false;
+    int position = 0;
   };
 
   void Notify();

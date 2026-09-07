@@ -4,10 +4,13 @@
 
 #include <memory>
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/entry_id.h"
+#include "arcium/browser/model/folder.h"
+#include "arcium/browser/model/space.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
@@ -148,19 +151,72 @@ TEST_F(SidebarFoldersTest, DeletingAFolderReturnsItsEntriesToTheTopLevel) {
   EXPECT_FALSE(model->rows()[0].folder_id.has_value());
 }
 
+// `position` decides, not the order the folders sit in the vector. Making
+// them through AddFolder cannot show that — it hands out positions in
+// insertion order, so the sort would be a no-op and the test would pass with
+// it deleted. Seeded the way a restore from disk seeds it instead, with the
+// two disagreeing.
 TEST_F(SidebarFoldersTest, FoldersComeBackInPositionOrder) {
-  AddTab(browser(), GURL("https://a.example/"));
-  AddTab(browser(), GURL("https://b.example/"));
   std::unique_ptr<SidebarTabModel> model = MakeModel();
-  model->PinTab(0);
-  model->PinTab(0);
-  model->CreateFolderWithEntry(model->rows()[0].entry_id, u"First");
-  model->CreateFolderWithEntry(model->rows()[1].entry_id, u"Second");
+  std::vector<Space> spaces = arcium_model_.spaces();
+  ASSERT_FALSE(spaces.empty());
+
+  Folder second;
+  second.id = FolderId::Generate();
+  second.space_id = spaces[0].id;
+  second.name = u"Second";
+  second.position = 1;
+  Folder first;
+  first.id = FolderId::Generate();
+  first.space_id = spaces[0].id;
+  first.name = u"First";
+  first.position = 0;
+  // Vector order is Second, First; position order is First, Second.
+  arcium_model_.ReplaceAll(std::move(spaces), {second, first}, {});
 
   std::vector<SidebarFolder> folders = model->folders();
   ASSERT_EQ(2u, folders.size());
   EXPECT_EQ(u"First", folders[0].name);
   EXPECT_EQ(u"Second", folders[1].name);
+}
+
+// Every folder command is built to be a no-op on an id the model does not
+// have, because a menu is a snapshot and the model can move under it.
+TEST_F(SidebarFoldersTest, CommandsOnARemovedFolderDoNothing) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  const EntryId entry = model->rows()[0].entry_id;
+  const FolderId folder = model->CreateFolderWithEntry(entry, u"Work");
+  ASSERT_TRUE(folder.is_valid());
+  model->DeleteFolder(folder);
+  ASSERT_TRUE(model->folders().empty());
+
+  model->SetFolderName(folder, u"Renamed");
+  model->SetFolderCollapsed(folder, true);
+  model->DeleteFolder(folder);
+  model->MoveEntryToFolder(entry, folder);
+
+  EXPECT_TRUE(model->folders().empty());
+  ASSERT_EQ(1u, model->rows().size());
+  // The entry came back to the top level when the folder went, and none of
+  // the commands above put it anywhere else.
+  EXPECT_FALSE(model->rows()[0].folder_id.has_value());
+}
+
+TEST_F(SidebarFoldersTest, CommandsOnAFolderThatNeverExistedDoNothing) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  const FolderId unknown = FolderId::Generate();
+
+  model->SetFolderName(unknown, u"Renamed");
+  model->SetFolderCollapsed(unknown, true);
+  model->DeleteFolder(unknown);
+
+  EXPECT_TRUE(model->folders().empty());
+  ASSERT_EQ(1u, model->rows().size());
+  EXPECT_FALSE(model->rows()[0].folder_id.has_value());
 }
 
 TEST_F(SidebarFoldersTest, EntryCountsAreCountedPerFolder) {

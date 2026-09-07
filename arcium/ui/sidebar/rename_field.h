@@ -15,8 +15,10 @@
 namespace arcium {
 
 // The plain views::Textfield a row shows in place of its label while it is
-// being renamed. Enter commits, Escape and focus loss abandon, and exactly
-// one of those happens once.
+// being renamed. Enter commits; Escape and losing the focus inside an active
+// window abandon; and exactly one of those happens once. Losing the focus
+// because the whole window was deactivated is not an outcome at all: the edit
+// stays open and the platform restores the focus to it.
 //
 // The finish callback almost always destroys this view — committing a title
 // changes the model, which rebuilds the list — so it is posted as a task
@@ -38,6 +40,11 @@ class RenameField : public views::Textfield, public views::TextfieldController {
   // views::TextfieldController:
   bool HandleKeyEvent(views::Textfield* sender,
                       const ui::KeyEvent& key_event) override;
+
+  // Gives up on the edit without reporting anything back. For an owner that
+  // is taking the field away for its own reasons — the row it belongs to now
+  // draws a different entry — rather than because the user ended the edit.
+  void Abandon();
 
   // views::Textfield / View:
   void OnBlur() override;

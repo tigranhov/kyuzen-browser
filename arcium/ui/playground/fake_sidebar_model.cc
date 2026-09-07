@@ -142,6 +142,16 @@ FolderId FakeSidebarModel::AddFolderWith(
   return folder;
 }
 
+void FakeSidebarModel::SetFolderPosition(FolderId id, int position) {
+  for (FakeFolder& folder : folders_) {
+    if (folder.id == id) {
+      folder.position = position;
+      Notify();
+      return;
+    }
+  }
+}
+
 std::vector<SidebarRow> FakeSidebarModel::rows() const {
   return rows_;
 }
@@ -271,14 +281,24 @@ void FakeSidebarModel::ReturnToPinnedUrl(EntryId id) {
 }
 
 std::vector<SidebarFolder> FakeSidebarModel::folders() const {
-  std::vector<SidebarFolder> result;
+  // Sorted by position, not by the vector's order, because that is what
+  // SidebarTabModel does and the views are entitled to rely on it.
+  std::vector<const FakeFolder*> ordered;
   for (const FakeFolder& folder : folders_) {
+    ordered.push_back(&folder);
+  }
+  std::sort(ordered.begin(), ordered.end(),
+            [](const FakeFolder* a, const FakeFolder* b) {
+              return a->position < b->position;
+            });
+  std::vector<SidebarFolder> result;
+  for (const FakeFolder* folder : ordered) {
     SidebarFolder out;
-    out.id = folder.id;
-    out.name = folder.name;
-    out.collapsed = folder.collapsed;
+    out.id = folder->id;
+    out.name = folder->name;
+    out.collapsed = folder->collapsed;
     for (const SidebarRow& row : rows_) {
-      if (row.folder_id == folder.id) {
+      if (row.folder_id == folder->id) {
         ++out.entry_count;
       }
     }
@@ -290,6 +310,12 @@ std::vector<SidebarFolder> FakeSidebarModel::folders() const {
 void FakeSidebarModel::SetFolderCollapsed(FolderId id, bool collapsed) {
   for (FakeFolder& folder : folders_) {
     if (folder.id == id) {
+      // ArciumModel early-returns on an unchanged value, so a caller that
+      // expects a notification out of a no-op change would be relying on
+      // behaviour the real model does not have.
+      if (folder.collapsed == collapsed) {
+        return;
+      }
       folder.collapsed = collapsed;
       Notify();
       return;
@@ -307,6 +333,8 @@ FolderId FakeSidebarModel::CreateFolderWithEntry(EntryId id,
   FakeFolder folder;
   folder.id = FolderId::Generate();
   folder.name = name;
+  // The same rule ArciumModel::AddFolder uses: the next free position.
+  folder.position = static_cast<int>(folders_.size());
   folders_.push_back(folder);
   row->folder_id = folder.id;
   Notify();

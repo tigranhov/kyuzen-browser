@@ -8,6 +8,7 @@
 #include <optional>
 #include <utility>
 
+#include "base/no_destructor.h"
 #include "ui/base/mojom/menu_source_type.mojom.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -41,7 +42,17 @@ enum RowCommand {
 // to change it.
 constexpr char16_t kNewFolderName[] = u"New folder";
 
+RowContextMenu::ShowHookForTesting& ShowHook() {
+  static base::NoDestructor<RowContextMenu::ShowHookForTesting> hook;
+  return *hook;
+}
+
 }  // namespace
+
+// static
+void RowContextMenu::SetShowHookForTesting(ShowHookForTesting hook) {
+  ShowHook() = std::move(hook);
+}
 
 RowContextMenu::RowContextMenu(SidebarModel* model) : model_(model) {}
 
@@ -128,6 +139,10 @@ void RowContextMenu::BuildForFolder(const SidebarFolder& folder,
 }
 
 void RowContextMenu::Run(views::View* source, const gfx::Point& point) {
+  if (ShowHook()) {
+    ShowHook().Run(this);
+    return;
+  }
   runner_ = std::make_unique<views::MenuRunner>(
       menu_.get(), views::MenuRunner::CONTEXT_MENU);
   runner_->RunMenuAt(source->GetWidget(), /*button_controller=*/nullptr,
@@ -137,10 +152,20 @@ void RowContextMenu::Run(views::View* source, const gfx::Point& point) {
 }
 
 bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
+  if (command_id >= kMoveToFolderFirst) {
+    // The folder the row is already in is not somewhere to move it, the same
+    // way "Top level" is not when it is already there.
+    const size_t index = static_cast<size_t>(command_id - kMoveToFolderFirst);
+    return index < move_targets_.size() &&
+           row_.folder_id != move_targets_[index];
+  }
   switch (command_id) {
     case kRename:
-      // A Today tab has no entry, so nothing would hold the name.
-      return is_folder_ || row_.entry_id.is_valid();
+      // A Today tab has no entry, so nothing would hold the name; and a row
+      // whose view has nowhere to put a field — a favourite tile — offers no
+      // rename closure, so there is nothing for the item to do.
+      return (is_folder_ || row_.entry_id.is_valid()) &&
+             !begin_rename_.is_null();
     case kCloseTab:
       // A cold entry has no tab to close.
       return !row_.is_cold;

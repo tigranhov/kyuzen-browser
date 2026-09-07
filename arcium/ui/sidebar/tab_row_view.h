@@ -41,9 +41,11 @@ class TabRowView : public views::Button, public views::ContextMenuController {
     base::RepeatingCallback<void(const SidebarRow& row)> close;
     // Called while dragging: the row at `from` wants to move to `to`.
     base::RepeatingCallback<void(int from, int to)> drag_move;
-    // A finished inline rename. Never called for a row with no entry.
-    base::RepeatingCallback<void(const SidebarRow& row,
-                                 const std::u16string& title)>
+    // A finished inline rename, against the entry the edit was started on
+    // rather than whatever this row draws when it ends: the view is pooled by
+    // position, so the two are not the same thing. Never called for a row
+    // with no entry.
+    base::RepeatingCallback<void(EntryId id, const std::u16string& title)>
         rename;
     base::RepeatingCallback<void(const SidebarRow& row)> return_to_pinned_url;
     // `source` is this view, so the menu's Rename item can start the edit on
@@ -71,6 +73,8 @@ class TabRowView : public views::Button, public views::ContextMenuController {
   // with no entry has nothing to carry the name, so this does nothing.
   void BeginRename();
   bool is_renaming() const { return rename_field_ != nullptr; }
+  // The entry the open edit belongs to; invalid when nothing is being renamed.
+  EntryId renaming_entry_id() const { return renaming_entry_id_; }
 
   // views::Button / View:
   bool OnMousePressed(const ui::MouseEvent& event) override;
@@ -92,7 +96,10 @@ class TabRowView : public views::Button, public views::ContextMenuController {
  private:
   void UpdateVisuals();
   void UpdateTrailingButtons();
-  void OnRenameFinished(bool commit, const std::u16string& title);
+  // Takes the field away without an outcome, for when this view stops being
+  // the view for the entry the edit was started on.
+  void AbandonRename();
+  void OnRenameFinished(EntryId id, bool commit, const std::u16string& title);
   // Runs the "return to pinned URL" command off copies, because it rebuilds
   // the list and can destroy this view before the call returns.
   void Revert();
@@ -110,6 +117,10 @@ class TabRowView : public views::Button, public views::ContextMenuController {
   raw_ptr<views::ImageButton> revert_ = nullptr;
   raw_ptr<views::ImageButton> close_ = nullptr;
   raw_ptr<RenameField> rename_field_ = nullptr;
+  // Captured when the edit starts. The pool re-points a row view at a
+  // different entry whenever the model moves — including from another window
+  // on the same profile — and an open field must not follow it.
+  EntryId renaming_entry_id_;
   base::WeakPtrFactory<TabRowView> weak_factory_{this};
 };
 

@@ -214,10 +214,9 @@ void TabListView::OnDragMove(int from, int to) {
   }
 }
 
-void TabListView::OnRenameRow(const SidebarRow& row,
-                              const std::u16string& title) {
-  if (row.entry_id.is_valid()) {
-    model_->SetEntryTitle(row.entry_id, title);
+void TabListView::OnRenameRow(EntryId id, const std::u16string& title) {
+  if (id.is_valid()) {
+    model_->SetEntryTitle(id, title);
   }
 }
 
@@ -242,9 +241,8 @@ void TabListView::OnToggleFolder(const SidebarFolder& folder) {
   model_->SetFolderCollapsed(folder.id, !folder.collapsed);
 }
 
-void TabListView::OnRenameFolder(const SidebarFolder& folder,
-                                 const std::u16string& name) {
-  model_->SetFolderName(folder.id, name);
+void TabListView::OnRenameFolder(FolderId id, const std::u16string& name) {
+  model_->SetFolderName(id, name);
 }
 
 void TabListView::OnShowFolderMenu(FolderHeaderView* source,

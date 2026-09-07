@@ -111,6 +111,14 @@ TabRowView::TabRowView(Delegate delegate)
 TabRowView::~TabRowView() = default;
 
 void TabRowView::SetRow(const SidebarRow& row) {
+  // Row views are pooled by laid-out position, so this slot can be handed a
+  // different entry at any time — another window on the same profile unpins
+  // something and every list rebuilds. An open field belongs to the entry it
+  // was opened on, not to the slot, so it goes rather than hovers over a row
+  // that is not its own.
+  if (is_renaming() && row.entry_id != renaming_entry_id_) {
+    AbandonRename();
+  }
   row_ = row;
   UpdateVisuals();
 }
@@ -160,9 +168,11 @@ void TabRowView::BeginRename() {
   if (!row_.entry_id.is_valid() || is_renaming()) {
     return;
   }
+  renaming_entry_id_ = row_.entry_id;
   auto field = std::make_unique<RenameField>(
-      row_.title, base::BindOnce(&TabRowView::OnRenameFinished,
-                                 weak_factory_.GetWeakPtr()));
+      row_.title,
+      base::BindOnce(&TabRowView::OnRenameFinished, weak_factory_.GetWeakPtr(),
+                     renaming_entry_id_));
   field->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::LayoutOrientation::kHorizontal,
@@ -170,26 +180,46 @@ void TabRowView::BeginRename() {
                                views::MaximumFlexSizeRule::kUnbounded));
   // In the title's place, so the favicon stays to its left.
   rename_field_ = AddChildViewAt(std::move(field), GetIndexOf(title_).value());
+  // The field takes the focus, and a focusable view without a name is a view
+  // a screen reader cannot announce.
+  rename_field_->GetViewAccessibility().SetName(u"Tab name");
   UpdateTrailingButtons();
   rename_field_->RequestFocus();
   InvalidateLayout();
 }
 
-void TabRowView::OnRenameFinished(bool commit, const std::u16string& title) {
+void TabRowView::AbandonRename() {
+  if (!rename_field_) {
+    return;
+  }
+  RenameField* field = rename_field_.ExtractAsDangling();
+  field->Abandon();
+  renaming_entry_id_ = EntryId();
+  RemoveChildViewT(field);
+  UpdateTrailingButtons();
+  InvalidateLayout();
+}
+
+void TabRowView::OnRenameFinished(EntryId id,
+                                  bool commit,
+                                  const std::u16string& title) {
   if (rename_field_) {
     RemoveChildViewT(rename_field_.ExtractAsDangling());
+    renaming_entry_id_ = EntryId();
   }
   UpdateTrailingButtons();
   InvalidateLayout();
-  if (!commit || title.empty() || !row_.entry_id.is_valid() ||
-      !delegate_.rename) {
+  // `id` is the entry the edit was started on, not whatever this pooled view
+  // draws now: the model can move — from another window on the same profile —
+  // between the Enter and this posted task, and the write must land on the
+  // entry the user was typing into. A model that no longer has it makes the
+  // command a no-op, which is the right answer.
+  if (!commit || title.empty() || !id.is_valid() || !delegate_.rename) {
     return;
   }
-  // Copies: the rename rebuilds the list and can destroy this view.
-  base::RepeatingCallback<void(const SidebarRow&, const std::u16string&)>
-      rename = delegate_.rename;
-  const SidebarRow row = row_;
-  rename.Run(row, title);
+  base::RepeatingCallback<void(EntryId, const std::u16string&)> rename =
+      delegate_.rename;
+  rename.Run(id, title);
 }
 
 void TabRowView::Revert() {

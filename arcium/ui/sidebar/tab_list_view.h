@@ -58,13 +58,13 @@ class TabListView : public views::View {
   void OnActivateRow(const SidebarRow& row);
   void OnCloseRow(const SidebarRow& row);
   void OnDragMove(int from, int to);
-  void OnRenameRow(const SidebarRow& row, const std::u16string& title);
+  void OnRenameRow(EntryId id, const std::u16string& title);
   void OnRevertRow(const SidebarRow& row);
   void OnShowRowMenu(TabRowView* source,
                      const SidebarRow& row,
                      const gfx::Point& point);
   void OnToggleFolder(const SidebarFolder& folder);
-  void OnRenameFolder(const SidebarFolder& folder, const std::u16string& name);
+  void OnRenameFolder(FolderId id, const std::u16string& name);
   void OnShowFolderMenu(FolderHeaderView* source,
                         const SidebarFolder& folder,
                         const gfx::Point& point);
