@@ -190,13 +190,25 @@ void TabListView::OnCloseRow(const SidebarRow& row) {
 }
 
 void TabListView::OnDragMove(int from, int to) {
-  // Clamp to this section's range in tab-index space.
-  if (rows_.empty()) {
+  // Clamp to this section's range in tab-index space. `rows_` is in laid-out
+  // order — a folder's entries come before the top level — so the first and
+  // last row are not the smallest and largest tab index, and a cold row has
+  // no tab index at all. Taking the ends instead of the extremes hands
+  // std::clamp lo > hi, which is a hard abort under libc++ hardening.
+  std::vector<int> indices;
+  indices.reserve(rows_.size());
+  for (const TabRowView* row : rows_) {
+    if (row->tab_index() >= 0) {
+      indices.push_back(row->tab_index());
+    }
+  }
+  // A section of nothing but cold rows has no tab-index range to move within,
+  // and a cold row is not being dragged anywhere the tab strip understands.
+  if (indices.empty() || from < 0) {
     return;
   }
-  const int first = rows_.front()->tab_index();
-  const int last = rows_.back()->tab_index();
-  to = std::clamp(to, first, last);
+  const auto [lo, hi] = std::minmax_element(indices.begin(), indices.end());
+  to = std::clamp(to, *lo, *hi);
   if (to != from) {
     model_->MoveTab(from, to);
   }

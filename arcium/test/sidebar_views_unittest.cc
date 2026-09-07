@@ -23,6 +23,7 @@
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/test/views_test_base.h"
+#include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
@@ -87,6 +88,25 @@ class SidebarViewsTest : public views::ViewsTestBase {
     view->OnMouseEntered(entered);
   }
 
+  // Presses on `row` and drags `dy` pixels down it, which is what the list
+  // turns into a MoveTab. Straight at the view's own handlers: the drag is
+  // resolved from the event's location inside the row, not from the window.
+  void DragRowBy(TabRowView* row, int dy) {
+    views::test::RunScheduledLayout(widget_.get());
+    const gfx::Point start(10, 10);
+    ui::MouseEvent press(ui::EventType::kMousePressed, start, start,
+                         base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON,
+                         ui::EF_LEFT_MOUSE_BUTTON);
+    row->OnMousePressed(press);
+    const gfx::Point moved(10, 10 + dy);
+    ui::MouseEvent drag(ui::EventType::kMouseDragged, moved, moved,
+                        base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON, 0);
+    row->OnMouseDragged(drag);
+    ui::MouseEvent release(ui::EventType::kMouseReleased, moved, moved,
+                           base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON, 0);
+    row->OnMouseReleased(release);
+  }
+
   // The labels of a built menu, top to bottom, with disabled ones marked.
   std::vector<std::u16string> MenuLabels(ui::SimpleMenuModel* menu) {
     std::vector<std::u16string> labels;
@@ -134,6 +154,74 @@ TEST_F(SidebarViewsTest, ACollapsedFolderContributesOnlyItsHeader) {
   // The row inside it is not built at all, so a big collapsed folder costs
   // one view rather than one per entry.
   EXPECT_EQ(1u, list_->row_count());
+}
+
+// The rows are laid out folder-first, so the first row view can hold a larger
+// tab index than the last one. Clamping to the ends rather than the extremes
+// hands std::clamp lo > hi, which libc++ hardening turns into an abort.
+TEST_F(SidebarViewsTest, DraggingWorksWhenAFolderHoldsALaterEntry) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kPinned,
+                false);
+  MakeList(SidebarSection::kPinned);
+  // The folder holds the *last* entry in model order, so the plan puts tab
+  // index 2 first and tab index 1 last.
+  model_.AddFolderWith(u"Work", {u"Three"});
+  Refresh();
+
+  TabRowView* first = views::AsViewClass<TabRowView>(list_->children()[1]);
+  ASSERT_TRUE(first);
+  EXPECT_EQ(2, first->tab_index());
+  TabRowView* one = views::AsViewClass<TabRowView>(list_->children()[2]);
+  ASSERT_TRUE(one);
+  EXPECT_EQ(0, one->tab_index());
+
+  // One row down: 0 -> 1, inside the section's real range of 0..2.
+  DragRowBy(one, 40);
+
+  ASSERT_EQ(3u, model_.rows().size());
+  EXPECT_EQ(u"Two", model_.rows()[0].title);
+  EXPECT_EQ(u"One", model_.rows()[1].title);
+}
+
+// The shape that could invert the bounds before folders existed: a cold row
+// has no tab index, so the last row's -1 is below the first row's 0.
+TEST_F(SidebarViewsTest, DraggingWorksWhenAColdRowIsLast) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model_.AddColdEntry(u"Cold", "https://cold.example/",
+                      SidebarSection::kPinned);
+  MakeList(SidebarSection::kPinned);
+  Refresh();
+
+  TabRowView* one = views::AsViewClass<TabRowView>(list_->children()[0]);
+  ASSERT_TRUE(one);
+  ASSERT_EQ(-1,
+            views::AsViewClass<TabRowView>(list_->children()[2])->tab_index());
+  DragRowBy(one, 40);
+
+  EXPECT_EQ(u"Two", model_.rows()[0].title);
+  EXPECT_EQ(u"One", model_.rows()[1].title);
+}
+
+// Nothing in the section has a tab index, so there is no range to clamp to.
+// This is the bail branch rather than a bounds inversion: it guards the
+// std::minmax_element call against an empty range.
+TEST_F(SidebarViewsTest, DraggingAColdOnlySectionMovesNothing) {
+  model_.AddColdEntry(u"Cold", "https://cold.example/",
+                      SidebarSection::kPinned);
+  model_.AddColdEntry(u"Colder", "https://colder.example/",
+                      SidebarSection::kPinned);
+  MakeList(SidebarSection::kPinned);
+  Refresh();
+
+  TabRowView* row = views::AsViewClass<TabRowView>(list_->children()[0]);
+  ASSERT_TRUE(row);
+  DragRowBy(row, 40);
+
+  EXPECT_EQ(u"Cold", model_.rows()[0].title);
+  EXPECT_EQ(u"Colder", model_.rows()[1].title);
 }
 
 TEST_F(SidebarViewsTest, TheTodaySectionHasNoFolders) {
