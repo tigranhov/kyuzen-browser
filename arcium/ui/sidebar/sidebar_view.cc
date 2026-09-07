@@ -8,6 +8,7 @@
 #include <optional>
 #include <utility>
 
+#include "arcium/ui/sidebar/archive_list_view.h"
 #include "arcium/ui/sidebar/favorites_grid_view.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
 #include "arcium/ui/sidebar/section_divider_view.h"
@@ -17,12 +18,15 @@
 #include "arcium/ui/sidebar/tint_background.h"
 #include "arcium/ui/sidebar/url_pill_view.h"
 #include "base/functional/bind.h"
+#include "base/location.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
@@ -50,9 +54,14 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   favorites_ = AddChildView(std::make_unique<FavoritesGridView>(model_));
   pinned_ = AddChildView(
       std::make_unique<TabListView>(model_, SidebarSection::kPinned));
-  divider_ =
-      AddChildView(std::make_unique<SectionDividerView>(base::BindRepeating(
-          &SidebarModel::ClearToday, base::Unretained(model_))));
+  // No archive, no archive button. Off the record there is no archive file
+  // and cannot be one, so the affordance is absent rather than disabled; see
+  // SidebarModel::has_archive().
+  divider_ = AddChildView(std::make_unique<SectionDividerView>(
+      base::BindRepeating(&SidebarModel::ClearToday, base::Unretained(model_)),
+      model_->has_archive() ? base::BindRepeating(&SidebarView::ShowArchiveList,
+                                                  base::Unretained(this))
+                            : base::RepeatingClosure()));
   // Today scrolls: with enough tabs the rows would otherwise be laid out past
   // the bottom of the column at zero height, which hides them entirely.
   // ScrollWithLayers is the macOS default, but a layer-backed viewport is not
@@ -143,6 +152,39 @@ bool SidebarView::AcceleratorPressed(const ui::Accelerator& accelerator) {
     }
   }
   return false;
+}
+
+void SidebarView::ShowArchiveList() {
+  // A bubble closes on deactivate, and the press that reaches this button has
+  // already deactivated the open one — so in practice this is a fresh open
+  // every time. The guard is for the paths that are not a mouse press: an
+  // accessibility action, or a test firing the button twice.
+  if (archive_widget_) {
+    archive_widget_->Close();
+    return;
+  }
+  // Anchored to the divider rather than to the button that opened it: the
+  // button is a hover affordance and hides itself the moment the bubble takes
+  // activation, and an anchor view that disappears takes the bubble's
+  // position with it.
+  archive_list_ = std::make_unique<ArchiveListView>(divider_, model_);
+  archive_widget_ = views::BubbleDialogDelegate::CreateBubble(
+      archive_list_.get(), base::BindOnce(&SidebarView::OnArchiveListClosed,
+                                          weak_factory_.GetWeakPtr()));
+  archive_widget_->Show();
+}
+
+void SidebarView::OnArchiveListClosed(views::Widget::ClosedReason reason) {
+  // Runs synchronously from inside the close; free both once the stack has
+  // unwound, the way BrowserSidebarController does for quick entry.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&SidebarView::DestroyArchiveList,
+                                weak_factory_.GetWeakPtr()));
+}
+
+void SidebarView::DestroyArchiveList() {
+  archive_widget_.reset();
+  archive_list_.reset();
 }
 
 void SidebarView::Rebuild() {

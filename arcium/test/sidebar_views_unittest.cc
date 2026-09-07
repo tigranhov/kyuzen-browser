@@ -7,10 +7,12 @@
 #include <vector>
 
 #include "arcium/ui/playground/fake_sidebar_model.h"
+#include "arcium/ui/sidebar/archive_list_view.h"
 #include "arcium/ui/sidebar/favorites_grid_view.h"
 #include "arcium/ui/sidebar/folder_header_view.h"
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
+#include "arcium/ui/sidebar/section_divider_view.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
 #include "arcium/ui/sidebar/space_bar_view.h"
@@ -19,6 +21,7 @@
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/events/event.h"
@@ -27,6 +30,7 @@
 #include "ui/events/test/event_generator.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/test/button_test_api.h"
@@ -35,6 +39,7 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_utils.h"
+#include "url/gurl.h"
 
 namespace arcium {
 namespace {
@@ -124,6 +129,37 @@ class SidebarViewsTest : public views::ViewsTestBase {
   }
 
   void Refresh() { list_->SetRows(model_.rows()); }
+
+  // The whole column, for the handful of things that only exist once it is
+  // assembled: the divider's buttons and the bubble they open.
+  SidebarView* MakeSidebar() {
+    SidebarView::Delegate delegate;
+    delegate.toggle_sidebar = base::DoNothing();
+    delegate.back = base::DoNothing();
+    delegate.forward = base::DoNothing();
+    delegate.reload = base::DoNothing();
+    delegate.edit_url = base::DoNothing();
+    SidebarView* sidebar = contents_->AddChildView(
+        std::make_unique<SidebarView>(&model_, std::move(delegate)));
+    views::test::RunScheduledLayout(widget_.get());
+    return sidebar;
+  }
+
+  void OpenArchiveList(SidebarView* sidebar) {
+    views::LabelButton* button = sidebar->divider()->archive_button();
+    CHECK(button);
+    ui::MouseEvent click(ui::EventType::kMousePressed, gfx::Point(),
+                         gfx::Point(), base::TimeTicks(),
+                         ui::EF_LEFT_MOUSE_BUTTON, 0);
+    views::test::ButtonTestApi(button).NotifyClick(click);
+  }
+
+  // What close-on-deactivate does when the user clicks away.
+  void CloseArchiveList(SidebarView* sidebar) {
+    ArchiveListView* list = sidebar->archive_list_for_testing();
+    CHECK(list);
+    list->GetWidget()->Close();
+  }
 
   ui::test::EventGenerator& generator() { return *generator_; }
 
@@ -1327,6 +1363,98 @@ TEST_F(SidebarViewsTest, TheSpaceMenuChoosesTheArchiveTimeout) {
   EXPECT_TRUE(bar.IsCommandIdEnabled(SpaceBarView::kTimeoutOneDay));
   EXPECT_FALSE(bar.IsCommandIdEnabled(SpaceBarView::kRename));
   EXPECT_FALSE(bar.IsCommandIdEnabled(SpaceBarView::kDelete));
+}
+
+// Off the record there is no archive and never will be, so the button is
+// absent rather than present and disabled: a control that can never be used
+// reads as a bug, and this stage has already removed one for that reason.
+TEST_F(SidebarViewsTest, NoArchiveMeansNoArchiveButton) {
+  model_.SetHasArchive(false);
+  SidebarView* sidebar = MakeSidebar();
+  EXPECT_EQ(nullptr, sidebar->divider()->archive_button());
+}
+
+TEST_F(SidebarViewsTest, TheArchiveButtonAppearsBesideClearOnHover) {
+  SidebarView* sidebar = MakeSidebar();
+  views::LabelButton* button = sidebar->divider()->archive_button();
+  ASSERT_TRUE(button);
+  EXPECT_FALSE(button->GetVisible());
+
+  Hover(sidebar->divider());
+  EXPECT_TRUE(button->GetVisible());
+}
+
+// The rows are asked for when the list opens and arrive on a later turn of
+// the run loop, which is what the model's asynchrony buys and what the view
+// has to be correct about: it is laid out once with nothing in it.
+TEST_F(SidebarViewsTest, TheArchiveListFillsWhenTheReadComesBack) {
+  const base::Time now = base::Time::Now();
+  model_.AddArchived(u"One", "https://one.example/", now - base::Hours(2));
+  model_.AddArchived(u"Two", "https://two.example/", now - base::Hours(5));
+  SidebarView* sidebar = MakeSidebar();
+
+  OpenArchiveList(sidebar);
+  ArchiveListView* list = sidebar->archive_list_for_testing();
+  ASSERT_TRUE(list);
+  EXPECT_EQ(0u, list->row_count_for_testing());
+  EXPECT_TRUE(list->is_empty_message_showing_for_testing());
+
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(2u, list->row_count_for_testing());
+  EXPECT_FALSE(list->is_empty_message_showing_for_testing());
+}
+
+// Clicking reopens the page and takes the row out of the list, without asking
+// the archive again: the delete is posted to a background sequence, so a
+// re-read would race it and could hand back the row just clicked.
+TEST_F(SidebarViewsTest, ClickingAnArchivedRowReopensItAndDropsIt) {
+  const base::Time now = base::Time::Now();
+  model_.AddArchived(u"One", "https://one.example/", now - base::Hours(2));
+  model_.AddArchived(u"Two", "https://two.example/", now - base::Hours(5));
+  SidebarView* sidebar = MakeSidebar();
+  OpenArchiveList(sidebar);
+  task_environment()->RunUntilIdle();
+  ArchiveListView* list = sidebar->archive_list_for_testing();
+  ASSERT_EQ(2u, list->row_count_for_testing());
+
+  ui::MouseEvent click(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
+                       base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON, 0);
+  views::test::ButtonTestApi(list->row_at_for_testing(0)).NotifyClick(click);
+
+  ASSERT_EQ(1u, model_.reopened().size());
+  EXPECT_EQ(GURL("https://one.example/"), model_.reopened()[0].url);
+  EXPECT_EQ(now - base::Hours(2), model_.reopened()[0].archived_at);
+  EXPECT_EQ(1u, list->row_count_for_testing());
+  EXPECT_FALSE(model_.has_pending_archive_request());
+}
+
+// An archive with nothing in it says so, rather than showing an empty box the
+// user cannot tell from a broken one.
+TEST_F(SidebarViewsTest, AnEmptyArchiveSaysSo) {
+  SidebarView* sidebar = MakeSidebar();
+  OpenArchiveList(sidebar);
+  task_environment()->RunUntilIdle();
+
+  ArchiveListView* list = sidebar->archive_list_for_testing();
+  ASSERT_TRUE(list);
+  EXPECT_EQ(0u, list->row_count_for_testing());
+  EXPECT_TRUE(list->is_empty_message_showing_for_testing());
+}
+
+// A bubble outlives the click that opened it, and the read behind it outlives
+// the bubble. The reply must land on nothing rather than on a freed delegate.
+TEST_F(SidebarViewsTest, ClosingTheListWhileTheReadIsInFlightIsSafe) {
+  model_.AddArchived(u"One", "https://one.example/",
+                     base::Time::Now() - base::Hours(2));
+  SidebarView* sidebar = MakeSidebar();
+  OpenArchiveList(sidebar);
+  ASSERT_TRUE(sidebar->archive_list_for_testing());
+  ASSERT_TRUE(model_.has_pending_archive_request());
+
+  // What close-on-deactivate does, one turn earlier than the reply.
+  CloseArchiveList(sidebar);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(nullptr, sidebar->archive_list_for_testing());
 }
 
 }  // namespace

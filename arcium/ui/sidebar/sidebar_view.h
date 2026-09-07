@@ -5,13 +5,17 @@
 #ifndef ARCIUM_UI_SIDEBAR_SIDEBAR_VIEW_H_
 #define ARCIUM_UI_SIDEBAR_SIDEBAR_VIEW_H_
 
+#include <memory>
+
 #include "arcium/ui/sidebar/row_drag_session.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
+#include "ui/views/widget/widget.h"
 
 namespace views {
 class ScrollView;
@@ -19,6 +23,7 @@ class ScrollView;
 
 namespace arcium {
 
+class ArchiveListView;
 class NavRowView;
 class UrlPillView;
 class FavoritesGridView;
@@ -55,6 +60,9 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   // the playground, where UrlPillView paints a placeholder.
   UrlPillView* url_pill() { return url_pill_; }
   NavRowView* nav_row() { return nav_row_; }
+  SectionDividerView* divider() { return divider_; }
+  // The open archive bubble's delegate, or null when none is open.
+  ArchiveListView* archive_list_for_testing() { return archive_list_.get(); }
 
   // True for points in the sidebar that should drag the window: the nav row
   // background and any empty space, but not buttons or tab rows.
@@ -70,6 +78,12 @@ class SidebarView : public views::View, public SidebarModel::Observer {
 
  private:
   void Rebuild();
+  // Opens the archive list over the divider. Only ever reached from the
+  // divider's archive button, which exists only when the model has an
+  // archive.
+  void ShowArchiveList();
+  void OnArchiveListClosed(views::Widget::ClosedReason reason);
+  void DestroyArchiveList();
 
   raw_ptr<SidebarModel> model_;
   Delegate delegate_;
@@ -90,6 +104,19 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   // destructor: members are destroyed before ~View destroys the children, so
   // a section still observing this when it goes would be a dangling observer.
   RowDragSession row_drag_session_;
+
+  // The archive bubble, when one is open. CreateBubble hands back a widget
+  // the caller owns and a delegate the caller must keep alive for at least as
+  // long, so both live here and are freed together, one turn after the close
+  // — the same shape as BrowserSidebarController's quick-entry bubble, and
+  // for the same reason: the close callback runs from inside the close.
+  //
+  // In this order, because members are destroyed in reverse: the widget goes
+  // before the delegate it points at, and both go before ~View destroys the
+  // divider the bubble is anchored to.
+  std::unique_ptr<ArchiveListView> archive_list_;
+  std::unique_ptr<views::Widget> archive_widget_;
+  base::WeakPtrFactory<SidebarView> weak_factory_{this};
 };
 
 }  // namespace arcium

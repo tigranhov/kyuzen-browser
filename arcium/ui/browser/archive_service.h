@@ -26,7 +26,10 @@ namespace arcium {
 class ArchiveStore;
 class TabBinding;
 
-// Writes idle Today tabs to the archive and closes them.
+// Writes idle Today tabs to the archive and closes them, and reads it back
+// for the archive list. Both halves are here because both need the same two
+// things — the store and the sequence that owns it — and a second object
+// holding the same pair would only be a second place to get that wrong.
 //
 // One service per window, because a tab is in exactly one strip: "the active
 // tab in any window" is then just this strip's active tab, and two windows can
@@ -65,6 +68,32 @@ class ArchiveService : public TabStripModelObserver,
   // divider's Clear button means, so it deliberately ignores the guards that
   // hold back the automatic sweep: the user asked.
   void ArchiveAllToday();
+
+  using RecentCallback = base::OnceCallback<void(std::vector<ArchivedTab>)>;
+
+  // Whether there is a store behind this service. False off the record and
+  // when the archive file would not open — the two cases where there is
+  // nothing to show and no point offering to show it.
+  bool has_store() const { return store_ != nullptr; }
+
+  // The `limit` most recently archived tabs of `space_id`, newest first.
+  //
+  // Asynchronous because ArchiveStore is not: every one of its methods blocks
+  // on SQLite, and a read whose pages are not in the OS cache is a disk seek.
+  // Doing that from the click that opens the list would be a dropped frame
+  // the user is looking at, and "no sync I/O ever" covers reads.
+  //
+  // `callback` runs on the calling sequence, and only ever on a later turn of
+  // the run loop — including in the no-store case, so a caller never has to
+  // handle being answered from inside its own call. It is dropped without
+  // running if whatever it is bound to has gone by then; bind through a
+  // WeakPtr.
+  void RequestRecent(SpaceId space_id, int limit, RecentCallback callback);
+
+  // Drops one archived row. Both halves of the archive's primary key are
+  // needed to name it. Fire-and-forget: nothing waits on the delete, and a
+  // row that is already gone is not an error.
+  void RemoveArchived(const GURL& url, base::Time archived_at);
 
   // False for the tabs closing would be data loss rather than tidying: the
   // active tab, a tab playing audio, a tab with an unload handler, and any tab

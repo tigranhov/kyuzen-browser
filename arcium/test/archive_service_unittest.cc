@@ -5,6 +5,8 @@
 #include "arcium/ui/browser/archive_service.h"
 
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 #include "arcium/browser/archive_store.h"
@@ -14,9 +16,11 @@
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
+#include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -531,6 +535,86 @@ TEST_F(ArchiveServiceTest, ARowParkedByClearIsWrittenWhenTheTabActuallyGoes) {
   ASSERT_EQ(1u, rows.size());
   EXPECT_EQ(GURL("https://today.example/"), rows[0].url);
   EXPECT_EQ(0u, service_->pending_archive_count_for_testing());
+}
+
+// The archive list's read path, end to end and through the real store: the
+// model asks, the service posts to the store's sequence, and the rows come
+// back converted and newest first. Reads get the same "posted, never inline"
+// treatment writes do — a SQLite read whose pages are not in the OS cache is
+// a disk seek, and the click that opens the list is a frame the user watches.
+TEST_F(ArchiveServiceTest, TheArchiveReadIsPostedAndComesBackNewestFirst) {
+  sidebar_model_->SetArchiveService(service_.get());
+  AddTab(browser(), GURL("https://old.example/"));
+  service_->ArchiveAllToday();
+  task_environment()->RunUntilIdle();
+  PassTime(base::Hours(1));
+  AddTab(browser(), GURL("https://new.example/"));
+  service_->ArchiveAllToday();
+  task_environment()->RunUntilIdle();
+
+  std::optional<std::vector<ArchivedRow>> got;
+  sidebar_model_->RequestArchivedRows(
+      10, base::BindLambdaForTesting([&got](std::vector<ArchivedRow> rows) {
+        got = std::move(rows);
+      }));
+  EXPECT_FALSE(got.has_value());
+
+  task_environment()->RunUntilIdle();
+  ASSERT_TRUE(got.has_value());
+  ASSERT_EQ(2u, got->size());
+  EXPECT_EQ(GURL("https://new.example/"), (*got)[0].url);
+  EXPECT_EQ(GURL("https://old.example/"), (*got)[1].url);
+  EXPECT_FALSE((*got)[0].archived_at.is_null());
+}
+
+// Reopening puts the page back in Today and takes the row out of the archive,
+// so the list is not a place tabs pile up twice. The delete is posted like
+// every other archive write.
+TEST_F(ArchiveServiceTest, ReopeningAnArchivedRowOpensATabAndDropsTheRow) {
+  sidebar_model_->SetArchiveService(service_.get());
+  AddTab(browser(), GURL("https://gone.example/"));
+  service_->ArchiveAllToday();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(0, strip()->count());
+  const std::vector<ArchivedTab> rows =
+      archive_.ListRecent(model_.default_space_id(), 10);
+  ASSERT_EQ(1u, rows.size());
+
+  sidebar_model_->ReopenArchived(rows[0].url, rows[0].archived_at);
+  ASSERT_EQ(1, strip()->count());
+  EXPECT_EQ(GURL("https://gone.example/"),
+            strip()->GetWebContentsAt(0)->GetVisibleURL());
+  EXPECT_EQ(1u, archive_.ListRecent(model_.default_space_id(), 10).size());
+
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(archive_.ListRecent(model_.default_space_id(), 10).empty());
+}
+
+// The reopened tab is a Today tab: it comes back claimed by nothing, so it is
+// archivable again on the next sweep rather than pinned by accident.
+TEST_F(ArchiveServiceTest, AReopenedTabIsATodayTab) {
+  sidebar_model_->SetArchiveService(service_.get());
+  AddTab(browser(), GURL("https://gone.example/"));
+  service_->ArchiveAllToday();
+  task_environment()->RunUntilIdle();
+  const std::vector<ArchivedTab> rows =
+      archive_.ListRecent(model_.default_space_id(), 10);
+  ASSERT_EQ(1u, rows.size());
+
+  sidebar_model_->ReopenArchived(rows[0].url, rows[0].archived_at);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(1u, sidebar_model_->rows().size());
+  EXPECT_EQ(SidebarSection::kToday, sidebar_model_->rows()[0].section);
+  EXPECT_FALSE(sidebar_model_->rows()[0].entry_id.is_valid());
+}
+
+// The window has a service with a store behind it, so the sidebar offers the
+// archive. The off-the-record case — no service at all — is in
+// sidebar_tab_model_unittest.cc, which is where a model without one lives.
+TEST_F(ArchiveServiceTest, AWindowWithAStoreHasAnArchive) {
+  EXPECT_TRUE(service_->has_store());
+  sidebar_model_->SetArchiveService(service_.get());
+  EXPECT_TRUE(sidebar_model_->has_archive());
 }
 
 }  // namespace

@@ -11,7 +11,9 @@
 
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/space.h"
+#include "base/functional/callback.h"
 #include "base/observer_list_types.h"
+#include "base/time/time.h"
 #include "ui/base/models/image_model.h"
 #include "url/gurl.h"
 
@@ -50,6 +52,16 @@ struct SidebarFolder {
   std::u16string name;
   bool collapsed = false;
   int entry_count = 0;
+};
+
+// One row of the archive list. Prepared by the model, like SidebarRow: the
+// list derives nothing and knows nothing about SQLite.
+struct ArchivedRow {
+  GURL url;
+  std::u16string title;
+  // Half of the archive's primary key — `url` is the other half — which is
+  // why both travel back with a reopen.
+  base::Time archived_at;
 };
 
 // The sidebar's view of a window's tabs plus the commands it can issue. The
@@ -152,6 +164,38 @@ class SidebarModel {
   // place it is chosen.
   virtual void SetArchiveTimeout(ArchiveTimeout timeout) = 0;
   virtual ArchiveTimeout archive_timeout() const = 0;
+
+  // The archive, which unlike everything above is not in memory: it is a
+  // SQLite file owned by a background sequence. So there is no
+  // `archived_rows()` to match rows() — a synchronous getter over it could
+  // only be a blocking read on the UI thread or a lie about freshness, and
+  // Stage 6's library inherits whatever shape is set here.
+  using ArchivedRowsCallback =
+      base::OnceCallback<void(std::vector<ArchivedRow>)>;
+
+  // Whether there is an archive to show at all. False off the record, where
+  // there is no archive file and cannot be one — an off-the-record context's
+  // GetPath() is the parent profile's, so an incognito archive would write
+  // incognito browsing into the regular profile's file. See
+  // ArciumProfileState::archive(). The affordance is then absent rather than
+  // disabled: a control that can never be used reads as a bug.
+  virtual bool has_archive() const = 0;
+
+  // Asks for the `limit` most recently archived rows of the active space,
+  // newest first. Always answers on a later turn of the run loop, never
+  // inline, so a caller has one order of events to handle rather than two.
+  //
+  // `callback` may be dropped without ever running: the window can close
+  // while the read is in flight. Bind it through a WeakPtr and put nothing in
+  // it that has to happen.
+  virtual void RequestArchivedRows(int limit,
+                                   ArchivedRowsCallback callback) = 0;
+
+  // Opens `url` in a new foreground tab and drops its archive row. An
+  // archived tab was a Today tab and comes back as one, claimed by no entry.
+  // Naming a row the archive no longer has still opens the tab and deletes
+  // nothing, which is what a stale list clicked twice should do.
+  virtual void ReopenArchived(const GURL& url, base::Time archived_at) = 0;
 
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;

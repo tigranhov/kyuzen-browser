@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "arcium/ui/sidebar/sidebar_model.h"
+#include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 
 namespace arcium {
@@ -47,6 +48,22 @@ class FakeSidebarModel : public SidebarModel {
   // them in an order that disagrees with the order they were made in.
   void SetFolderPosition(FolderId id, int position);
 
+  // Seeds the fake archive, newest first however they are added.
+  void AddArchived(const std::u16string& title,
+                   const std::string& url,
+                   base::Time archived_at);
+  // Off the record the real model has no archive and the sidebar shows no
+  // archive button. The playground and the view tests need to be able to sit
+  // on both sides of that.
+  void SetHasArchive(bool has_archive);
+  // What ReopenArchived was asked to reopen, in order.
+  const std::vector<ArchivedRow>& reopened() const { return reopened_; }
+  // Whether a RequestArchivedRows reply is still queued. The reply is posted,
+  // so a test that does not drain the run loop sees nothing.
+  bool has_pending_archive_request() const {
+    return pending_archive_requests_ > 0;
+  }
+
   // SidebarModel:
   std::vector<SidebarRow> rows() const override;
   void ActivateTab(int tab_index) override;
@@ -77,6 +94,9 @@ class FakeSidebarModel : public SidebarModel {
   void DeleteFolder(FolderId id) override;
   void SetArchiveTimeout(ArchiveTimeout timeout) override;
   ArchiveTimeout archive_timeout() const override;
+  bool has_archive() const override;
+  void RequestArchivedRows(int limit, ArchivedRowsCallback callback) override;
+  void ReopenArchived(const GURL& url, base::Time archived_at) override;
   void AddObserver(Observer* observer) override;
   void RemoveObserver(Observer* observer) override;
 
@@ -113,10 +133,21 @@ class FakeSidebarModel : public SidebarModel {
   std::vector<SidebarRow>::iterator SlotIn(SidebarSection section,
                                            int position);
 
+  void DeliverArchivedRows(int limit, ArchivedRowsCallback callback);
+
   std::vector<SidebarRow> rows_;
   std::vector<FakeFolder> folders_;
   ArchiveTimeout archive_timeout_ = ArchiveTimeout::kTwelveHours;
+  // The real archive is SQLite behind a posted read; this is a vector behind
+  // a posted read. The asynchrony is the part worth copying — a fake that
+  // answered inline would let a view that only works when the rows arrive
+  // before it is laid out pass here and fail in the browser.
+  std::vector<ArchivedRow> archived_;
+  std::vector<ArchivedRow> reopened_;
+  int pending_archive_requests_ = 0;
+  bool has_archive_ = true;
   base::ObserverList<Observer> observers_;
+  base::WeakPtrFactory<FakeSidebarModel> weak_factory_{this};
 };
 
 }  // namespace arcium

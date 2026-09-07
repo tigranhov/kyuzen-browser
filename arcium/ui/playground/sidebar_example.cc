@@ -12,6 +12,7 @@
 #include "arcium/ui/sidebar/sidebar_view.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
+#include "base/time/time.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/background.h"
@@ -66,6 +67,19 @@ SidebarExample::SidebarExample()
   const FolderId reading = model_->AddFolderWith(u"Reading", {u"Notion"});
   model_->SetFolderCollapsed(reading, true);
   model_->SetCanReturnToPinnedUrl(5, true);
+  // Enough archived rows to see the list's three states: several ages, an
+  // empty title falling back to nothing useful, and — once a few are clicked
+  // away — the empty message.
+  const base::Time now = base::Time::Now();
+  model_->AddArchived(u"Arc Browser", "https://arc.net/", now - base::Hours(2));
+  model_->AddArchived(u"WebKit Blog", "https://webkit.org/blog/",
+                      now - base::Hours(9));
+  model_->AddArchived(
+      u"A very long title that has to elide before it reaches "
+      u"the timestamp column",
+      "https://example.com/long", now - base::Days(1));
+  model_->AddArchived(u"Rust Book", "https://doc.rust-lang.org/book/",
+                      now - base::Days(4));
 }
 
 SidebarExample::~SidebarExample() = default;

@@ -587,6 +587,68 @@ ArchiveTimeout SidebarTabModel::archive_timeout() const {
   return ArchiveTimeout::kTwelveHours;
 }
 
+bool SidebarTabModel::has_archive() const {
+  // Two conditions, not one: off the record there is no service at all
+  // (BrowserSidebarController does not build one), and a service whose file
+  // would not open has nothing to list. Neither can be shown, so neither gets
+  // a button.
+  return archive_service_ && archive_service_->has_store();
+}
+
+void SidebarTabModel::RequestArchivedRows(int limit,
+                                          ArchivedRowsCallback callback) {
+  if (!archive_service_) {
+    // The playground and the model's own tests. Posted, and through the same
+    // weak pointer the real path uses, so this branch answers on the same
+    // turn of the run loop and is dropped in the same circumstances. A rare
+    // branch that behaves differently is the branch nobody tested.
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&SidebarTabModel::DeliverArchivedRows,
+                       weak_factory_.GetWeakPtr(), std::move(callback),
+                       std::vector<ArchivedTab>()));
+    return;
+  }
+  archive_service_->RequestRecent(
+      arcium_model_->default_space_id(), limit,
+      base::BindOnce(&SidebarTabModel::DeliverArchivedRows,
+                     weak_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void SidebarTabModel::DeliverArchivedRows(ArchivedRowsCallback callback,
+                                          std::vector<ArchivedTab> tabs) {
+  std::vector<ArchivedRow> rows;
+  rows.reserve(tabs.size());
+  for (ArchivedTab& tab : tabs) {
+    ArchivedRow row;
+    row.url = std::move(tab.url);
+    // A page that never got a title archives with an empty one, and a blank
+    // row is unclickable-looking. The URL is what the sidebar draws for a
+    // cold entry in the same situation.
+    row.title = tab.title.empty() ? base::UTF8ToUTF16(row.url.spec())
+                                  : std::move(tab.title);
+    row.archived_at = tab.archived_at;
+    rows.push_back(std::move(row));
+  }
+  std::move(callback).Run(std::move(rows));
+}
+
+void SidebarTabModel::ReopenArchived(const GURL& url, base::Time archived_at) {
+  if (!tab_strip_model_ || !url.is_valid()) {
+    return;
+  }
+  // Foreground: this is a click on the page the user asked for, not a
+  // rearrangement. Deliberately bound to nothing — an archived tab was a
+  // Today tab and comes back as one.
+  tab_strip_model_->delegate()->AddTabAt(url, -1, /*foreground=*/true);
+  if (archive_service_) {
+    // The row goes whether or not the tab opened cleanly. Leaving it would
+    // mean a list that grows a duplicate every time it is used, and the page
+    // is in the strip now either way.
+    archive_service_->RemoveArchived(url, archived_at);
+  }
+}
+
 void SidebarTabModel::AddObserver(SidebarModel::Observer* observer) {
   observers_.AddObserver(observer);
 }

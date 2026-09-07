@@ -20,6 +20,8 @@ aggregate_vector_icons("sidebar_icons") {
 # Pure Views. Must not depend on //chrome/browser so the playground stays small.
 source_set("sidebar") {
   sources = [
+    "archive_list_view.cc",
+    "archive_list_view.h",
     "favorites_grid_view.cc",
     "favorites_grid_view.h",
     "folder_header_view.cc",

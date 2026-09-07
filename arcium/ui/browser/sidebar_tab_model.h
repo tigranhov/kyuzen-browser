@@ -27,6 +27,7 @@ class TabInterface;
 namespace arcium {
 
 class ArchiveService;
+struct ArchivedTab;
 struct TabEntry;
 
 // Merges the window's live tabs with the profile's persistent entries into
@@ -91,6 +92,9 @@ class SidebarTabModel : public SidebarModel,
   void DeleteFolder(FolderId id) override;
   void SetArchiveTimeout(ArchiveTimeout timeout) override;
   ArchiveTimeout archive_timeout() const override;
+  bool has_archive() const override;
+  void RequestArchivedRows(int limit, ArchivedRowsCallback callback) override;
+  void ReopenArchived(const GURL& url, base::Time archived_at) override;
   // Qualified: ArciumModel::Observer is also in scope through the base.
   void AddObserver(SidebarModel::Observer* observer) override;
   void RemoveObserver(SidebarModel::Observer* observer) override;
@@ -140,6 +144,13 @@ class SidebarTabModel : public SidebarModel,
   // Copies the live page title of every warm entry into the model, so a row
   // that later goes cold has something better than a URL to draw.
   void SyncEntryTitles();
+  // Turns what the archive stores into what the list draws, then answers the
+  // caller. A member rather than a free function so it can be bound through
+  // this object's WeakPtr: a read still in flight when the window closes is
+  // then dropped here, and the interface's promise that a callback may never
+  // run holds whatever the caller bound it to.
+  void DeliverArchivedRows(ArchivedRowsCallback callback,
+                           std::vector<ArchivedTab> tabs);
 
   // Schedules FlushNotification() unless one is already pending.
   void NotifyChanged();

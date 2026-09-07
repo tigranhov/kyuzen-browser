@@ -5,6 +5,8 @@
 #include "arcium/ui/browser/sidebar_tab_model.h"
 
 #include <memory>
+#include <optional>
+#include <utility>
 #include <vector>
 
 #include "arcium/browser/model/arcium_model.h"
@@ -13,6 +15,7 @@
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
+#include "base/test/bind.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -699,6 +702,46 @@ TEST_F(SidebarTabModelTest, ADifferentQueryStillOffersTheReturn) {
   NavigateAndCommitActiveTab(GURL("https://pinned.example/docs?page=2"));
   task_environment()->RunUntilIdle();
   EXPECT_TRUE(model->rows()[0].can_return_to_pinned_url);
+}
+
+// A window with no ArchiveService is what an off-the-record window is:
+// BrowserSidebarController builds one only when the profile has an archive.
+// The sidebar must then show no archive affordance at all.
+TEST_F(SidebarTabModelTest, WithoutAServiceThereIsNoArchive) {
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  EXPECT_FALSE(model->has_archive());
+}
+
+// The interface promises the answer never arrives inline, in every branch —
+// including this one, where there is nothing to read and the temptation to
+// answer on the spot is greatest. A caller with two possible orders of events
+// is a caller that gets one of them wrong.
+TEST_F(SidebarTabModelTest, AnArchiveRequestIsNeverAnsweredInline) {
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  std::optional<std::vector<ArchivedRow>> got;
+  model->RequestArchivedRows(
+      10, base::BindLambdaForTesting([&got](std::vector<ArchivedRow> rows) {
+        got = std::move(rows);
+      }));
+
+  EXPECT_FALSE(got.has_value());
+  task_environment()->RunUntilIdle();
+  ASSERT_TRUE(got.has_value());
+  EXPECT_TRUE(got->empty());
+}
+
+// The reply is bound through the model's WeakPtr, so a read still in flight
+// when the window closes is dropped rather than delivered into a dead model.
+TEST_F(SidebarTabModelTest, AnArchiveRequestOutlivedByItsModelIsDropped) {
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  bool ran = false;
+  model->RequestArchivedRows(
+      10, base::BindLambdaForTesting(
+              [&ran](std::vector<ArchivedRow> rows) { ran = true; }));
+  model.reset();
+
+  task_environment()->RunUntilIdle();
+  EXPECT_FALSE(ran);
 }
 
 }  // namespace

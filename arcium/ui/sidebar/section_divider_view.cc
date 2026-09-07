@@ -24,7 +24,8 @@ namespace {
 constexpr int kDividerHeight = 20;
 }  // namespace
 
-SectionDividerView::SectionDividerView(base::RepeatingClosure on_clear) {
+SectionDividerView::SectionDividerView(base::RepeatingClosure on_clear,
+                                       base::RepeatingClosure on_archive) {
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
@@ -39,6 +40,15 @@ SectionDividerView::SectionDividerView(base::RepeatingClosure on_clear) {
       views::FlexSpecification(views::LayoutOrientation::kHorizontal,
                                views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
+  // "Archived" before "Clear", so Clear stays where it has always been: on
+  // the trailing edge, where the pointer that just left a Today row lands.
+  if (on_archive) {
+    archive_ = AddChildView(std::make_unique<views::LabelButton>(
+        std::move(on_archive), u"Archived"));
+    archive_->SetEnabledTextColors(kColorArciumRowTextSecondary);
+    archive_->SetVisible(false);
+    archive_->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 8, 0, 0));
+  }
   clear_ = AddChildView(
       std::make_unique<views::LabelButton>(std::move(on_clear), u"Clear"));
   clear_->SetEnabledTextColors(kColorArciumRowTextSecondary);
@@ -48,14 +58,21 @@ SectionDividerView::SectionDividerView(base::RepeatingClosure on_clear) {
 
 SectionDividerView::~SectionDividerView() = default;
 
+void SectionDividerView::SetButtonsVisible(bool visible) {
+  clear_->SetVisible(visible);
+  if (archive_) {
+    archive_->SetVisible(visible);
+  }
+}
+
 void SectionDividerView::OnMouseEntered(const ui::MouseEvent& event) {
-  clear_->SetVisible(true);
+  SetButtonsVisible(true);
 }
 
 void SectionDividerView::OnMouseExited(const ui::MouseEvent& event) {
-  // Keep it while the pointer is over the button itself.
-  if (!clear_->IsMouseHovered()) {
-    clear_->SetVisible(false);
+  // Keep them while the pointer is over either button itself.
+  if (!clear_->IsMouseHovered() && !(archive_ && archive_->IsMouseHovered())) {
+    SetButtonsVisible(false);
   }
 }
 

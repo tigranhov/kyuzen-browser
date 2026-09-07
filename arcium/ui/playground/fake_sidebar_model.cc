@@ -9,6 +9,9 @@
 #include <limits>
 #include <utility>
 
+#include "base/functional/bind.h"
+#include "base/location.h"
+#include "base/task/sequenced_task_runner.h"
 #include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/models/image_model.h"
@@ -458,6 +461,61 @@ void FakeSidebarModel::SetArchiveTimeout(ArchiveTimeout timeout) {
 
 ArchiveTimeout FakeSidebarModel::archive_timeout() const {
   return archive_timeout_;
+}
+
+void FakeSidebarModel::AddArchived(const std::u16string& title,
+                                   const std::string& url,
+                                   base::Time archived_at) {
+  ArchivedRow row;
+  row.url = GURL(url);
+  row.title = title;
+  row.archived_at = archived_at;
+  archived_.push_back(std::move(row));
+}
+
+void FakeSidebarModel::SetHasArchive(bool has_archive) {
+  has_archive_ = has_archive;
+}
+
+bool FakeSidebarModel::has_archive() const {
+  return has_archive_;
+}
+
+void FakeSidebarModel::RequestArchivedRows(int limit,
+                                           ArchivedRowsCallback callback) {
+  // Posted, and through a WeakPtr, exactly as SidebarTabModel does it. Note
+  // this is the one place this fake is deliberately *not* synchronous: see
+  // the class comment.
+  ++pending_archive_requests_;
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE,
+      base::BindOnce(&FakeSidebarModel::DeliverArchivedRows,
+                     weak_factory_.GetWeakPtr(), limit, std::move(callback)));
+}
+
+void FakeSidebarModel::DeliverArchivedRows(int limit,
+                                           ArchivedRowsCallback callback) {
+  --pending_archive_requests_;
+  std::vector<ArchivedRow> rows = archived_;
+  if (limit >= 0 && rows.size() > static_cast<size_t>(limit)) {
+    rows.resize(static_cast<size_t>(limit));
+  }
+  std::move(callback).Run(std::move(rows));
+}
+
+void FakeSidebarModel::ReopenArchived(const GURL& url, base::Time archived_at) {
+  // The real model opens a tab and deletes the row. There is no tab strip
+  // here, so it records the call and deletes the row — which is the half the
+  // list can see.
+  for (const ArchivedRow& row : archived_) {
+    if (row.url == url && row.archived_at == archived_at) {
+      reopened_.push_back(row);
+      break;
+    }
+  }
+  std::erase_if(archived_, [&](const ArchivedRow& row) {
+    return row.url == url && row.archived_at == archived_at;
+  });
 }
 
 void FakeSidebarModel::AddObserver(Observer* observer) {

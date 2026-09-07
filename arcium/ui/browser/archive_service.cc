@@ -14,6 +14,7 @@
 #include "arcium/browser/tab_binding.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -91,6 +92,38 @@ void ArchiveService::ArchiveAllToday() {
     ArchiveAndClose(handle);
   }
   RescheduleTimer();
+}
+
+void ArchiveService::RequestRecent(SpaceId space_id,
+                                   int limit,
+                                   RecentCallback callback) {
+  if (!store_ || !store_runner_) {
+    // Posted rather than run here. A caller that is answered from inside its
+    // own call has a second order of events to be correct in, and this branch
+    // is the rare one, so it would be the one nobody tested.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(callback), std::vector<ArchivedTab>()));
+    return;
+  }
+  // base::Unretained for the same reason Add's is safe: the store belongs to
+  // `store_runner_`, is only ever touched there, and its owner deletes it on
+  // that same sequence behind every task already posted. The reply runs here
+  // and is the caller's to keep alive, or not.
+  store_runner_->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&ArchiveStore::ListRecent, base::Unretained(store_),
+                     space_id, limit),
+      std::move(callback));
+}
+
+void ArchiveService::RemoveArchived(const GURL& url, base::Time archived_at) {
+  if (!store_ || !store_runner_) {
+    return;
+  }
+  store_runner_->PostTask(
+      FROM_HERE, base::BindOnce(&ArchiveStore::Remove, base::Unretained(store_),
+                                url, archived_at));
 }
 
 bool ArchiveService::MayArchive(tabs::TabHandle handle) const {
