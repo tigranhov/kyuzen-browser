@@ -104,6 +104,20 @@ scripts/perf [--runs N] [--idle S] [--label L]   # startup, idle RSS, process co
 out/dev/arcium_unittests      # model and adapter tests (scripts/build dev arcium_unittests)
 ```
 
+Debugging switches, passed through `scripts/run`:
+
+```
+--arcium-fake-clock-offset=13h   # only the archive service's clock moves forward
+```
+
+`--arcium-fake-clock-offset` takes a `base::TimeDeltaFromString` duration (`13h`, `2d`, `1h30m`)
+and moves **only** the clock `ArchiveService` reads when it asks whether a Today tab has been idle
+long enough. It deliberately does not move `base::Time::Now()` for the process: that would also
+move the model store's writes, the archive rows' own timestamps and session restore's last-active
+times, corrupting the very records the archive acceptance pass exists to check. An absent,
+unparseable, negative or infinite value means zero. It does not override the never-archive rules,
+so a pass under the switch still proves something. Declared in `arcium/common/arcium_features.h`.
+
 Verifying UI without screen capture: `arcium_playground --snapshot=<png>` and
 `scripts/run --arcium-snapshot=<png> [--arcium-snapshot-delay=<seconds>]` paint the Views tree
 offscreen at 2x, write a PNG, and log every view's class, bounds and visibility. Web contents come
@@ -131,7 +145,7 @@ busy; touching one Views file and rebuilding 17 s; rebase no-op 29 s; views_exam
 |---|---|
 | 0 Foundation | done, see docs/stage0-carryover.md and docs/perf/ |
 | 1 Visual MVP | done, see docs/stage1-findings.md and docs/perf/ |
-| 2 Arc tab model | in close-out, see docs/stage2-findings.md |
+| 2 Arc tab model | in close-out — suite, perf and netaudit recorded (docs/stage2-findings.md, docs/perf/2026-09-07-stage2.md); the A2.1 and A2.2 human acceptance pass is outstanding and the stage is not done until it runs |
 | 2.5 Entry behaviour | not started — nested folders, model migration |
 | 2.6 Favourite home boundary | design pending, see spec section 5 |
 | 3 Spaces and profiles | not started |

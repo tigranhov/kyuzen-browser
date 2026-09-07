@@ -289,7 +289,55 @@ Acceptance: A8.1 a signed build installs on a clean Mac and updates itself to th
 | Rebase conflicts grow with patch count | all | Logic in `arcium/`, patches are hooks only; rebase monthly, never skip |
 | UI-thread jank from painting favicons and gradients | 1, 3 | Cache rendered gradients; measure NF4 from Stage 1 |
 
-## 7. Testing strategy
+## 7. Deviations
+
+Where a shipped stage differs from what this document says, the difference is recorded here rather
+than by quietly editing the requirement, so a reader can tell an intentional change from a
+mistake. A deviation is a place the spec was wrong or under-specified and the build corrected it.
+Stages 0 and 1 shipped with none.
+
+Distinct from Stages 2.5 and 2.6 in section 5: those are new work the spec never covered, not
+departures from what it did say.
+
+### Stage 2
+
+**D2-1. Folders are Arcium entities, not Chromium tab groups.** Line 76 says a Folder is "built on
+Chromium's tab group data where it fits". It does not fit, and `arcium/` contains no reference to
+`tab_groups::` at all. Three reasons, in order of weight. A `TabGroup` belongs to one
+`TabStripModel`, so it is per window; a folder must be per profile and appear identically in every
+window, which is the same reason entries are not per window. A `TabGroup` can only contain live
+tabs, but a folder's whole point is holding pinned entries that outlive their tabs and are usually
+cold — a group cannot represent an entry with no tab. And a group is saved by Chromium's own
+tab-group sync into storage Arcium does not own, which would put half the model in a file the
+stage does not control and cannot migrate. `Folder` is therefore a plain struct in
+`arcium/browser/model/folder.h`, serialized in the same JSON file as everything else, and Stage
+2.5's nesting requirement is a change to that struct rather than a fight with an upstream type.
+
+**D2-2. Today tabs have never-archive rules the spec does not mention.** R2.3 says Today tabs
+auto-archive after the idle timeout, with no exceptions. Implemented exactly that way, the feature
+eats the user's work, so `ArchiveService::MayArchive` refuses five cases: the window's **active
+tab**; a tab **claimed by an entry** (a pinned or favourite tab is not a Today tab, whatever the
+timeout says); a tab that is **currently audible**; a tab whose page has a **`beforeunload` or
+`unload` handler**, because a page with something to say about being closed must not be closed
+silently; and any tab belonging to **another window's strip**, which is another service's
+business. A `kNever` timeout disables the sweep entirely, as R2.3 already allows.
+
+The explicit "Clear" button is deliberately not bound by the first rule — it archives every
+unclaimed tab including the active one, because that is a button the user pressed rather than an
+automatic sweep. It still respects the claimed-by-an-entry rule, since clearing Today must not
+delete pinned entries.
+
+**D2-3. A custom title is permanent.** R2.4 says a renamed title "persists for pinned and
+favorites", which reads as "survives a restart". It is stronger than that: `TabEntry` carries
+`custom_title` and `last_title` as separate fields, `SyncEntryTitles()` only ever writes
+`last_title`, and `DisplayTitle()` prefers `custom_title` whenever it is non-empty. So a rename is
+never overwritten by the page's own title — not on navigation, not on a title change, not on
+restore. The page title keeps updating underneath in `last_title` and reappears if the custom
+title is set back to empty, which is the only way to undo a rename. The weaker reading, where the
+page's title wins after a navigation, would make renaming a pinned tab useless precisely on the
+pinned tabs that navigate.
+
+## 8. Testing strategy
 
 - Unit tests for every model and service in `arcium/test/`, run with Chromium's test runner.
 - Browser tests for tab-to-space mapping, partition isolation and persistence.

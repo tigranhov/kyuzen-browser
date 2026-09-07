@@ -16,6 +16,66 @@ Same shape as `docs/stage1-findings.md`.
 | 9 | `tabs::TabInterface::GetFromContents` dereferences its lookup unconditionally (`components/tabs/impl/tab_interface.cc`), so an `if (!tab)` guard after it is dead code that reads as protection. `MaybeGetFromContents` is the null-safe one | `arcium/browser/session_tab_entry.cc` | Both lookups use `MaybeGetFromContents`, so the guards are real. At a patched seam the failure mode has to be a cold entry, not a crashed browser |
 | 10 | `content::BrowserContext` exposes no route from an off-the-record context to its parent — only `IsOffTheRecord()`. `arcium/browser` therefore *cannot* write regular-profile state from an incognito `WebContents`, whatever it does | `arcium/browser/session_tab_entry.cc` | The incognito session path is safe by construction rather than by a check. Tested anyway (`AnIncognitoTabNeitherBindsNorWritesRegularState`), because the argument is only as good as the API staying that way |
 
+| 11 | Under load, `arcium_unittests` reported six failures on one run and passed on every other. Two of the six were `SidebarViewsTest.PressingTheButtonWhileTheListIsClosingOpensNothing` and `TabSearchServiceTest.SuppressedNewArchiveRowsDoNotHideOlderMatches`, both timing-sensitive around `Browser`'s 200 ms coalescing window | `arcium/test/` | Recorded, not chased. Eight full runs since (three in Task 13A, five in 13B at load average 96-111) and 30 back-to-back iterations of the two named tests were all green, so it is not reproducible on demand. If it recurs on a **quiet** machine it is a real flake in those tests and worth a fix; under load it is the machine. See "The flaky run" below |
+
+## Acceptance A2.1 — NOT YET EXECUTED
+
+Nothing in this table has been run. It is written in the shape Stage 1's
+daily-driver checklist used, ready to be filled in by the human pass, and Stage 2
+is not done until it is. A2.1 in the spec is one line — "Pin, favorite, rename,
+fold; quit and relaunch; everything is where it was" — and the rows below are
+that line decomposed into things a person can actually observe, one per model
+command the stage shipped.
+
+**Where the results come from.** This pass is tracked on the human test checklist
+at https://claude.ai/code/artifact/dd8e000a-b469-4dd9-878a-e619bb1705b4, which
+also carries acceptance A2.2 (the archive pass, which uses the
+`--arcium-fake-clock-offset` switch Task 13A added) and the session-restore
+scenarios in the next section. Copy results back into these tables when the pass
+is run; a row that had to be fixed records the fix, as Stage 1's did.
+
+```bash
+scripts/build dev chrome && scripts/run
+```
+
+| Item | Result | Fix |
+|---|---|---|
+| Drag a Today tab above the divider pins it (`PinTab`) | not run | |
+| Drag a tab into the Favorites grid makes a Favorite (`AddToFavorites`) | not run | |
+| A Favorite with no live tab opens its `home_url`; with one, focuses it (`ActivateEntry`) | not run | |
+| A pinned tab navigated away offers "return to pinned URL" on hover and by shortcut (`ReturnToPinnedUrl`) | not run | |
+| Rename a row inline; the custom title sticks and is not overwritten by the page's own title (`SetEntryTitle`) | not run | |
+| Create a folder from a pinned entry (`CreateFolderWithEntry`), rename it (`SetFolderName`), collapse it (`SetFolderCollapsed`) | not run | |
+| Drag a pinned entry into and out of a folder (`MoveEntryToFolder`) | not run | |
+| Reorder within a section, and move an entry between sections, by drag (`MoveEntryToSection`) | not run | |
+| Unpin an entry; its live tab survives as a Today row rather than closing (`UnpinEntry`) | not run | |
+| Every row type's context menu offers its commands and nothing that does not apply | not run | |
+| **Quit with Cmd+Q and relaunch.** Pinned entries, favourites, folders, custom titles, folder names, collapsed state and order are all where they were | not run | |
+| A second window on the same profile shows the same entries, and a change in one window appears in the other | not run | |
+
+The last two rows are the ones that matter most: the first is A2.1's actual
+sentence, and the second is the claim in the perf record that `ModelStore` is
+owned per profile and shared by every window, which nothing else on this list
+exercises.
+
+## The flaky run
+
+Recorded so it is a note rather than folklore. During Task 13A the suite run
+immediately after a six-minute build reported 6 failures; five subsequent runs
+were clean. Task 13B tried to reproduce it and could not:
+
+| Attempt | Result |
+|---|---|
+| 5 consecutive full runs, load average 96-111 | 286/286 each time |
+| `--gtest_repeat=30` over the two named tests | 60/60 passed |
+
+Suite wall time across those runs varied from 28 s to 36 s, and in 13A from 31 s
+to 76 s, which is the size of the machine's own variance. The one thing not
+reproduced is 13A's exact condition — a run starting the instant a large build
+released ten cores and a USB SSD. That is the most likely explanation and it is
+not a defect in the code. Treat a repeat on a **quiet** machine as a real bug in
+those two tests; treat one under load as the machine, and say which it was.
+
 ## Session restore acceptance list — NOT YET RUN
 
 These need a human at the window and a `chrome` build, neither of which Task 12

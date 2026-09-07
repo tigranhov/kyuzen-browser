@@ -41,8 +41,8 @@ wiring: both files build in `//chrome/browser/ui:ui`, which reaches `//arcium/br
 patch `0010`'s dep on `//arcium/ui/browser` and that target's `public_deps`. Adding a second
 `//arcium/browser` line to `chrome/browser/ui/BUILD.gn` was tried and reverted: it lands inside
 patch `0010`'s hunk context, which breaks `0010`'s already-applied check and makes `scripts/sync`
-non-idempotent — the rule at the top of this file, met in practice. `0125`'s own header carries
-the long form.
+non-idempotent — the rule at the top of this file, met in practice. The long form is `0125`'s own
+header, and `docs/stage2-findings.md` finding 5 for why `:impl` is the right target.
 
 ## Monthly rebase routine
 
