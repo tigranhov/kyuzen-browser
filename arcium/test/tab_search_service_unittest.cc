@@ -328,6 +328,33 @@ TEST_F(TabSearchServiceTest, SuppressedNewArchiveRowsDoNotHideOlderMatches) {
   EXPECT_EQ(GURL("https://gone.example/"), results[0].url);
 }
 
+// StoreFetchLimit's bound counts distinct URLs the user can reach, so it is
+// exact only if the store never hands back two rows for one URL. It does not
+// promise that by itself: the archive's key is (url, archived_at), so
+// archiving one tab twice leaves two rows at one URL, and a plain
+// ORDER BY archived_at DESC lets both occupy the window.
+//
+// One non-matching open tab makes the fetch limit 2, and both of that tab's
+// URL's archive rows are newer than the only match the user cannot already
+// reach. Before ArchiveStore::Search grouped by URL, both filled the window,
+// both were suppressed, and the archive half came back empty with a genuine
+// match one row further down.
+TEST_F(TabSearchServiceTest, RepeatedArchiveRowsForOneUrlDoNotEmptyTheArchive) {
+  const base::Time now = base::Time::Now();
+  AddTabWithTitle(GURL("https://x.example/"), u"Nothing alike");
+
+  archive_.Add(MakeArchivedAt("https://x.example/", u"Zebra newest", now));
+  archive_.Add(MakeArchivedAt("https://x.example/", u"Zebra newer",
+                              now - base::Minutes(1)));
+  archive_.Add(MakeArchivedAt("https://gone.example/", u"Zebra oldest",
+                              now - base::Hours(1)));
+
+  std::vector<SearchResult> results = Search(u"zebra", 1);
+  ASSERT_EQ(1u, results.size());
+  EXPECT_EQ(SearchResult::Source::kArchive, results[0].source);
+  EXPECT_EQ(GURL("https://gone.example/"), results[0].url);
+}
+
 // The suppression above must never fold two live tabs together: two tabs on
 // one URL are two things the user can switch to, and collapsing them is how a
 // tab becomes unreachable.

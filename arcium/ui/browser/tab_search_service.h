@@ -117,13 +117,15 @@ class TabSearchService {
   // themselves, so a caller has to be told rather than shown:
   //
   //   * It is limited by RECENCY, NOT BY SCORE. ArchiveStore::Search takes the
-  //     newest matching rows and the ranking here re-sorts whatever it gets,
-  //     so an old row with a title-prefix match can fall outside that window
-  //     and never be seen while a recent URL-only match survives. The store
-  //     fetch deliberately over-asks — enough that dropping rows the user can
-  //     already reach cannot empty the archive half — but that only widens the
-  //     window; it does not order it by score. Ordering it properly means
-  //     ranking in SQL, which is the FTS migration ArchiveStore::Search
+  //     newest matching rows — one per URL, since its LIMIT counts distinct
+  //     URLs rather than rows, so a page archived repeatedly appears once at
+  //     its most recent archived_at — and the ranking here re-sorts whatever
+  //     it gets, so an old row with a title-prefix match can fall outside that
+  //     window and never be seen while a recent URL-only match survives. The
+  //     store fetch deliberately over-asks — enough that dropping rows the
+  //     user can already reach cannot empty the archive half — but that only
+  //     widens the window; it does not order it by score. Ordering it properly
+  //     means ranking in SQL, which is the FTS migration ArchiveStore::Search
   //     already anticipates.
   //
   //   * It is case-insensitive but NOT accent-insensitive, while the live and

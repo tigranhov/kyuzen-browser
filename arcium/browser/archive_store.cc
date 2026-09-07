@@ -175,8 +175,16 @@ bool ArchiveStore::InitSchema(int* sqlite_error) {
       "  folded_url TEXT NOT NULL,"
       "  folded_title TEXT NOT NULL,"
       "  PRIMARY KEY (url, archived_at))";
-  // Both indexes serve a query the UI actually makes: the archive list is
-  // by space and recency, search is by recency across spaces.
+  // idx_space_time serves the archive list, which is by space and recency.
+  //
+  // idx_time no longer serves Search directly: since Search groups by url,
+  // the ordering it wants is over one MAX(archived_at) per group, not over
+  // raw rows, and the automatic index SQLite builds for PRIMARY KEY
+  // (url, archived_at) is the one that supplies the grouping. The index is
+  // kept rather than dropped because dropping it means a schema migration
+  // for existing archives, and it stays useful the moment any by-recency
+  // query across spaces is added back. Revisit it at the FTS migration,
+  // which rewrites this table anyway.
   static constexpr char kCreateSpaceIndex[] =
       "CREATE INDEX IF NOT EXISTS idx_space_time"
       "  ON archived_tabs(space_id, archived_at DESC)";
@@ -279,11 +287,35 @@ std::vector<ArchivedTab> ArchiveStore::Search(const std::u16string& query,
   // non-ASCII text untouched — "ÖKONOMIE" vs "ökonomie" would not match.
   // FTS would be a schema to migrate to later if a plain scan gets too slow;
   // the archive is small enough that it isn't yet.
+  //
+  // GROUP BY url, so a URL archived several times contributes one row and the
+  // LIMIT counts distinct URLs rather than rows. See the header for why a
+  // caller depends on that; the short version is that ungrouped, a page
+  // archived twice can fill a small window on its own and starve every other
+  // match behind it.
+  //
+  // The grouping relies on SQLite's documented bare-column rule: in an
+  // aggregate query whose only aggregate is min() or max(), the columns that
+  // are neither grouped nor aggregated take their values from the row that
+  // produced that min/max (sqlite.org/lang_select.html#bareagg). So url,
+  // title, space_id and the MAX all come from ONE row — the newest — rather
+  // than being spliced from different rows of the group. That matters beyond
+  // tidiness: (url, archived_at) is the archive's primary key and how a
+  // caller names the row again to reopen or Remove() it, so a title from one
+  // row beside a timestamp from another would hand out a key to a row the
+  // user never saw. Ties cannot arise, since that same primary key makes
+  // (url, archived_at) unique.
+  //
+  // The MAX is over the MATCHING rows only, the WHERE having already run: the
+  // newest row whose title matches, not the newest row that happens to share
+  // its URL. A page whose title changed between two archivings is therefore
+  // still findable by its older title.
   const std::string needle = "%" + EscapeLikePattern(FoldToUtf8(query)) + "%";
   sql::Statement statement(db_.GetUniqueStatement(
-      "SELECT url, title, space_id, archived_at FROM archived_tabs"
+      "SELECT url, title, space_id, MAX(archived_at) AS newest_archived_at"
+      " FROM archived_tabs"
       " WHERE folded_title LIKE ? ESCAPE '\\' OR folded_url LIKE ? ESCAPE '\\'"
-      " ORDER BY archived_at DESC LIMIT ?"));
+      " GROUP BY url ORDER BY newest_archived_at DESC LIMIT ?"));
   statement.BindString(0, needle);
   statement.BindString(1, needle);
   statement.BindInt(2, limit);

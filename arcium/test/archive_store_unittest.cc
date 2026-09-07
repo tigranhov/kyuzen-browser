@@ -109,6 +109,55 @@ TEST_F(ArchiveStoreTest, SearchEscapesLikeMetacharactersInTheQuery) {
   EXPECT_EQ(u"100% done", results[0].title);
 }
 
+// The archive's key is (url, archived_at), so archiving one tab twice — close
+// it, reopen it, let it go idle again — leaves two rows at one URL. Search
+// collapses them: at most one row per URL, so its LIMIT counts distinct URLs
+// rather than rows and a repeatedly archived page cannot fill the window by
+// itself. TabSearchService's over-fetch bound is "limit + one row per URL the
+// user can already reach", which is only exact because of this.
+TEST_F(ArchiveStoreTest, SearchLimitsDistinctUrlsRatherThanRows) {
+  const base::Time now = base::Time::Now();
+  store_.Add(MakeTab("https://dup.example/", u"Zebra newest", now));
+  store_.Add(
+      MakeTab("https://dup.example/", u"Zebra newer", now - base::Minutes(1)));
+  store_.Add(
+      MakeTab("https://other.example/", u"Zebra oldest", now - base::Hours(1)));
+
+  // Ungrouped, the two dup.example rows are the two newest and fill this
+  // limit between them, leaving other.example unread.
+  std::vector<ArchivedTab> results = store_.Search(u"zebra", 2);
+  ASSERT_EQ(2u, results.size());
+  EXPECT_EQ(GURL("https://dup.example/"), results[0].url);
+  EXPECT_EQ(GURL("https://other.example/"), results[1].url);
+}
+
+// The one row a repeated URL contributes is the newest, and it carries that
+// row's own title and archived_at. The archived_at half is load-bearing:
+// (url, archived_at) is how a caller names the row again to reopen or
+// Remove() it, so a grouped row reporting some other row's timestamp would
+// hand out a key to a row the user did not choose.
+TEST_F(ArchiveStoreTest, SearchReturnsTheNewestRowForARepeatedUrl) {
+  const base::Time now = base::Time::Now();
+  store_.Add(
+      MakeTab("https://dup.example/", u"Zebra oldest", now - base::Hours(2)));
+  store_.Add(MakeTab("https://dup.example/", u"Zebra newest", now));
+  store_.Add(
+      MakeTab("https://dup.example/", u"Zebra middle", now - base::Hours(1)));
+
+  std::vector<ArchivedTab> results = store_.Search(u"zebra", 10);
+  ASSERT_EQ(1u, results.size());
+  EXPECT_EQ(u"Zebra newest", results[0].title);
+  EXPECT_EQ(now, results[0].archived_at);
+  EXPECT_EQ(space_, results[0].space_id);
+
+  // The pair really does name that row and no other: removing it uncovers the
+  // next-newest rather than emptying the URL out.
+  store_.Remove(results[0].url, results[0].archived_at);
+  results = store_.Search(u"zebra", 10);
+  ASSERT_EQ(1u, results.size());
+  EXPECT_EQ(u"Zebra middle", results[0].title);
+}
+
 TEST_F(ArchiveStoreTest, RemoveDropsOneRow) {
   const base::Time now = base::Time::Now();
   store_.Add(MakeTab("https://a.example/", u"A", now));

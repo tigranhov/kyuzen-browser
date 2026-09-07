@@ -61,7 +61,25 @@ class ArchiveStore {
 
   void Add(const ArchivedTab& tab);
   std::vector<ArchivedTab> ListRecent(SpaceId space_id, int limit);
+
+  // At most one row per URL — the newest matching one — newest first. So
+  // `limit` bounds DISTINCT URLS, not rows: a page archived five times is one
+  // result carrying its most recent archived_at, not five.
+  //
+  // The archive keys rows by (url, archived_at) and Add() writes a fresh row
+  // on every archiving, so one URL accumulates rows as the user closes and
+  // reopens the same page. Handing all of them back is worse for the reader
+  // (one page listed five times) and actively wrong for a caller that filters
+  // the result and sized its request assuming one row per URL — it can have
+  // its whole result filtered away while a match it wanted sits just outside
+  // the LIMIT. TabSearchService is exactly that caller; see StoreFetchLimit
+  // in tab_search_service.cc.
+  //
+  // Matching is on the folded shadow columns, which are case-folded only:
+  // case-insensitive, not accent-insensitive. Ordering is by recency, never
+  // by relevance.
   std::vector<ArchivedTab> Search(const std::u16string& query, int limit);
+
   void Remove(const GURL& url, base::Time archived_at);
 
   // Exposes the file-unusable classifier for a unit test that pins it

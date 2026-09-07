@@ -79,6 +79,17 @@ int ScoreFor(Matcher& matcher, const std::u16string& title, const GURL& url) {
 // A 2x or 4x factor would only make the hole rarer, and rare is how this one
 // got as far as a review.
 //
+// "At most one row suppressed per reachable URL" is a fact about the store,
+// not an assumption made here: ArchiveStore::Search returns at most one row
+// per URL, so its LIMIT counts distinct URLs and this addition is in the same
+// unit as the thing it is compensating for. That is load-bearing. The archive
+// keys rows by (url, archived_at), so one URL accumulates a row per
+// archiving; if those all reached this code, a single reachable URL could
+// occupy the whole window on its own and be suppressed row by row, which is
+// the failure the addition exists to prevent, reappearing one level down.
+// Should that grouping ever be relaxed, this bound stops being exact — it
+// does not merely get looser.
+//
 // The counts are read here rather than from the reachable set, which does not
 // exist until the reply: both are O(1) — count() is a size, and entries() is
 // the whole vector rather than the default space's slice precisely so no

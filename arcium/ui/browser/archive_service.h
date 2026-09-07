@@ -114,8 +114,12 @@ class ArchiveService : public TabStripModelObserver,
   // WeakPtr.
   void RequestRecent(SpaceId space_id, int limit, ReadCallback callback);
 
-  // The `limit` archived tabs matching `query`, newest first, over every
-  // space. Asynchronous for exactly the reason RequestRecent is, and posted
+  // The archived tabs matching `query`, newest first, over every space. This
+  // is a pass-through, so `limit` carries ArchiveStore::Search's meaning and
+  // not RequestRecent's: it bounds DISTINCT URLS, one row each, rather than
+  // rows — a page archived repeatedly counts once.
+  //
+  // Asynchronous for exactly the reason RequestRecent is, and posted
   // onto the same sequence for exactly the reason it is: sql::Database is
   // sequence-affine, this service owns the one sequence it is bound to, and a
   // second async path over the same store would be a second place to get that
