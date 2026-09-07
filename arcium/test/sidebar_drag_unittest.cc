@@ -12,6 +12,7 @@
 #include "arcium/ui/sidebar/favorites_grid_view.h"
 #include "arcium/ui/sidebar/folder_header_view.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
+#include "arcium/ui/sidebar/row_drag_image.h"
 #include "arcium/ui/sidebar/row_drag_session.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
@@ -31,6 +32,7 @@
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/vector2d.h"
+#include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/button/button.h"
 #include "ui/views/drag_controller.h"
 #include "ui/views/layout/box_layout.h"
@@ -261,6 +263,80 @@ TEST_F(SidebarDragTest, ATodayRowWritesATabIndexAndNoEntry) {
   ASSERT_TRUE(payload);
   EXPECT_FALSE(payload->entry_id.is_valid());
   EXPECT_TRUE(payload->is_tab());
+}
+
+// A drag with no image is fatal, not ugly: DragDropClientMac turns whatever
+// the provider holds into an NSImage and DCHECKs that it is not zero-sized,
+// so this is the difference between dragging a row and aborting the browser.
+// None of the drop tests above reach it -- they call the drop handlers
+// directly, because View::DoDrag enters a nested platform loop a unit test
+// cannot drive, and the image is read inside that loop.
+TEST_F(SidebarDragTest, ARowDragCarriesADragImage) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  MakePinned();
+  Refresh();
+  TabRowView* row = RowIn(pinned_, 0);
+  ASSERT_TRUE(row);
+
+  const gfx::ImageSkia image =
+      DragDataFrom(row, row)->provider().GetDragImage();
+  EXPECT_FALSE(image.isNull());
+  EXPECT_FALSE(image.size().IsEmpty());
+}
+
+// The case that would put the crash back, and the reason the image is not
+// built from the dragged view's own pixels. A row is drawn as soon as its tab
+// exists -- before the favicon has loaded and before the page has given up a
+// title -- so a user dragging a tab they just opened is dragging a row with
+// nothing drawn in it but its URL. Straight at the helper, because the fake
+// model gives every row a swatch favicon and cannot produce this row.
+TEST_F(SidebarDragTest, ARowWithNoFaviconAndNoTitleStillCarriesADragImage) {
+  SidebarRow bare;
+  bare.url = GURL("https://bare.example/");
+  bare.tab_index = 0;
+  ASSERT_TRUE(bare.favicon.IsEmpty());
+  ASSERT_TRUE(bare.title.empty());
+
+  ui::OSExchangeData data;
+  // Null source too: rasterizing a favicon needs a colour provider, which a
+  // view has only once it is in a widget, and this is the path that has none.
+  SetRowDragImage(bare, nullptr, gfx::Point(), &data);
+
+  const gfx::ImageSkia image = data.provider().GetDragImage();
+  EXPECT_FALSE(image.isNull());
+  EXPECT_FALSE(image.size().IsEmpty());
+}
+
+// The guard that keeps a row with no URL at all away from the code above.
+// It matters more than it looks: the drag image is a button, and painting a
+// button with neither text nor a URL to fall back on fails Views' own
+// accessibility paint check -- an unnamed focusable view -- which is fatal in
+// exactly the same builds the zero-size image was. So "a blank row is not
+// draggable" is what stops one abort being traded for another.
+TEST_F(SidebarDragTest, ARowNamingNeitherAnEntryNorATabIsNotDraggable) {
+  auto row = std::make_unique<TabRowView>(TabRowView::Delegate{});
+  ASSERT_FALSE(row->row().entry_id.is_valid());
+  ASSERT_LT(row->row().tab_index, 0);
+
+  EXPECT_EQ(ui::DragDropTypes::DRAG_NONE,
+            row->GetDragOperationsForView(row.get(), gfx::Point()));
+}
+
+// The grid is a second drag source with its own WriteDragDataForView, so it
+// can lose the image on its own.
+TEST_F(SidebarDragTest, AFavouriteTileDragCarriesADragImage) {
+  model_.AddTab(u"Fav", "https://fav.example/", SidebarSection::kFavorites,
+                false);
+  MakeGrid();
+  Refresh();
+  views::test::RunScheduledLayout(widget_.get());
+  ASSERT_FALSE(grid_->children().empty());
+  views::View* tile = grid_->children()[0];
+
+  const gfx::ImageSkia image =
+      DragDataFrom(grid_, tile)->provider().GetDragImage();
+  EXPECT_FALSE(image.isNull());
+  EXPECT_FALSE(image.size().IsEmpty());
 }
 
 TEST_F(SidebarDragTest, DataFromSomewhereElseIsRefused) {

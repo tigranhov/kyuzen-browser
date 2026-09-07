@@ -9,6 +9,7 @@
 
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
+#include "arcium/ui/sidebar/row_drag_image.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/vector_icons.h"
@@ -298,6 +299,7 @@ void TabRowView::WriteDragDataForView(views::View* sender,
   payload.entry_id = row_.entry_id;
   payload.tab_index = row_.tab_index;
   payload.Write(data);
+  SetRowDragImage(row_, sender, press_pt, data);
   // Once per drag, at the one moment a source knows one is starting.
   if (delegate_.drag_started) {
     delegate_.drag_started.Run();

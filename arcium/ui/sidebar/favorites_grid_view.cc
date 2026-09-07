@@ -12,6 +12,7 @@
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
+#include "arcium/ui/sidebar/row_drag_image.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "base/functional/bind.h"
@@ -180,6 +181,7 @@ void FavoritesGridView::WriteDragDataForView(views::View* sender,
   payload.entry_id = rows_[*index].entry_id;
   payload.tab_index = rows_[*index].tab_index;
   payload.Write(data);
+  SetRowDragImage(rows_[*index], sender, press_pt, data);
   // Once per drag, at the one moment a source knows a drag is starting: the
   // empty sections need a band to be droppable at all.
   if (drag_session_.IsObserving()) {
