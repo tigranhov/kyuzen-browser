@@ -579,6 +579,106 @@ TEST_F(SidebarDragTest, AFolderHeaderRefusesAFavourite) {
   EXPECT_EQ(1, model_.folders()[0].entry_count);
 }
 
+// The header refuses a favourite and gives no highlight, but DropHelper walks
+// a refused drop up to the view behind it — the Pinned list, which used to
+// still accept and land the favourite as a top-level pinned entry. That
+// silently changes the row's kind as a side effect of a gesture aimed at a
+// folder, which is the exact outcome the header's own refusal exists to
+// prevent. The list must refuse too, while the pointer sits over the header
+// that refused it.
+TEST_F(SidebarDragTest,
+       PinnedRefusesAFavouriteWhenTheHeaderUnderThePointerRefusedIt) {
+  model_.AddTab(u"Inside", "https://inside.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Fav", "https://fav.example/", SidebarSection::kFavorites,
+                false);
+  MakeGrid();
+  MakePinned();
+  model_.AddFolderWith(u"Work", {u"Inside"});
+  Refresh();
+
+  FolderHeaderView* header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  ASSERT_TRUE(header);
+  views::View* tile = grid_->children()[0];
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFrom(grid_.get(), tile);
+
+  // Squarely inside the header, in the Pinned list's own coordinate space —
+  // exactly what event.location() carries once DropHelper walks the header's
+  // refusal up to its owning list.
+  const gfx::Point at = header->bounds().CenterPoint();
+  ui::DropTargetEvent event(*data, gfx::PointF(at), gfx::PointF(at),
+                            ui::DragDropTypes::DRAG_MOVE);
+
+  // CanDrop is format-level and unchanged: the list still takes an entry in
+  // general, so a drag elsewhere in it still highlights.
+  ASSERT_TRUE(pinned_->CanDrop(*data));
+  pinned_->OnDragEntered(event);
+  EXPECT_EQ(ui::DragDropTypes::DRAG_NONE, pinned_->OnDragUpdated(event));
+  EXPECT_FALSE(pinned_->drop_index_for_testing().has_value());
+  EXPECT_FALSE(pinned_->GetDropCallback(event));
+
+  // Nothing happened: the favourite is still a favourite, the folder still
+  // holds only "Inside".
+  EXPECT_EQ((std::vector<std::u16string>{u"Fav"}),
+            TitlesInSection(SidebarSection::kFavorites));
+  EXPECT_EQ((std::vector<std::u16string>{u"Inside"}),
+            TitlesInSection(SidebarSection::kPinned));
+  EXPECT_EQ(1, model_.folders()[0].entry_count);
+}
+
+// The asymmetry the ruling keeps: a Today tab dropped on the same header
+// falls all the way through and pins at the top level, because that changes
+// no row's kind — there is no kind to protect for a tab that was never an
+// entry.
+TEST_F(SidebarDragTest, PinnedStillAcceptsATodayTabOverAFolderHeader) {
+  model_.AddTab(u"Inside", "https://inside.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Loose", "https://loose.example/", SidebarSection::kToday,
+                true);
+  MakePinned();
+  MakeToday();
+  model_.AddFolderWith(u"Work", {u"Inside"});
+  Refresh();
+
+  FolderHeaderView* header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  ASSERT_TRUE(header);
+  TabRowView* loose = RowIn(today_, 0);
+  ASSERT_TRUE(loose);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFrom(loose, loose);
+
+  DropOn(pinned_, *data, header->bounds().CenterPoint());
+
+  EXPECT_TRUE(TitlesInSection(SidebarSection::kToday).empty());
+  std::optional<SidebarRow> moved = RowNamed(u"Loose");
+  ASSERT_TRUE(moved);
+  EXPECT_EQ(SidebarSection::kPinned, moved->section);
+  EXPECT_FALSE(moved->folder_id.has_value());
+}
+
+// A fix that refuses too much is worse than the bug: the same favourite,
+// dropped on the same list, away from any header, still lands.
+TEST_F(SidebarDragTest, PinnedStillAcceptsAFavouriteAwayFromAFolderHeader) {
+  model_.AddTab(u"Inside", "https://inside.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Fav", "https://fav.example/", SidebarSection::kFavorites,
+                false);
+  MakeGrid();
+  MakePinned();
+  model_.AddFolderWith(u"Work", {u"Inside"});
+  Refresh();
+
+  views::View* tile = grid_->children()[0];
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFrom(grid_.get(), tile);
+
+  DropOn(pinned_, *data, BelowEveryRow(pinned_));
+
+  EXPECT_TRUE(TitlesInSection(SidebarSection::kFavorites).empty());
+  EXPECT_EQ((std::vector<std::u16string>{u"Inside", u"Fav"}),
+            TitlesInSection(SidebarSection::kPinned));
+}
+
 // The predicate asks the list, not the payload, so it also refuses an id the
 // model has dropped since the drag began — which is what no field written
 // into the payload at drag-start could do.

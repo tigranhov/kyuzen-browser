@@ -433,6 +433,22 @@ std::optional<int> TabListView::EntryPositionInSection(EntryId id) const {
   return std::nullopt;
 }
 
+bool TabListView::IsOverHeaderAt(int y) const {
+  // A walk over the built headers, with no allocation: asked again on every
+  // drag-move event, the same as DropRowIndex.
+  for (const FolderHeaderView* header : headers_) {
+    if (y >= header->y() && y < header->bounds().bottom()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool TabListView::DropRefusedByHeader(int y, const RowDragData& payload) const {
+  return payload.is_entry() && IsOverHeaderAt(y) &&
+         !CanFolderAcceptEntry(payload.entry_id);
+}
+
 void TabListView::SetDropIndex(std::optional<size_t> index) {
   if (drop_index_ == index) {
     return;
@@ -473,7 +489,15 @@ int TabListView::OnDragUpdated(const ui::DropTargetEvent& event) {
     SetDropIndex(std::nullopt);
     return ui::DragDropTypes::DRAG_NONE;
   }
-  SetDropIndex(DropRowIndex(event.location().y()));
+  const int y = event.location().y();
+  if (DropRefusedByHeader(y, *drag_payload_)) {
+    // The header under the pointer already said no. No indicator either: a
+    // line this list would not honour is the same lie a header's highlight
+    // would have told.
+    SetDropIndex(std::nullopt);
+    return ui::DragDropTypes::DRAG_NONE;
+  }
+  SetDropIndex(DropRowIndex(y));
   return ui::DragDropTypes::DRAG_MOVE;
 }
 
@@ -488,13 +512,13 @@ views::View::DropCallback TabListView::GetDropCallback(
   if (!payload) {
     payload = RowDragData::Read(event.data());
   }
-  const DropAnchor anchor =
-      AnchorForDropIndex(DropRowIndex(event.location().y()));
+  const int y = event.location().y();
   drag_payload_.reset();
   SetDropIndex(std::nullopt);
-  if (!payload) {
+  if (!payload || DropRefusedByHeader(y, *payload)) {
     return base::NullCallback();
   }
+  const DropAnchor anchor = AnchorForDropIndex(DropRowIndex(y));
   // Weak, and with the payload and the anchor already resolved: the drop runs
   // after the event that produced it, and a model change from another window
   // can rebuild — or destroy — this list in between. The anchor is an entry

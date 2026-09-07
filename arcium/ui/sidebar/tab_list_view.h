@@ -148,6 +148,21 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // The position `id` holds among this section's entries right now, or
   // nothing when this section does not hold it.
   std::optional<int> EntryPositionInSection(EntryId id) const;
+  // Whether one of this list's folder headers sits under `y`, in this list's
+  // own coordinates — the same space `event.location()` arrives in once
+  // DropHelper walks a refused header's drop up to its owning list.
+  bool IsOverHeaderAt(int y) const;
+  // Whether the drop at `y` must be refused because the header under the
+  // pointer refused it. Only an entry can be refused this way: a Today tab is
+  // never `is_entry()`, so it always falls through and lands pinned at the
+  // top level, which invents no kind change for anyone to silently suffer. An
+  // entry a header would refuse — a favourite, or one the model has since
+  // dropped — must not quietly land here instead, one section down from where
+  // the header said no. Routes through CanFolderAcceptEntry, the exact
+  // predicate every header in this list already asks, rather than
+  // re-deriving the answer: it is also the one that keeps working when the
+  // model drops the id mid-drag.
+  bool DropRefusedByHeader(int y, const RowDragData& payload) const;
   // The drop boundary `to` turned into the position ReorderEntry wants, which
   // differ by one whenever the entry is moving down inside its own section.
   int ReorderPosition(EntryId id, int to) const;
