@@ -15,6 +15,7 @@
 #include "arcium/ui/sidebar/sidebar_view.h"
 #include "arcium/ui/sidebar/tab_list_view.h"
 #include "arcium/ui/sidebar/tab_row_view.h"
+#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -42,19 +43,16 @@ namespace {
 // the hook hands over is the real menu, built by the real path.
 class ScopedMenuCapture {
  public:
-  ScopedMenuCapture() {
-    RowContextMenu::SetShowHookForTesting(base::BindRepeating(
-        [](ScopedMenuCapture* self, RowContextMenu* menu) {
-          self->menu_ = menu;
-          ++self->count_;
-        },
-        base::Unretained(this)));
-  }
+  ScopedMenuCapture()
+      : hook_(RowContextMenu::SetShowHookForTesting(base::BindRepeating(
+            [](ScopedMenuCapture* self, RowContextMenu* menu) {
+              self->menu_ = menu;
+              ++self->count_;
+            },
+            base::Unretained(this)))) {}
   ScopedMenuCapture(const ScopedMenuCapture&) = delete;
   ScopedMenuCapture& operator=(const ScopedMenuCapture&) = delete;
-  ~ScopedMenuCapture() {
-    RowContextMenu::SetShowHookForTesting(RowContextMenu::ShowHookForTesting());
-  }
+  ~ScopedMenuCapture() = default;
 
   RowContextMenu* menu() { return menu_; }
   int count() const { return count_; }
@@ -62,6 +60,10 @@ class ScopedMenuCapture {
  private:
   raw_ptr<RowContextMenu> menu_ = nullptr;
   int count_ = 0;
+  // Restores the previous (empty) hook on destruction, so a forgotten-scoper
+  // bug is impossible to write here — the type itself is the guardrail the
+  // header's comment asks every caller to have.
+  base::AutoReset<RowContextMenu::ShowHookForTesting> hook_;
 };
 
 // Rebuilds the list on every model change, the way SidebarView does. Without
@@ -506,6 +508,7 @@ TEST_F(SidebarViewsTest, DeactivatingTheWindowLeavesTheRenameOpen) {
   TabRowView* row = views::AsViewClass<TabRowView>(list_->children()[0]);
   ASSERT_TRUE(row);
   row->BeginRename();
+  ASSERT_TRUE(row->is_renaming());
   RenameField* field = FocusedField();
   ASSERT_TRUE(field);
   field->SetText(u"Half typed");
@@ -605,6 +608,47 @@ TEST_F(SidebarViewsTest, FolderHeadersAreLaidOutInPositionOrder) {
                          .name);
 }
 
+// FakeSidebarModel must not be more permissive than ArciumModel::RemoveFolder,
+// which renormalises positions to 0..n-1 after a deletion.
+//
+// A single delete-then-create only produces a *tie* between the new folder
+// and the last survivor, and std::sort's tie-breaking on this small a range
+// turns out to preserve insertion order in practice — so a test built on one
+// collision passes whether or not positions are renormalised, the "passes
+// both directions" trap. Three deletions off the front instead: without
+// renormalising after each one, the survivors D and E keep the *stale*
+// positions (3 and 4) they had among five folders, both higher than the
+// next-free position (folders_.size(), 2) a folder made afterwards receives.
+// That is not a tie to break, it is F(2) sorting strictly before D(3) and
+// E(4) — an unambiguous wrong answer under any conforming sort.
+TEST_F(SidebarViewsTest, DeletingAFolderRenormalisesRemainingPositions) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Four", "https://four.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Five", "https://five.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Six", "https://six.example/", SidebarSection::kPinned, false);
+  const FolderId a = model_.AddFolderWith(u"A", {u"One"});
+  const FolderId b = model_.AddFolderWith(u"B", {u"Two"});
+  const FolderId c = model_.AddFolderWith(u"C", {u"Three"});
+  const FolderId d = model_.AddFolderWith(u"D", {u"Four"});
+  const FolderId e = model_.AddFolderWith(u"E", {u"Five"});
+
+  model_.DeleteFolder(a);
+  model_.DeleteFolder(b);
+  model_.DeleteFolder(c);
+  const FolderId f = model_.AddFolderWith(u"F", {u"Six"});
+
+  std::vector<SidebarFolder> folders = model_.folders();
+  ASSERT_EQ(3u, folders.size());
+  EXPECT_EQ(d, folders[0].id);
+  EXPECT_EQ(e, folders[1].id);
+  EXPECT_EQ(f, folders[2].id);
+}
+
 // A single click collapses, straight away. The gesture is not delayed to wait
 // for a possible second click, so the common action never feels laggy.
 TEST_F(SidebarViewsTest, ClickingAFolderHeaderCollapsesIt) {
@@ -637,13 +681,26 @@ TEST_F(SidebarViewsTest, DoubleClickingAFolderHeaderDoesNotRenameIt) {
   FolderHeaderView* header =
       views::AsViewClass<FolderHeaderView>(list_->children()[0]);
   ASSERT_TRUE(header);
+  ASSERT_FALSE(model_.folders()[0].collapsed);
   views::test::RunScheduledLayout(widget_.get());
   generator().MoveMouseTo(header->GetBoundsInScreen().CenterPoint());
   generator().DoubleClickLeftButton();
 
   EXPECT_FALSE(header->is_renaming());
+  // Click 1 collapsed it; click 2's toggle-back is swallowed by the fake's
+  // unchanged-value early return, because nothing rebuilt the header between
+  // the two clicks and it is still handing over the pre-click value. Without
+  // this assertion the test would pass identically if the header stopped
+  // responding to clicks altogether.
+  EXPECT_TRUE(model_.folders()[0].collapsed);
 }
 
+// Headers are FocusBehavior::ACCESSIBLE_ONLY, which does not put them out of
+// EventGenerator's reach: View::RequestFocusWithReason gates a request on
+// IsAccessibilityFocusable() rather than refusing it once the focus manager
+// is in keyboard-accessible mode — the state macOS Full Keyboard Access and
+// VoiceOver turn on — so this is a real, focus-routed F2, not a direct call
+// to the handler.
 TEST_F(SidebarViewsTest, F2RenamesAFolderHeader) {
   model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
   MakeList(SidebarSection::kPinned);
@@ -653,10 +710,10 @@ TEST_F(SidebarViewsTest, F2RenamesAFolderHeader) {
   FolderHeaderView* header =
       views::AsViewClass<FolderHeaderView>(list_->children()[0]);
   ASSERT_TRUE(header);
-  // Sidebar rows are accessibility-focusable only, so the key arrives at the
-  // view rather than through the focus manager.
-  ui::KeyEvent f2(ui::EventType::kKeyPressed, ui::VKEY_F2, ui::EF_NONE);
-  EXPECT_TRUE(header->OnKeyPressed(f2));
+  widget_->GetFocusManager()->SetKeyboardAccessible(true);
+  header->RequestFocus();
+  ASSERT_EQ(header, widget_->GetFocusManager()->GetFocusedView());
+  generator().PressAndReleaseKey(ui::VKEY_F2, ui::EF_NONE);
   EXPECT_TRUE(header->is_renaming());
 
   FocusedField()->SetText(u"Renamed");
@@ -712,7 +769,8 @@ TEST_F(SidebarViewsTest, APinnedRowOnItsPinnedUrlIsNotOfferedTheReturn) {
 }
 
 // A favourite is a tile in the grid, not a row in a list, and the tiles carry
-// the same menu. Rename is disabled: a 40px tile has nowhere to put a field.
+// the same menu. Rename is offered: the field goes in the tile's row, not the
+// 40px tile itself.
 TEST_F(SidebarViewsTest, TheMenuForAFavouriteTile) {
   model_.AddTab(u"One", "https://one.example/", SidebarSection::kFavorites,
                 false);
@@ -724,9 +782,98 @@ TEST_F(SidebarViewsTest, TheMenuForAFavouriteTile) {
   ScopedMenuCapture capture;
   RightClickOn(grid->children()[0]);
   ASSERT_TRUE(capture.menu());
-  EXPECT_EQ((std::vector<std::u16string>{
-                u"Rename [disabled]", u"Remove from Favorites", u"Close tab"}),
+  EXPECT_EQ((std::vector<std::u16string>{u"Rename", u"Remove from Favorites",
+                                         u"Close tab"}),
             MenuLabels(capture.menu()->menu()));
+}
+
+// The field goes up bounded to the tile's row, not the 40px tile: the grid is
+// its own context menu controller, so the closure the menu's Rename item runs
+// has to find the right tile by the index it was built for.
+TEST_F(SidebarViewsTest, RenameFromAFavouriteTilesMenuOpensTheField) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kFavorites,
+                false);
+  auto* grid =
+      contents_->AddChildView(std::make_unique<FavoritesGridView>(&model_));
+  grid->SetRows(model_.rows());
+
+  ScopedMenuCapture capture;
+  RightClickOn(grid->children()[0]);
+  ASSERT_TRUE(capture.menu());
+  EXPECT_TRUE(Choose(capture.menu()->menu(), u"Rename"));
+
+  RenameField* field = FocusedField();
+  ASSERT_TRUE(field);
+  EXPECT_EQ(u"One", field->GetText());
+}
+
+// Enter goes in as a real key, through the same field a pinned row's rename
+// uses, committing through SetEntryTitle exactly as TabRowView's does.
+TEST_F(SidebarViewsTest, EnterCommitsAFavouriteRenameThroughTheModel) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kFavorites,
+                false);
+  auto* grid =
+      contents_->AddChildView(std::make_unique<FavoritesGridView>(&model_));
+  grid->SetRows(model_.rows());
+
+  ScopedMenuCapture capture;
+  RightClickOn(grid->children()[0]);
+  ASSERT_TRUE(capture.menu());
+  EXPECT_TRUE(Choose(capture.menu()->menu(), u"Rename"));
+
+  RenameField* field = FocusedField();
+  ASSERT_TRUE(field);
+  field->SetText(u"Renamed");
+  generator().PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
+  task_environment()->RunUntilIdle();
+
+  ASSERT_EQ(1u, model_.rows().size());
+  EXPECT_EQ(u"Renamed", model_.rows()[0].title);
+}
+
+// The other discipline round 1 established for TabRowView and
+// FolderHeaderView: a tile is pooled by position, so a rename open on one
+// slot must not survive that slot being handed a different entry, and must
+// not write to whatever the slot draws once it is.
+TEST_F(SidebarViewsTest, RepointingAFavouriteTilesIndexAbandonsItsOpenRename) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kFavorites,
+                false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kFavorites,
+                false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kFavorites,
+                false);
+  auto* grid =
+      contents_->AddChildView(std::make_unique<FavoritesGridView>(&model_));
+  grid->SetRows(model_.rows());
+  ASSERT_EQ(3u, grid->children().size());
+
+  const EntryId one_id = model_.rows()[0].entry_id;
+  const EntryId two_id = model_.rows()[1].entry_id;
+
+  ScopedMenuCapture capture;
+  RightClickOn(grid->children()[1]);  // "Two"
+  ASSERT_TRUE(capture.menu());
+  EXPECT_TRUE(Choose(capture.menu()->menu(), u"Rename"));
+  RenameField* field = FocusedField();
+  ASSERT_TRUE(field);
+  field->SetText(u"Renamed");
+
+  // "One" leaves the favourites grid, so tile index 1 — where the rename is
+  // open — now draws "Three" instead of "Two".
+  model_.UnpinEntry(one_id);
+  grid->SetRows(model_.rows());
+
+  EXPECT_FALSE(FocusedField());
+  generator().PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
+  task_environment()->RunUntilIdle();
+
+  // Abandoned: nothing was renamed anywhere in the model.
+  for (const SidebarRow& row : model_.rows()) {
+    if (row.entry_id == two_id) {
+      EXPECT_EQ(u"Two", row.title);
+    }
+    EXPECT_NE(u"Renamed", row.title);
+  }
 }
 
 TEST_F(SidebarViewsTest, RemoveFromFavoritesFromTheTilesMenu) {

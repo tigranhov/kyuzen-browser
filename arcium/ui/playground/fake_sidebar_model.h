@@ -86,6 +86,11 @@ class FakeSidebarModel : public SidebarModel {
 
   void Notify();
   void Reindex();
+  // Renumbers folders_ to 0..n-1 in position order, the way
+  // ArciumModel::NormalisePositions does after RemoveFolder. Without this,
+  // CreateFolderWithEntry's "next free position" — folders_.size() — can
+  // collide with a folder that kept the position it had before a deletion.
+  void NormaliseFolderPositions();
   SidebarRow* FindByTabIndex(int tab_index);
   SidebarRow* FindByEntry(EntryId id);
   SidebarRow* FindByTitle(const std::u16string& title);

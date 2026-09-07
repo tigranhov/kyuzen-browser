@@ -10,6 +10,7 @@
 
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/context_menu_controller.h"
@@ -21,6 +22,7 @@ class ImageButton;
 
 namespace arcium {
 
+class RenameField;
 class RowContextMenu;
 
 // Square tiles, four per row, one per row of section kFavorites. The grid is
@@ -53,6 +55,17 @@ class FavoritesGridView : public views::View,
  private:
   void OnTileActivated(EntryId entry_id, int tab_index);
 
+  // Swaps the tile at `index` for a RenameField bounded to that tile's row —
+  // a 40px tile has nowhere to host a field on its own, but the row it sits
+  // in does. Mirrors TabRowView::BeginRename: captures the entry id at the
+  // point the edit actually starts, not when the menu closure was built.
+  void BeginRenameForTile(size_t index);
+  bool is_renaming() const { return rename_field_ != nullptr; }
+  // Takes the field away without an outcome, for when the tile pool is
+  // re-pointed at a different entry out from under an open rename.
+  void AbandonRename();
+  void OnRenameFinished(EntryId id, bool commit, const std::u16string& text);
+
   raw_ptr<SidebarModel> model_;
   std::vector<raw_ptr<views::ImageButton>> tiles_;
   // Parallel to `tiles_`: what each tile was last drawn from, which is what
@@ -60,6 +73,12 @@ class FavoritesGridView : public views::View,
   std::vector<SidebarRow> rows_;
   // Outlives the menu it is running; see TabListView.
   std::unique_ptr<RowContextMenu> context_menu_;
+  raw_ptr<RenameField> rename_field_ = nullptr;
+  // Captured when the edit starts. Tiles are pooled by position exactly like
+  // TabRowView's rows, so a slot can be handed a different entry at any time.
+  EntryId renaming_entry_id_;
+  size_t renaming_tile_index_ = 0;
+  base::WeakPtrFactory<FavoritesGridView> weak_factory_{this};
 };
 
 }  // namespace arcium

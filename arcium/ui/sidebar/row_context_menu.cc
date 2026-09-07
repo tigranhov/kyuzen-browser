@@ -50,8 +50,9 @@ RowContextMenu::ShowHookForTesting& ShowHook() {
 }  // namespace
 
 // static
-void RowContextMenu::SetShowHookForTesting(ShowHookForTesting hook) {
-  ShowHook() = std::move(hook);
+base::AutoReset<RowContextMenu::ShowHookForTesting>
+RowContextMenu::SetShowHookForTesting(ShowHookForTesting hook) {
+  return base::AutoReset<ShowHookForTesting>(&ShowHook(), std::move(hook));
 }
 
 RowContextMenu::RowContextMenu(SidebarModel* model) : model_(model) {}

@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "arcium/ui/sidebar/sidebar_model.h"
+#include "base/auto_reset.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/menus/simple_menu_model.h"
@@ -60,13 +61,24 @@ class RowContextMenu : public ui::SimpleMenuModel::Delegate {
                       base::RepeatingClosure begin_rename);
   ui::SimpleMenuModel* menu() { return menu_.get(); }
 
-  // Test seam. A context menu on macOS runs a nested native loop, so a test
-  // that right-clicked for real would hang. With a hook installed the menu is
-  // built exactly as it would be and handed over instead of being shown,
-  // which is what lets the right-click path itself be covered rather than
-  // only the builder underneath it. Pass a null callback to remove it.
+  // Test seam. A context menu on macOS runs a nested native loop
+  // (MenuRunnerImplCocoa::RunMenuAt -> ui::ShowContextMenu, a blocking
+  // NSMenu pop-up), so a test that right-clicked for real would hang with no
+  // user to dismiss it. With a hook installed the menu is built exactly as it
+  // would be and handed over instead of being shown, which is what lets the
+  // right-click path itself be covered rather than only the builder
+  // underneath it.
+  //
+  // Returns a scoper that restores the previous hook when it goes out of
+  // scope, so correctness does not rest on every caller remembering to clear
+  // it by hand. A menu test that lets a right-click happen without this
+  // scoper alive **hangs the suite silently** — no assertion fails, no
+  // message prints, the run just stops in the nested loop above — so keep
+  // the returned value alive for exactly the span where a right-click can
+  // occur.
   using ShowHookForTesting = base::RepeatingCallback<void(RowContextMenu*)>;
-  static void SetShowHookForTesting(ShowHookForTesting hook);
+  [[nodiscard]] static base::AutoReset<ShowHookForTesting>
+  SetShowHookForTesting(ShowHookForTesting hook);
 
   // ui::SimpleMenuModel::Delegate:
   bool IsCommandIdEnabled(int command_id) const override;

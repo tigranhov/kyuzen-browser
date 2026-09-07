@@ -374,6 +374,7 @@ void FakeSidebarModel::DeleteFolder(FolderId id) {
       row.folder_id.reset();
     }
   }
+  NormaliseFolderPositions();
   Notify();
 }
 
@@ -388,6 +389,23 @@ void FakeSidebarModel::RemoveObserver(Observer* observer) {
 void FakeSidebarModel::Notify() {
   for (Observer& o : observers_) {
     o.OnSidebarModelChanged();
+  }
+}
+
+void FakeSidebarModel::NormaliseFolderPositions() {
+  // Mirrors ArciumModel::NormalisePositions: a single sequence, sorted by the
+  // position folders already have, renumbered to 0..n-1.
+  std::vector<FakeFolder*> ordered;
+  ordered.reserve(folders_.size());
+  for (FakeFolder& folder : folders_) {
+    ordered.push_back(&folder);
+  }
+  std::sort(ordered.begin(), ordered.end(),
+            [](const FakeFolder* a, const FakeFolder* b) {
+              return a->position < b->position;
+            });
+  for (size_t i = 0; i < ordered.size(); ++i) {
+    ordered[i]->position = static_cast<int>(i);
   }
 }
 

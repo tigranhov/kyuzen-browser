@@ -5,6 +5,7 @@
 #include "arcium/ui/sidebar/tab_list_view.h"
 
 #include <algorithm>
+#include <limits>
 #include <memory>
 #include <set>
 #include <utility>
@@ -195,20 +196,25 @@ void TabListView::OnDragMove(int from, int to) {
   // last row are not the smallest and largest tab index, and a cold row has
   // no tab index at all. Taking the ends instead of the extremes hands
   // std::clamp lo > hi, which is a hard abort under libc++ hardening.
-  std::vector<int> indices;
-  indices.reserve(rows_.size());
+  //
+  // A two-variable scan rather than a collected std::vector<int>: this runs
+  // on every mouse-drag event while a row is being dragged, so an allocation
+  // per pixel of motion is the 8ms-per-frame budget's kind of problem.
+  int lo = std::numeric_limits<int>::max();
+  int hi = std::numeric_limits<int>::min();
   for (const TabRowView* row : rows_) {
-    if (row->tab_index() >= 0) {
-      indices.push_back(row->tab_index());
+    const int index = row->tab_index();
+    if (index >= 0) {
+      lo = std::min(lo, index);
+      hi = std::max(hi, index);
     }
   }
   // A section of nothing but cold rows has no tab-index range to move within,
   // and a cold row is not being dragged anywhere the tab strip understands.
-  if (indices.empty() || from < 0) {
+  if (lo > hi || from < 0) {
     return;
   }
-  const auto [lo, hi] = std::minmax_element(indices.begin(), indices.end());
-  to = std::clamp(to, *lo, *hi);
+  to = std::clamp(to, lo, hi);
   if (to != from) {
     model_->MoveTab(from, to);
   }

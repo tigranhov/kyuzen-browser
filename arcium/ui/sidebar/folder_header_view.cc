@@ -155,10 +155,17 @@ void FolderHeaderView::OnRenameFinished(FolderId id,
 }
 
 bool FolderHeaderView::OnKeyPressed(const ui::KeyEvent& event) {
-  // F2 renames, the conventional key for renaming a thing in place. Collapse
-  // stays on the single click: delaying it by the double-click interval to
-  // free up a double click would make the common gesture feel laggy to serve
-  // a rare one, and the context menu's Rename is the discoverable path.
+  // F2 renames, the conventional key for renaming a thing in place. This
+  // header is FocusBehavior::ACCESSIBLE_ONLY, so the key only reaches here
+  // once the header has the focus, which requires the focus manager's
+  // keyboard-accessible mode — the state macOS Full Keyboard Access and
+  // VoiceOver turn on (View::RequestFocusWithReason gates a request on
+  // IsAccessibilityFocusable() in that mode; see ui/views/view.cc). The
+  // binding is live for those users today; it is not reachable through plain
+  // Tab traversal, which the context menu's Rename covers for everyone else.
+  // Collapse stays on the single click: delaying it by the double-click
+  // interval to free up a double click would make the common gesture feel
+  // laggy to serve a rare one.
   if (event.key_code() == ui::VKEY_F2) {
     BeginRename();
     return true;
