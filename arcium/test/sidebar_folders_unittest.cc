@@ -88,6 +88,11 @@ TEST_F(SidebarFoldersTest, AFavouriteCannotBeFoldered) {
   std::unique_ptr<SidebarTabModel> model = MakeModel();
   model->AddToFavorites(0);
   const EntryId id = model->rows()[0].entry_id;
+  // Without this the test is vacuous the day AddToFavorites stops working: an
+  // invalid id makes CreateFolderWithEntry refuse through its unknown-entry
+  // branch, and the refusal this test names — a favourite cannot be foldered
+  // — would never be reached again.
+  ASSERT_TRUE(id.is_valid());
 
   EXPECT_FALSE(model->CreateFolderWithEntry(id, u"Work").is_valid());
   EXPECT_TRUE(model->folders().empty());
