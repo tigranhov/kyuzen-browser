@@ -73,8 +73,7 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   if (state->archive()) {
     archive_service_ = std::make_unique<ArchiveService>(
         browser_view->browser()->tab_strip_model(), state->model(),
-        state->binding(), state->archive(), state->archive_runner(),
-        state->store());
+        state->binding(), state->archive(), state->archive_runner());
     model_->SetArchiveService(archive_service_.get());
   }
   SidebarView::Delegate delegate;

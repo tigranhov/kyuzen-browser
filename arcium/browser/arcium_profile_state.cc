@@ -71,9 +71,12 @@ ArciumProfileState::ArciumProfileState(const base::FilePath& profile_path,
                                        bool off_the_record) {
   if (!off_the_record) {
     store_ = std::make_unique<ModelStore>(&model_, ModelPath(profile_path));
-    // BEST_EFFORT: nothing waits on an archive write, and the file is opened
-    // lazily off the startup path. BLOCK_SHUTDOWN so a tab archived during
-    // teardown is not lost between the close and the write.
+    // BEST_EFFORT: nothing waits on an archive write, and the open below is
+    // posted rather than done here, so it is off the startup path. It is not
+    // lazy — every regular profile opens the file whether or not anything is
+    // ever archived, and carries the connection for the life of the process.
+    // BLOCK_SHUTDOWN so a tab archived during teardown is not lost between the
+    // close and the write.
     archive_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
         {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::BLOCK_SHUTDOWN});

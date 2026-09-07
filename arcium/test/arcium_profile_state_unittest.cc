@@ -19,6 +19,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
+#include "components/segmentation_platform/public/features.h"
 #include "components/tabs/public/tab_interface.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -34,9 +35,12 @@ class ArciumProfileStateTest : public BrowserWithTestWindowTest {
     // Moving the clock wakes the segmentation platform, which parks a task
     // runner in a process-global object and makes the next test in the binary
     // complain about "a previous test leaving a stale task runner in a global
-    // object". Nothing here is about segmentation; turn it off.
-    scoped_feature_list_.InitFromCommandLine(
-        /*enable_features=*/"", /*disable_features=*/"SegmentationPlatform");
+    // object". Nothing here is about segmentation; turn it off. By the typed
+    // constant, so an upstream rename is a build error rather than a silently
+    // disarmed guard, and by disabling one feature rather than replacing the
+    // whole list.
+    scoped_feature_list_.InitAndDisableFeature(
+        segmentation_platform::features::kSegmentationPlatformFeature);
   }
 
  private:

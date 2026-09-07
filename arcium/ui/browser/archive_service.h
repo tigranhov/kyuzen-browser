@@ -23,7 +23,6 @@ class TabStripModel;
 namespace arcium {
 
 class ArchiveStore;
-class ModelStore;
 class TabBinding;
 
 // Writes idle Today tabs to the archive and closes them.
@@ -36,8 +35,8 @@ class TabBinding;
 //
 // One base::OneShotTimer for the whole service, aimed at the earliest expiry
 // among the tabs it may archive, and restarted whenever that earliest expiry
-// can have moved: a tab activated, inserted or closed, or the model changed
-// (which is how a new timeout, a new pinned entry, or the completion of
+// can have moved: a tab inserted, closed or switched away from, or the model
+// changed (which is how a new timeout, a new pinned entry, or the completion of
 // ModelStore::Load reaches us). Twenty tabs cost one timer, and a space set to
 // kNever costs none — the timer is stopped, not aimed at a far-future date.
 // Nothing here polls.
@@ -52,22 +51,14 @@ class ArchiveService : public TabStripModelObserver,
   // on `store_runner`, never here: sql::Database blocks and is sequence-
   // affine, and this runs on the UI thread.
   //
-  // `model_store` is null off the record and in tests. It supplies the restart
-  // floor — see RestartFloor().
   ArchiveService(TabStripModel* tab_strip_model,
                  ArciumModel* model,
                  TabBinding* binding,
                  ArchiveStore* store,
-                 scoped_refptr<base::SequencedTaskRunner> store_runner,
-                 ModelStore* model_store);
+                 scoped_refptr<base::SequencedTaskRunner> store_runner);
   ArchiveService(const ArchiveService&) = delete;
   ArchiveService& operator=(const ArchiveService&) = delete;
   ~ArchiveService() override;
-
-  // Restarts `handle`'s idle clock. Called for every activation the strip
-  // reports, and public because the sidebar's own notion of "the user touched
-  // this tab" is not always a strip selection change.
-  void OnTabActivated(tabs::TabHandle handle);
 
   // Archives and closes every Today tab, whatever its idle time. What the
   // divider's Clear button means, so it deliberately ignores the guards that
@@ -104,28 +95,17 @@ class ArchiveService : public TabStripModelObserver,
   // The earliest expiry over the tabs MayArchive allows, or nullopt when there
   // is nothing to wait for.
   std::optional<base::Time> EarliestExpiry() const;
-  // When `handle` was last active. A tab that was already open when the
-  // service was made has no stamp of its own and takes the restart floor.
+  // The instant `handle` stopped being visible, which is what its idle time is
+  // measured from. See `last_active_`.
   base::Time IdleSince(tabs::TabHandle handle) const;
-  // The idle floor for tabs restored after a quit: the model's last save, the
-  // last moment the browser knew about them. A browser closed overnight
-  // therefore archives yesterday's Today tabs on launch, without any per-tab
-  // timestamp having to survive the quit.
-  //
-  // ModelStore::Load is asynchronous, so at construction last_save_time() is
-  // usually still null. It reads as startup until the load lands, which
-  // archives nothing early; the load ends in an ArciumModel notification, and
-  // OnArciumModelChanged reschedules against the real floor as soon as there
-  // is one.
-  base::Time RestartFloor() const;
 
   ArchiveTimeout TimeoutForDefaultSpace() const;
 
   void RescheduleTimer();
   void OnTimerFired();
-  // Writes `tab` to the archive on the store's sequence, then closes it.
+  // Closes `handle`'s tab and, only once the close has actually happened,
+  // writes it to the archive on the store's sequence.
   void ArchiveAndClose(tabs::TabHandle handle);
-  void WriteToArchive(tabs::TabInterface* tab);
 
   raw_ptr<TabStripModel> tab_strip_model_;
   raw_ptr<ArciumModel> model_;
@@ -134,11 +114,14 @@ class ArchiveService : public TabStripModelObserver,
   // write posted here always runs before the deletion behind it.
   raw_ptr<ArchiveStore> store_;
   scoped_refptr<base::SequencedTaskRunner> store_runner_;
-  raw_ptr<ModelStore> model_store_;
 
-  // When the service was made, the floor before a load has landed.
-  const base::Time created_at_;
-  // A null value means "no stamp of its own": the tab predates the service.
+  // When a tab this service has watched stopped being visible. Only tabs the
+  // strip has told us about hold an entry; every other tab — one restored into
+  // the window, one the user has just opened, one dragged in from another
+  // window — is measured from WebContents::GetLastActiveTime(), which is
+  // truthful for all three. That is deliberately the only fallback: an idle
+  // clock with two sources is an idle clock with two answers, and this feature
+  // has already been bitten by exactly that.
   std::map<tabs::TabHandle, base::Time> last_active_;
 
   base::OneShotTimer timer_;

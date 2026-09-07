@@ -11,7 +11,6 @@
 #include "arcium/browser/entry_claim.h"
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/tab_entry.h"
-#include "arcium/browser/model_store.h"
 #include "arcium/browser/tab_binding.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -26,6 +25,21 @@ namespace {
 
 constexpr uint32_t kCloseTypes = TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB;
 
+// The row `tab` would be archived as, or nullopt when there is nothing worth
+// recording. Read before the close, because afterwards the tab is gone.
+std::optional<ArchivedTab> MakeRow(tabs::TabInterface* tab, SpaceId space_id) {
+  const tabs::TabData data = tabs::TabData::FromTabInterface(tab);
+  if (!data.visible_url.is_valid()) {
+    return std::nullopt;
+  }
+  ArchivedTab row;
+  row.url = data.visible_url;
+  row.title = data.title;
+  row.space_id = space_id;
+  row.archived_at = base::Time::Now();
+  return row;
+}
+
 }  // namespace
 
 ArchiveService::ArchiveService(
@@ -33,21 +47,18 @@ ArchiveService::ArchiveService(
     ArciumModel* model,
     TabBinding* binding,
     ArchiveStore* store,
-    scoped_refptr<base::SequencedTaskRunner> store_runner,
-    ModelStore* model_store)
+    scoped_refptr<base::SequencedTaskRunner> store_runner)
     : tab_strip_model_(tab_strip_model),
       model_(model),
       binding_(binding),
       store_(store),
-      store_runner_(std::move(store_runner)),
-      model_store_(model_store),
-      created_at_(base::Time::Now()) {
-  // Tabs that already exist get no stamp: they are restored tabs, and the
-  // restart floor is what their idle time is measured from. See RestartFloor().
-  for (int i = 0; i < tab_strip_model_->count(); ++i) {
-    last_active_[tab_strip_model_->GetTabAtIndex(i)->GetHandle()] =
-        base::Time();
-  }
+      store_runner_(std::move(store_runner)) {
+  // No seeding loop. BrowserView builds this inside its own constructor, when
+  // the strip is empty in every real launch — session restore, the startup NTP
+  // and command-line URLs all insert their tabs afterwards — so a loop over
+  // existing tabs is a path production never takes, and a path production never
+  // takes is a path that drifts. Whatever tabs are here, IdleSince() measures
+  // them the same way it measures the ones that arrive later.
   tab_strip_model_->AddObserver(this);
   model_->AddObserver(this);
   RescheduleTimer();
@@ -58,11 +69,6 @@ ArchiveService::~ArchiveService() {
   if (tab_strip_model_) {
     tab_strip_model_->RemoveObserver(this);
   }
-}
-
-void ArchiveService::OnTabActivated(tabs::TabHandle handle) {
-  last_active_[handle] = base::Time::Now();
-  RescheduleTimer();
 }
 
 void ArchiveService::ArchiveAllToday() {
@@ -128,16 +134,10 @@ void ArchiveService::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
-  if (change.type() == TabStripModelChange::kInserted) {
-    const TabStripModelChange::Insert* insert = change.GetInsert();
-    if (insert) {
-      for (const auto& inserted : insert->contents) {
-        if (inserted.tab) {
-          last_active_[inserted.tab->GetHandle()] = base::Time::Now();
-        }
-      }
-    }
-  } else if (change.type() == TabStripModelChange::kRemoved) {
+  // Nothing is stamped on insert: a tab arriving from session restore already
+  // carries the last-active time saved in the session, and one the user has
+  // just opened carries its creation time. Both are read by IdleSince().
+  if (change.type() == TabStripModelChange::kRemoved) {
     const TabStripModelChange::Remove* remove = change.GetRemove();
     if (remove) {
       for (const TabStripModelChange::RemovedTab& removed : remove->contents) {
@@ -147,8 +147,20 @@ void ArchiveService::OnTabStripModelChanged(
       }
     }
   }
-  if (selection.active_tab_changed() && selection.new_tab) {
-    last_active_[selection.new_tab->GetHandle()] = base::Time::Now();
+  // A tab's idle clock starts when it stops being visible, not when it was
+  // activated. Stamping only the new tab meant a tab that had been on screen
+  // for thirteen hours was archived the instant the user opened another one —
+  // the tab they were reading a moment ago, which is the worst thing this
+  // feature can do.
+  //
+  // Not when the old tab is the one being closed — it is already detached by
+  // the time this runs, and stamping it would put back the entry the kRemoved
+  // branch above just erased. TabStripModel guards its own use of `old_tab`
+  // the same way.
+  if (selection.active_tab_changed() && selection.old_tab &&
+      tab_strip_model->GetIndexOfTab(selection.old_tab) !=
+          TabStripModel::kNoTab) {
+    last_active_[selection.old_tab->GetHandle()] = base::Time::Now();
   }
   RescheduleTimer();
 }
@@ -162,23 +174,27 @@ void ArchiveService::OnTabStripModelDestroyed(TabStripModel* tab_strip_model) {
 
 void ArchiveService::OnArciumModelChanged() {
   // A changed timeout, an entry that now claims a tab, an entry that stopped
-  // claiming one — and the completion of ModelStore::Load, which is what makes
-  // the restart floor real. All of them move the earliest expiry.
+  // claiming one — and the completion of ModelStore::Load, which replaces the
+  // entries wholesale. All of them move the earliest expiry.
   RescheduleTimer();
-}
-
-base::Time ArchiveService::RestartFloor() const {
-  const base::Time saved =
-      model_store_ ? model_store_->last_save_time() : base::Time();
-  return saved.is_null() ? created_at_ : saved;
 }
 
 base::Time ArchiveService::IdleSince(tabs::TabHandle handle) const {
   const auto it = last_active_.find(handle);
-  if (it == last_active_.end() || it->second.is_null()) {
-    return RestartFloor();
+  if (it != last_active_.end()) {
+    return it->second;
   }
-  return it->second;
+  // A tab this service has not watched stop being visible. The tab itself
+  // knows when it was last on screen, and for a tab restored after a quit that
+  // answer survived the quit: session restore reads the saved last-active time
+  // out of the session file and hands it to WebContents::CreateParams, so a
+  // browser closed overnight really does archive yesterday's Today tabs on
+  // launch. For a tab the user opened a moment ago it is that tab's creation
+  // time, which is what "opened a moment ago" should mean. One rule, both
+  // cases, no way to tell a restored tab from a fresh one and no need to.
+  tabs::TabInterface* tab = handle.Get();
+  content::WebContents* contents = tab ? tab->GetContents() : nullptr;
+  return contents ? contents->GetLastActiveTime() : base::Time::Now();
 }
 
 ArchiveTimeout ArchiveService::TimeoutForDefaultSpace() const {
@@ -272,29 +288,29 @@ void ArchiveService::ArchiveAndClose(tabs::TabHandle handle) {
   if (index == TabStripModel::kNoTab) {
     return;
   }
-  WriteToArchive(tab);
+  // Read the row first — after the close the tab is gone — but do not write it
+  // yet. A close can be declined: a beforeunload dialog the user cancels, or a
+  // TabUnloadHandler that puts up its own confirmation. "The user asked to
+  // close it" is not "the tab closed", and a row written for a tab that stayed
+  // open is another row every time Clear is pressed, in an archive nothing
+  // reads, dedups or prunes.
+  const std::optional<ArchivedTab> row =
+      MakeRow(tab, model_->default_space_id());
   tab_strip_model_->CloseWebContentsAt(index, kCloseTypes);
-}
-
-void ArchiveService::WriteToArchive(tabs::TabInterface* tab) {
-  if (!store_ || !store_runner_) {
-    return;  // Incognito, or an archive that would not open. Close anyway.
+  tabs::TabInterface* survivor = handle.Get();
+  if (survivor &&
+      tab_strip_model_->GetIndexOfTab(survivor) != TabStripModel::kNoTab) {
+    return;  // Still open: the close was declined.
   }
-  const tabs::TabData data = tabs::TabData::FromTabInterface(tab);
-  if (!data.visible_url.is_valid()) {
-    return;  // Nothing worth a row; still close the tab.
+  if (!row || !store_ || !store_runner_) {
+    return;  // Nothing worth recording, or incognito, or no archive at all.
   }
-  ArchivedTab row;
-  row.url = data.visible_url;
-  row.title = data.title;
-  row.space_id = model_->default_space_id();
-  row.archived_at = base::Time::Now();
   // sql::Database blocks and is sequence-affine. The store belongs to
   // `store_runner_` and is only ever touched there; base::Unretained is safe
   // because its owner deletes it on that same sequence, behind this task.
   store_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(&ArchiveStore::Add, base::Unretained(store_), row));
+      base::BindOnce(&ArchiveStore::Add, base::Unretained(store_), *row));
 }
 
 }  // namespace arcium

@@ -12,7 +12,6 @@
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/space.h"
 #include "arcium/browser/model/tab_entry.h"
-#include "arcium/browser/model_store.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
 #include "base/files/scoped_temp_dir.h"
@@ -24,7 +23,9 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/unload_controller.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
+#include "components/segmentation_platform/public/features.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"  // nogncheck
 #include "content/public/browser/web_contents.h"
@@ -35,6 +36,32 @@
 
 namespace arcium {
 namespace {
+
+// The production seam a close can be declined at: UnloadController asks every
+// registered TabUnloadHandler before it lets a tab go, and one that puts up its
+// own confirmation keeps the tab open until the user answers. Standing in here
+// for the beforeunload dialog, which cannot be closed in this fixture without
+// a PerformanceManager the fixture does not build.
+class DecliningUnloadHandler : public UnloadController::TabUnloadHandler {
+ public:
+  void set_intercept(bool intercept) { intercept_ = intercept; }
+
+  bool ShouldSkipBeforeUnload(content::WebContents* contents) override {
+    return false;
+  }
+  bool ShouldShowCustomConfirmation(content::WebContents* contents) override {
+    return intercept_;
+  }
+  bool ShowCustomConfirmation(
+      content::WebContents* contents,
+      base::OnceCallback<void(bool)> on_closed) override {
+    // Shown, and never answered: the tab stays.
+    return intercept_;
+  }
+
+ private:
+  bool intercept_ = true;
+};
 
 // BrowserWithTestWindowTest::AddTab inserts at index 0 and activates, so the
 // tab named last is the one at index 0 and the one the strip calls active.
@@ -47,9 +74,13 @@ class ArchiveServiceTest : public BrowserWithTestWindowTest {
     // executions off that clock and parks a task runner in a process-global
     // object, which the next test then CHECKs on ("a previous test leaving a
     // stale task runner in a global object" is base's own wording for it).
-    // Nothing here is about segmentation; turn it off.
-    scoped_feature_list_.InitFromCommandLine(
-        /*enable_features=*/"", /*disable_features=*/"SegmentationPlatform");
+    // Nothing here is about segmentation; turn it off. By the typed constant
+    // and by disabling one feature rather than replacing the list: a string
+    // goes stale silently the next time upstream renames the feature, and
+    // InitFromCommandLine would drop any Arcium feature set on the command
+    // line.
+    scoped_feature_list_.InitAndDisableFeature(
+        segmentation_platform::features::kSegmentationPlatformFeature);
   }
 
  protected:
@@ -59,7 +90,15 @@ class ArchiveServiceTest : public BrowserWithTestWindowTest {
     ASSERT_TRUE(archive_.Open(temp_dir_.GetPath().AppendASCII("Archive")));
     sidebar_model_ =
         std::make_unique<SidebarTabModel>(strip(), &model_, &binding_);
-    MakeService(/*model_store=*/nullptr);
+    // Production order, and the only order any test here uses:
+    // BrowserSidebarController builds the service from
+    // BrowserView::BrowserView, when the strip is still empty. Every tab a test
+    // adds arrives afterwards, exactly as session restore, the startup NTP and
+    // command-line URLs do.
+    ASSERT_EQ(0, strip()->count());
+    service_ = std::make_unique<ArchiveService>(
+        strip(), &model_, &binding_, &archive_,
+        base::SequencedTaskRunner::GetCurrentDefault());
   }
 
   void TearDown() override {
@@ -67,18 +106,6 @@ class ArchiveServiceTest : public BrowserWithTestWindowTest {
     service_.reset();
     sidebar_model_.reset();
     BrowserWithTestWindowTest::TearDown();
-  }
-
-  // The store runs on the main sequence here rather than in the thread pool,
-  // so a test can read the archive back without hopping. It is still *posted*:
-  // nothing is written inside the call that decides to archive, which is what
-  // TheArchiveWriteIsPostedNotDoneInline pins. Production passes a MayBlock
-  // pool sequence; see ArciumProfileState.
-  void MakeService(ModelStore* model_store) {
-    service_.reset();
-    service_ = std::make_unique<ArchiveService>(
-        strip(), &model_, &binding_, &archive_,
-        base::SequencedTaskRunner::GetCurrentDefault(), model_store);
   }
 
   // AdvanceClock plus a drain, not FastForwardBy. Fast-forwarding steps the
@@ -135,12 +162,19 @@ class ArchiveServiceTest : public BrowserWithTestWindowTest {
     return strip()->GetTabAtIndex(index)->GetHandle();
   }
 
-  // `model_store_` is a fixture member rather than a local so that it always
-  // outlives the service that holds a pointer to it.
-  ModelStore* MakeModelStore() {
-    model_store_ = std::make_unique<ModelStore>(
-        &model_, temp_dir_.GetPath().AppendASCII("Model"));
-    return model_store_.get();
+  // What session restore does: the WebContents is created already carrying the
+  // last-active time saved in the session, through
+  // WebContents::CreateParams::last_active_time (see CreateRestoredTab in
+  // chrome/browser/ui/browser_tabrestore.cc), and is then inserted into a strip
+  // the window already owns.
+  void AppendRestoredTab(const GURL& url, base::Time last_active) {
+    std::unique_ptr<content::WebContents> contents =
+        content::WebContentsTester::CreateTestWebContents(profile(), nullptr);
+    content::WebContentsTester* tester =
+        content::WebContentsTester::For(contents.get());
+    tester->NavigateAndCommit(url);
+    tester->SetLastActiveTime(last_active);
+    strip()->AppendWebContents(std::move(contents), /*foreground=*/false);
   }
 
   base::test::ScopedFeatureList scoped_feature_list_;
@@ -148,7 +182,6 @@ class ArchiveServiceTest : public BrowserWithTestWindowTest {
   ArciumModel model_;
   TabBinding binding_;
   ArchiveStore archive_;
-  std::unique_ptr<ModelStore> model_store_;
   std::unique_ptr<SidebarTabModel> sidebar_model_;
   std::unique_ptr<ArchiveService> service_;
 };
@@ -156,7 +189,6 @@ class ArchiveServiceTest : public BrowserWithTestWindowTest {
 TEST_F(ArchiveServiceTest, ATabIdleBeyondTheTimeoutIsArchivedAndClosed) {
   AddTab(browser(), GURL("https://a.example/"));
   AddTab(browser(), GURL("https://keep.example/"));  // active, never archived
-  service_->OnTabActivated(HandleAt(0));
 
   PassTime(base::Hours(13));
   EXPECT_EQ(1, strip()->count());
@@ -165,8 +197,12 @@ TEST_F(ArchiveServiceTest, ATabIdleBeyondTheTimeoutIsArchivedAndClosed) {
 
 TEST_F(ArchiveServiceTest, TheActiveTabIsNeverArchived) {
   AddTab(browser(), GURL("https://a.example/"));
+  // No archivable tab, so no timer at all — without this the thirty-day
+  // advance below proves nothing, because there is nothing that could fire.
+  EXPECT_EQ(0, service_->live_timer_count_for_testing());
   PassTime(base::Days(30));
   EXPECT_EQ(1, strip()->count());
+  EXPECT_EQ(0, service_->live_timer_count_for_testing());
 }
 
 TEST_F(ArchiveServiceTest, ATabPlayingAudioIsNeverArchived) {
@@ -179,7 +215,6 @@ TEST_F(ArchiveServiceTest, ATabPlayingAudioIsNeverArchived) {
   AppendAudibleTab(GURL("https://music.example/"));
   ASSERT_EQ(2, strip()->count());
   ASSERT_TRUE(strip()->GetWebContentsAt(1)->IsCurrentlyAudible());
-  service_->OnTabActivated(HandleAt(1));
 
   PassTime(base::Days(30));
   // ASSERT, not EXPECT: the check below indexes the strip, and if the tab was
@@ -194,7 +229,6 @@ TEST_F(ArchiveServiceTest, ATabWithAnUnloadHandlerIsNeverArchived) {
   ASSERT_EQ(2, strip()->count());
   ASSERT_TRUE(
       strip()->GetWebContentsAt(1)->NeedToFireBeforeUnloadOrUnloadEvents());
-  service_->OnTabActivated(HandleAt(1));
 
   PassTime(base::Days(30));
   ASSERT_EQ(2, strip()->count());
@@ -236,15 +270,17 @@ TEST_F(ArchiveServiceTest, OneTimerServesEveryTab) {
 }
 
 TEST_F(ArchiveServiceTest, ActivityPushesTheExpiryOut) {
-  AddTab(browser(), GURL("https://a.example/"));
   AddTab(browser(), GURL("https://b.example/"));
-  // Index 1, not 0: AddTab activates what it inserts, so index 0 is the active
-  // tab, which MayArchive excludes and which therefore has no expiry to push
-  // out. (The brief says HandleAt(0), which only works if AddTab appended.)
-  service_->OnTabActivated(HandleAt(1));
+  AddTab(browser(), GURL("https://a.example/"));  // index 0, and active
+  ASSERT_TRUE(service_->next_expiry_for_testing().has_value());
   const base::Time first = *service_->next_expiry_for_testing();
+
   PassTime(base::Hours(1));
-  service_->OnTabActivated(HandleAt(1));
+  // Visit the background tab and come back. Driven through the strip, because
+  // that is the only way the browser ever tells this service about an
+  // activation.
+  strip()->ActivateTabAt(1);
+  strip()->ActivateTabAt(0);
   EXPECT_GT(*service_->next_expiry_for_testing(), first);
 }
 
@@ -311,50 +347,6 @@ TEST_F(ArchiveServiceTest, TheArchivedRowCarriesTheTabsUrlAndSpace) {
   EXPECT_FALSE(rows[0].archived_at.is_null());
 }
 
-// Tabs that were already open when the service was made have no idle stamp of
-// their own. Their clock starts at the model's last save — the last moment the
-// browser knew about them — so a browser closed overnight archives yesterday's
-// Today tabs on launch without any per-tab timestamp surviving the quit.
-TEST_F(ArchiveServiceTest, RestoredTabsTakeTheModelsLastSaveAsTheirIdleFloor) {
-  ModelStore* store = MakeModelStore();
-  model_.AddEntry(EntryKind::kPinned, GURL("https://p.example/"), u"P");
-  store->SaveNowForTesting();
-  task_environment()->RunUntilIdle();
-  ASSERT_FALSE(store->last_save_time().is_null());
-
-  // The quit, and the launch: tabs exist before the service does.
-  PassTime(base::Hours(13));
-  AddTab(browser(), GURL("https://yesterday.example/"));
-  AddTab(browser(), GURL("https://active.example/"));
-  MakeService(store);
-
-  // No time passes. The floor alone makes the restored tabs expired, and the
-  // timer's zero delay is what runs the sweep.
-  task_environment()->RunUntilIdle();
-  EXPECT_EQ(1, strip()->count());
-  EXPECT_EQ(1u, archive_.ListRecent(model_.default_space_id(), 10).size());
-}
-
-// ...and before the load has landed there is no last save time, so the floor
-// is startup and nothing is archived early. This is the case the async load
-// makes real: ModelStore::Load returns long before last_save_time() is set.
-TEST_F(ArchiveServiceTest, ATabIsNotArchivedWhileTheLoadIsStillOutstanding) {
-  ModelStore* store = MakeModelStore();
-  ASSERT_TRUE(store->last_save_time().is_null());
-
-  AddTab(browser(), GURL("https://restored.example/"));
-  AddTab(browser(), GURL("https://active.example/"));
-  MakeService(store);
-
-  task_environment()->RunUntilIdle();
-  EXPECT_EQ(2, strip()->count());
-  PassTime(base::Hours(11));
-  EXPECT_EQ(2, strip()->count());
-  // The floor is the service's own start, so the full timeout still applies.
-  PassTime(base::Hours(2));
-  EXPECT_EQ(1, strip()->count());
-}
-
 // A handle is weak. A tab this strip no longer holds — closed, or moved to
 // another window, where it is that window's service's business — must not be
 // archived a second time. Guard, not a regression.
@@ -381,6 +373,109 @@ TEST_F(ArchiveServiceTest, ChangingTheTimeoutReschedulesTheOneTimer) {
   sidebar_model_->SetArchiveTimeout(ArchiveTimeout::kNever);
   EXPECT_FALSE(service_->next_expiry_for_testing().has_value());
   EXPECT_EQ(0, service_->live_timer_count_for_testing());
+}
+
+// C1. The worst thing this feature can do is eat the tab the user was reading
+// a moment ago. A tab's idle clock must start when it stops being visible, not
+// when it was activated — and the only way to see that is to drive the strip
+// the way the browser does, which is what hid it.
+TEST_F(ArchiveServiceTest, SwitchingAwayFromATabRestartsItsIdleClock) {
+  AddTab(browser(), GURL("https://reading.example/"));
+  // Thirteen hours of reading. It is the active tab, so nothing happens.
+  PassTime(base::Hours(13));
+  ASSERT_EQ(1, strip()->count());
+
+  // The user opens a new tab. AddTab inserts at 0 and activates, so the tab
+  // they were reading is now the background tab at index 1.
+  AddTab(browser(), GURL("https://new.example/"));
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(2, strip()->count());
+
+  // Its clock restarted just now, so it survives another eleven hours...
+  PassTime(base::Hours(11));
+  EXPECT_EQ(2, strip()->count());
+  // ...and only then does the full timeout run out.
+  PassTime(base::Hours(2));
+  EXPECT_EQ(1, strip()->count());
+}
+
+// C2. BrowserView builds the service inside its own constructor, when the strip
+// is still empty; every real tab arrives afterwards. A restored tab must bring
+// its own truthful idle time with it, which it does: session restore puts the
+// saved last-active time on the WebContents before it is inserted.
+TEST_F(ArchiveServiceTest, ARestoredTabTakesItsSavedLastActiveTimeAsItsClock) {
+  const base::Time yesterday = base::Time::Now() - base::Hours(20);
+  AddTab(browser(), GURL("https://active.example/"));
+  AppendRestoredTab(GURL("https://yesterday.example/"), yesterday);
+  ASSERT_EQ(2, strip()->count());
+  ASSERT_EQ(yesterday, strip()->GetWebContentsAt(1)->GetLastActiveTime());
+
+  // No time passes: twenty hours have already gone by as far as the tab is
+  // concerned, so the timer's zero delay is what runs the sweep.
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(1, strip()->count());
+  EXPECT_EQ(1u, archive_.ListRecent(model_.default_space_id(), 10).size());
+}
+
+// The other half of the same rule, and the reason the restart floor could not
+// be applied to every inserted tab: a tab the user opens right now gets the
+// full timeout. Guard, not a regression.
+TEST_F(ArchiveServiceTest, ATabOpenedNowGetsTheFullTimeout) {
+  AddTab(browser(), GURL("https://active.example/"));
+  AppendTestTab(GURL("https://fresh.example/"));
+  ASSERT_EQ(2, strip()->count());
+
+  PassTime(base::Hours(11));
+  EXPECT_EQ(2, strip()->count());
+  PassTime(base::Hours(2));
+  EXPECT_EQ(1, strip()->count());
+}
+
+// M1. One timer, fired more than once: archive, reschedule to the next
+// earliest expiry, fire again. Nothing before this crossed two expiries.
+TEST_F(ArchiveServiceTest, TheOneTimerFiresAgainAfterASweep) {
+  AddTab(browser(), GURL("https://active.example/"));
+  AppendTestTab(GURL("https://early.example/"));
+  PassTime(base::Hours(6));
+  AppendTestTab(GURL("https://late.example/"));
+  ASSERT_EQ(3, strip()->count());
+
+  // t0 + 13h: `early` is out of time, `late` has been idle seven hours.
+  PassTime(base::Hours(7));
+  EXPECT_EQ(2, strip()->count());
+  EXPECT_EQ(1u, archive_.ListRecent(model_.default_space_id(), 10).size());
+  // The same timer, re-aimed at `late` rather than left stopped.
+  EXPECT_EQ(1, service_->live_timer_count_for_testing());
+
+  // t0 + 19h: `late` reaches thirteen hours and the timer fires a second time.
+  PassTime(base::Hours(6));
+  EXPECT_EQ(1, strip()->count());
+  EXPECT_EQ(2u, archive_.ListRecent(model_.default_space_id(), 10).size());
+  EXPECT_EQ(0, service_->live_timer_count_for_testing());
+}
+
+// I2. "The user asked to close it" is not "the tab closed". A close the user
+// does not confirm leaves the tab open, and a row written anyway is a row per
+// press of Clear, in an archive nothing reads and nothing prunes.
+TEST_F(ArchiveServiceTest, AClearTheUserDoesNotConfirmWritesNoRow) {
+  auto handler = std::make_unique<DecliningUnloadHandler>();
+  DecliningUnloadHandler* handler_ptr = handler.get();
+  UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  AddTab(browser(), GURL("https://today.example/"));
+
+  service_->ArchiveAllToday();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(1, strip()->count());  // The confirmation is up; nothing closed.
+  EXPECT_TRUE(archive_.ListRecent(model_.default_space_id(), 10).empty());
+
+  // And pressing Clear again does not stack up a second row for the same tab.
+  service_->ArchiveAllToday();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(1, strip()->count());
+  EXPECT_TRUE(archive_.ListRecent(model_.default_space_id(), 10).empty());
+
+  // TearDown closes every tab; let them go.
+  handler_ptr->set_intercept(false);
 }
 
 }  // namespace
