@@ -16,6 +16,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 
 class TabStripModel;
@@ -115,6 +116,14 @@ class SidebarTabModel : public SidebarModel,
   void OnArciumModelChanged() override;
 
  private:
+  // How this model closes a tab, wherever the request came from: a user
+  // gesture, and a historical tab so Cmd+Shift+T can bring it back. On the
+  // class rather than in one .cc file because both halves of the
+  // implementation close tabs, and two copies of it could drift apart.
+  static constexpr uint32_t kCloseTypes =
+      TabCloseTypes::CLOSE_USER_GESTURE |
+      TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB;
+
   // The entry's tab if it is live, in whichever window's strip it sits.
   tabs::TabInterface* BoundTabAnywhere(EntryId id) const;
   // The entry's tab if it is live and in this window's strip, else null.

@@ -15,6 +15,7 @@ source_set("browser") {
     "session_rebuild_nudge.h",
     "sidebar_tab_model.cc",
     "sidebar_tab_model.h",
+    "sidebar_tab_model_entries.cc",
     "tab_search_service.cc",
     "tab_search_service.h",
   ]
