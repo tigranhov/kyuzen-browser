@@ -361,6 +361,49 @@ void SidebarTabModel::ReturnToPinnedUrl(EntryId id) {
                                     std::string());
 }
 
+void SidebarTabModel::MoveEntryToSection(EntryId id,
+                                         SidebarSection section,
+                                         int position) {
+  const TabEntry* entry = arcium_model_->GetEntry(id);
+  if (!entry || !tab_strip_model_) {
+    return;
+  }
+  if (section == SidebarSection::kToday) {
+    // Today holds tabs, not entries, so this drops the entry. It must not
+    // drop the page with it. A warm entry already has a tab that stays
+    // behind once nothing claims it; a cold entry has none, so one is opened
+    // first and the end state is the same either way — Today holding a live
+    // tab for that URL. Nothing is lost, which is why this needs no undo.
+    //
+    // The URL is copied out before the mutation: RemoveEntry invalidates
+    // every TabEntry pointer.
+    const GURL url = entry->url;
+    // Anywhere, not just this window: an entry whose tab sits in another
+    // window still has a page behind it, and opening a second copy here
+    // would duplicate it.
+    const bool cold = BoundTabAnywhere(id) == nullptr;
+    if (cold && url.is_valid()) {
+      // Background: a drop rearranges the sidebar, it does not ask to read
+      // the page. Deliberately unbound — the entry is about to go, and a
+      // binding to a removed entry is what ATabWhoseEntryVanishes covers.
+      tab_strip_model_->delegate()->AddTabAt(url, -1, /*foreground=*/false);
+    }
+    binding_->UnbindEntry(id);
+    arcium_model_->RemoveEntry(id);
+    NotifyChanged();
+    return;
+  }
+  const EntryKind kind = section == SidebarSection::kFavorites
+                             ? EntryKind::kFavorite
+                             : EntryKind::kPinned;
+  // Two ArciumModel writes, one sidebar notification: NotifyChanged coalesces
+  // the burst into a single posted flush, so no SidebarModel observer can see
+  // the entry in its new section still holding its old position.
+  arcium_model_->SetEntryKind(id, kind);
+  arcium_model_->ReorderEntry(id, position);
+  NotifyChanged();
+}
+
 std::vector<SidebarFolder> SidebarTabModel::folders() const {
   const SpaceId space = arcium_model_->default_space_id();
   // One pass over the entries counts every folder, so a header never scans

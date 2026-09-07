@@ -6,15 +6,25 @@
 #define ARCIUM_UI_SIDEBAR_FAVORITES_GRID_VIEW_H_
 
 #include <memory>
+#include <optional>
+#include <set>
 #include <vector>
 
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/views/context_menu_controller.h"
+#include "ui/views/drag_controller.h"
 #include "ui/views/view.h"
+
+namespace ui {
+class ClipboardFormatType;
+class OSExchangeData;
+}  // namespace ui
 
 namespace views {
 class ImageButton;
@@ -30,7 +40,8 @@ class RowContextMenu;
 // tile is a plain views::ImageButton with no idea which row it draws, and the
 // grid already holds that mapping.
 class FavoritesGridView : public views::View,
-                          public views::ContextMenuController {
+                          public views::ContextMenuController,
+                          public views::DragController {
   METADATA_HEADER(FavoritesGridView, views::View)
 
  public:
@@ -41,10 +52,24 @@ class FavoritesGridView : public views::View,
 
   void SetRows(const std::vector<SidebarRow>& rows);
 
+  // Where the gap indicator sits, or nothing when no drag is over the grid.
+  // An index into the tiles; tile count means "after the last one".
+  std::optional<size_t> drop_index_for_testing() const { return drop_index_; }
+
   // views::View:
   void Layout(PassKey) override;
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
+  void OnPaint(gfx::Canvas* canvas) override;
+  bool GetDropFormats(int* formats,
+                      std::set<ui::ClipboardFormatType>* format_types) override;
+  bool AreDropTypesRequired() override;
+  bool CanDrop(const ui::OSExchangeData& data) override;
+  void OnDragEntered(const ui::DropTargetEvent& event) override;
+  int OnDragUpdated(const ui::DropTargetEvent& event) override;
+  void OnDragExited() override;
+  views::View::DropCallback GetDropCallback(
+      const ui::DropTargetEvent& event) override;
 
   // views::ContextMenuController:
   void ShowContextMenuForViewImpl(
@@ -52,8 +77,33 @@ class FavoritesGridView : public views::View,
       const gfx::Point& point,
       ui::mojom::MenuSourceType source_type) override;
 
+  // views::DragController. The grid is its tiles' drag controller for the
+  // same reason it is their context menu controller: a tile is a plain
+  // ImageButton with no idea which row it draws, and the grid holds that map.
+  void WriteDragDataForView(views::View* sender,
+                            const gfx::Point& press_pt,
+                            ui::OSExchangeData* data) override;
+  int GetDragOperationsForView(views::View* sender,
+                               const gfx::Point& p) override;
+  bool CanStartDragForView(views::View* sender,
+                           const gfx::Point& press_pt,
+                           const gfx::Point& p) override;
+
  private:
   void OnTileActivated(EntryId entry_id, int tab_index);
+
+  // The tile `sender` is, or nothing when it is not one of ours.
+  std::optional<size_t> IndexOfTile(const views::View* sender) const;
+  // Where in the tiles a drop at `p` would insert: 0..tiles_.size().
+  size_t DropTileIndex(const gfx::Point& p) const;
+  // The gap the indicator fills for `index`, in this view's coordinates.
+  gfx::Rect DropIndicatorBounds(size_t index) const;
+  void SetDropIndex(std::optional<size_t> index);
+  void PerformDrop(RowDragData payload,
+                   size_t index,
+                   const ui::DropTargetEvent& event,
+                   ui::mojom::DragOperation& output_drag_op,
+                   std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
 
   // Swaps the tile at `index`'s whole row for a RenameField bounded to that
   // row — a tile is a quarter of the sidebar wide and has nowhere to host a
@@ -85,6 +135,10 @@ class FavoritesGridView : public views::View,
   // TabRowView's rows, so a slot can be handed a different entry at any time.
   EntryId renaming_entry_id_;
   size_t renaming_tile_index_ = 0;
+  // Read once when a drag enters and reused for every move over the grid; see
+  // TabListView for why.
+  std::optional<RowDragData> drag_payload_;
+  std::optional<size_t> drop_index_;
   base::WeakPtrFactory<FavoritesGridView> weak_factory_{this};
 };
 

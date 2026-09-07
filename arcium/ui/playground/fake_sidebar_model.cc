@@ -280,6 +280,56 @@ void FakeSidebarModel::ReturnToPinnedUrl(EntryId id) {
   }
 }
 
+void FakeSidebarModel::MoveEntryToSection(EntryId id,
+                                          SidebarSection section,
+                                          int position) {
+  SidebarRow* found = FindByEntry(id);
+  if (!found) {
+    return;
+  }
+  // Copied out before the erase below invalidates it.
+  SidebarRow moved = *found;
+  std::erase_if(rows_, [id](const SidebarRow& r) { return r.entry_id == id; });
+
+  if (section == SidebarSection::kToday) {
+    // The entry goes, the page stays. A warm entry's tab falls back into
+    // Today because nothing claims it any more; a cold entry's URL is opened
+    // as a tab, which is what turns the row warm here. Either way there is a
+    // live tab where the entry was, so nothing is lost.
+    moved.entry_id = EntryId();
+    moved.section = SidebarSection::kToday;
+    moved.is_cold = false;
+    moved.can_return_to_pinned_url = false;
+    moved.folder_id.reset();
+    rows_.push_back(std::move(moved));
+    Reindex();
+    Notify();
+    return;
+  }
+
+  moved.section = section;
+  // A favourite is a tile in the grid; it has nowhere to be indented to, so
+  // it leaves any folder behind. ArciumModel::SetEntryKind does the same.
+  if (section == SidebarSection::kFavorites) {
+    moved.folder_id.reset();
+  }
+  // Walk to the `position`-th row of `section`, or to the end of the section
+  // if it holds fewer, which is what ArciumModel::ReorderEntry's clamp does.
+  int seen = 0;
+  auto it = rows_.begin();
+  while (it != rows_.end() &&
+         (static_cast<int>(it->section) < static_cast<int>(section) ||
+          (it->section == section && seen < position))) {
+    if (it->section == section) {
+      ++seen;
+    }
+    ++it;
+  }
+  rows_.insert(it, std::move(moved));
+  Reindex();
+  Notify();
+}
+
 std::vector<SidebarFolder> FakeSidebarModel::folders() const {
   // Sorted by position, not by the vector's order, because that is what
   // SidebarTabModel does and the views are entitled to rely on it.

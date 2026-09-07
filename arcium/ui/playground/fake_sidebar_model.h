@@ -61,6 +61,9 @@ class FakeSidebarModel : public SidebarModel {
   void CloseEntryTab(EntryId id) override;
   void SetEntryTitle(EntryId id, const std::u16string& title) override;
   void ReturnToPinnedUrl(EntryId id) override;
+  void MoveEntryToSection(EntryId id,
+                          SidebarSection section,
+                          int position) override;
   std::vector<SidebarFolder> folders() const override;
   void SetFolderCollapsed(FolderId id, bool collapsed) override;
   FolderId CreateFolderWithEntry(EntryId id,

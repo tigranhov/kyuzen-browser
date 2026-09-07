@@ -87,6 +87,23 @@ class SidebarModel {
   // Navigates the entry's bound tab back to the entry's URL.
   virtual void ReturnToPinnedUrl(EntryId id) = 0;
 
+  // Puts `id` in `section` at `position` among that section's entries. What a
+  // drop does, and one command rather than a kind change followed by a
+  // reorder: a drop changes both at once, so two calls would let an observer
+  // see the entry in its new section still holding its old position, and a
+  // failure between them would strand it mid-move. `position` is ignored for
+  // kToday, whose order is the tab strip's.
+  //
+  // kToday drops the entry rather than moving it — Today is tabs, and a tab
+  // is not an entry — but never the page: a warm entry's tab stays behind,
+  // and a cold entry's URL is opened as a tab first, so nothing is lost and
+  // the drop needs no undo. Naming an id the model does not have, or a
+  // section it cannot reach, is a no-op rather than a crash, because the
+  // drag that issued this began from a snapshot of rows().
+  virtual void MoveEntryToSection(EntryId id,
+                                  SidebarSection section,
+                                  int position) = 0;
+
   // Folder commands. Folders hold pinned entries only, so every one of these
   // that names a favourite, a Today row or an id the model no longer has is a
   // no-op rather than a crash: menus are built from a snapshot of rows() and

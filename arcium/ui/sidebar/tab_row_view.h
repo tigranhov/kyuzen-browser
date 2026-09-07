@@ -15,6 +15,11 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/drag_controller.h"
+
+namespace ui {
+class OSExchangeData;
+}
 
 namespace views {
 class ImageButton;
@@ -30,7 +35,9 @@ class RenameField;
 // One 32px row: favicon or throbber, title, audio indicator, and on hover
 // either a close button or — for a pinned entry that has navigated away — the
 // button that returns it to its pinned URL.
-class TabRowView : public views::Button, public views::ContextMenuController {
+class TabRowView : public views::Button,
+                   public views::ContextMenuController,
+                   public views::DragController {
   METADATA_HEADER(TabRowView, views::Button)
 
  public:
@@ -39,8 +46,6 @@ class TabRowView : public views::Button, public views::ContextMenuController {
     // owner has to dispatch on entry_id instead.
     base::RepeatingCallback<void(const SidebarRow& row)> activate;
     base::RepeatingCallback<void(const SidebarRow& row)> close;
-    // Called while dragging: the row at `from` wants to move to `to`.
-    base::RepeatingCallback<void(int from, int to)> drag_move;
     // A finished inline rename, against the entry the edit was started on
     // rather than whatever this row draws when it ends: the view is pooled by
     // position, so the two are not the same thing. Never called for a row
@@ -78,7 +83,6 @@ class TabRowView : public views::Button, public views::ContextMenuController {
 
   // views::Button / View:
   bool OnMousePressed(const ui::MouseEvent& event) override;
-  bool OnMouseDragged(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
@@ -93,6 +97,16 @@ class TabRowView : public views::Button, public views::ContextMenuController {
       const gfx::Point& point,
       ui::mojom::MenuSourceType source_type) override;
 
+  // views::DragController:
+  void WriteDragDataForView(views::View* sender,
+                            const gfx::Point& press_pt,
+                            ui::OSExchangeData* data) override;
+  int GetDragOperationsForView(views::View* sender,
+                               const gfx::Point& p) override;
+  bool CanStartDragForView(views::View* sender,
+                           const gfx::Point& press_pt,
+                           const gfx::Point& p) override;
+
  private:
   void UpdateVisuals();
   void UpdateTrailingButtons();
@@ -104,11 +118,20 @@ class TabRowView : public views::Button, public views::ContextMenuController {
   // the list and can destroy this view before the call returns.
   void Revert();
 
+  // Opens the rename a double-click asks for. Returns whether it did, which
+  // is what tells the press whether it has already been spent.
+  bool BeginRenameFromDoubleClick();
+
   Delegate delegate_;
   SidebarRow row_;
   bool hovered_ = false;
-  bool dragging_ = false;
-  gfx::Point drag_start_;
+  // Set for the press that opened a rename, and read by the two things that
+  // press must not also do: start a drag, and fire the button a second time.
+  // A double-click's second press and a drag's first press are the same
+  // press, and the drag threshold is the only thing between them — so the
+  // decision is taken here, at press time, before the threshold can be
+  // crossed, rather than left to whichever handler runs first.
+  bool rename_began_on_press_ = false;
 
   raw_ptr<views::ImageView> favicon_ = nullptr;
   raw_ptr<views::Throbber> throbber_ = nullptr;

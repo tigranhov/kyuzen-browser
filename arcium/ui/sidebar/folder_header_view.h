@@ -5,6 +5,7 @@
 #ifndef ARCIUM_UI_SIDEBAR_FOLDER_HEADER_VIEW_H_
 #define ARCIUM_UI_SIDEBAR_FOLDER_HEADER_VIEW_H_
 
+#include <set>
 #include <string>
 
 #include "arcium/ui/sidebar/sidebar_model.h"
@@ -15,6 +16,11 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
+
+namespace ui {
+class ClipboardFormatType;
+class OSExchangeData;
+}  // namespace ui
 
 namespace views {
 class ImageView;
@@ -47,6 +53,9 @@ class FolderHeaderView : public views::Button,
                                  const SidebarFolder& folder,
                                  const gfx::Point& point)>
         show_context_menu;
+    // A row dropped on this header: the entry it names goes into the folder.
+    base::RepeatingCallback<void(EntryId id, const SidebarFolder& folder)>
+        drop_entry;
   };
 
   explicit FolderHeaderView(Delegate delegate);
@@ -79,6 +88,21 @@ class FolderHeaderView : public views::Button,
       const gfx::Point& point,
       ui::mojom::MenuSourceType source_type) override;
 
+  // views::View, drop target half. A header takes entries only: a Today tab
+  // has no entry to put in a folder, so refusing it here lets the drop fall
+  // through to the Pinned list, which knows how to make one.
+  bool GetDropFormats(int* formats,
+                      std::set<ui::ClipboardFormatType>* format_types) override;
+  bool AreDropTypesRequired() override;
+  bool CanDrop(const ui::OSExchangeData& data) override;
+  void OnDragEntered(const ui::DropTargetEvent& event) override;
+  int OnDragUpdated(const ui::DropTargetEvent& event) override;
+  void OnDragExited() override;
+  views::View::DropCallback GetDropCallback(
+      const ui::DropTargetEvent& event) override;
+
+  bool is_drop_target_for_testing() const { return drop_target_; }
+
  private:
   void UpdateVisuals();
   // Takes the field away without an outcome, for when this header stops being
@@ -86,10 +110,18 @@ class FolderHeaderView : public views::Button,
   void AbandonRename();
   void OnRenameFinished(FolderId id, bool commit, const std::u16string& name);
   void Toggle();
+  void SetDropTarget(bool drop_target);
+  void PerformDrop(EntryId id,
+                   const ui::DropTargetEvent& event,
+                   ui::mojom::DragOperation& output_drag_op,
+                   std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
 
   Delegate delegate_;
   SidebarFolder folder_;
   bool hovered_ = false;
+  // Painted like a hover, so the header a drop would land in is the one that
+  // looks like it. Kept apart from `hovered_`, which a drag does not set.
+  bool drop_target_ = false;
 
   raw_ptr<views::ImageView> disclosure_ = nullptr;
   raw_ptr<views::Label> name_ = nullptr;

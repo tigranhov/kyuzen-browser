@@ -4,15 +4,26 @@
 
 #include "arcium/ui/sidebar/favorites_grid_view.h"
 
+#include <algorithm>
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/drop_target_event.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/compositor/layer_tree_owner.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
@@ -35,6 +46,10 @@ gfx::Rect TileRowBounds(int width, size_t index) {
   const int row = static_cast<int>(index) / metrics::kFavoritesPerRow;
   return gfx::Rect(0, row * (size + metrics::kFavoriteTileGap), width, size);
 }
+
+// The gap indicator's width. It fills the gap between two tiles rather than
+// drawing a hairline in it, so it reads as "the tile goes here".
+constexpr int kDropIndicatorWidth = 3;
 
 }  // namespace
 
@@ -61,9 +76,9 @@ void FavoritesGridView::SetRows(const std::vector<SidebarRow>& rows) {
     auto tile = std::make_unique<views::ImageButton>();
     tile->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
     tile->SetImageVerticalAlignment(views::ImageButton::ALIGN_MIDDLE);
-    // Right-click reaches the same menu a pinned row's does; without this the
-    // only way to unpin a favourite would be drag and drop, which is Task 8.
+    // Right-click reaches the same menu a pinned row's does.
     tile->set_context_menu_controller(this);
+    tile->set_drag_controller(this);
     tiles_.push_back(AddChildView(std::move(tile)));
   }
   while (tiles_.size() > mine.size()) {
@@ -109,23 +124,185 @@ void FavoritesGridView::OnTileActivated(EntryId entry_id, int tab_index) {
   }
 }
 
+std::optional<size_t> FavoritesGridView::IndexOfTile(
+    const views::View* sender) const {
+  for (size_t i = 0; i < tiles_.size() && i < rows_.size(); ++i) {
+    if (tiles_[i] == sender) {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
 void FavoritesGridView::ShowContextMenuForViewImpl(
     views::View* source,
     const gfx::Point& point,
     ui::mojom::MenuSourceType source_type) {
-  for (size_t i = 0; i < tiles_.size() && i < rows_.size(); ++i) {
-    if (tiles_[i] == source) {
-      context_menu_ = std::make_unique<RowContextMenu>(model_);
-      // The Rename item starts the edit on this tile's row; see
-      // BeginRenameForTile for why it is bounded to the row rather than the
-      // tile.
-      context_menu_->RunForRow(
-          rows_[i], source, point,
-          base::BindRepeating(&FavoritesGridView::BeginRenameForTile,
-                              weak_factory_.GetWeakPtr(), i));
-      return;
-    }
+  std::optional<size_t> index = IndexOfTile(source);
+  if (!index) {
+    return;
   }
+  context_menu_ = std::make_unique<RowContextMenu>(model_);
+  // The Rename item starts the edit on this tile's row; see
+  // BeginRenameForTile for why it is bounded to the row rather than the tile.
+  context_menu_->RunForRow(
+      rows_[*index], source, point,
+      base::BindRepeating(&FavoritesGridView::BeginRenameForTile,
+                          weak_factory_.GetWeakPtr(), *index));
+}
+
+void FavoritesGridView::WriteDragDataForView(views::View* sender,
+                                             const gfx::Point& press_pt,
+                                             ui::OSExchangeData* data) {
+  std::optional<size_t> index = IndexOfTile(sender);
+  if (!index) {
+    return;
+  }
+  RowDragData payload;
+  payload.entry_id = rows_[*index].entry_id;
+  payload.tab_index = rows_[*index].tab_index;
+  payload.Write(data);
+}
+
+int FavoritesGridView::GetDragOperationsForView(views::View* sender,
+                                                const gfx::Point& p) {
+  std::optional<size_t> index = IndexOfTile(sender);
+  if (is_renaming() || !index ||
+      (!rows_[*index].entry_id.is_valid() && rows_[*index].tab_index < 0)) {
+    return ui::DragDropTypes::DRAG_NONE;
+  }
+  return ui::DragDropTypes::DRAG_MOVE;
+}
+
+bool FavoritesGridView::CanStartDragForView(views::View* sender,
+                                            const gfx::Point& press_pt,
+                                            const gfx::Point& p) {
+  return !is_renaming() && views::View::ExceededDragThreshold(press_pt - p);
+}
+
+size_t FavoritesGridView::DropTileIndex(const gfx::Point& p) const {
+  const int pitch = TileSize(width()) + metrics::kFavoriteTileGap;
+  if (pitch <= 0 || tiles_.empty()) {
+    return tiles_.size();
+  }
+  const int grid_row = std::max(0, p.y() / pitch);
+  // Half a pitch across: the nearest gap, not the tile the pointer is over.
+  const int column =
+      std::clamp((p.x() + pitch / 2) / pitch, 0, metrics::kFavoritesPerRow);
+  const size_t index = static_cast<size_t>(grid_row) *
+                           static_cast<size_t>(metrics::kFavoritesPerRow) +
+                       static_cast<size_t>(column);
+  return std::min(index, tiles_.size());
+}
+
+gfx::Rect FavoritesGridView::DropIndicatorBounds(size_t index) const {
+  const int size = TileSize(width());
+  const int pitch = size + metrics::kFavoriteTileGap;
+  const size_t per_row = static_cast<size_t>(metrics::kFavoritesPerRow);
+  // Past the last tile, the indicator goes after it rather than at the start
+  // of a row that does not exist yet.
+  size_t slot = index;
+  bool trailing = false;
+  if (index >= tiles_.size() && !tiles_.empty()) {
+    slot = tiles_.size() - 1;
+    trailing = true;
+  }
+  const int grid_row = static_cast<int>(slot / per_row);
+  const int column = static_cast<int>(slot % per_row) + (trailing ? 1 : 0);
+  // Centred on the gap before `column`; column 0 has no gap to its left, so
+  // it sits flush against the grid's edge.
+  const int x =
+      std::max(0, column * pitch -
+                      (metrics::kFavoriteTileGap + kDropIndicatorWidth) / 2);
+  return gfx::Rect(std::min(x, std::max(0, width() - kDropIndicatorWidth)),
+                   grid_row * pitch, kDropIndicatorWidth, size);
+}
+
+void FavoritesGridView::SetDropIndex(std::optional<size_t> index) {
+  if (drop_index_ == index) {
+    return;
+  }
+  drop_index_ = index;
+  SchedulePaint();
+}
+
+bool FavoritesGridView::GetDropFormats(
+    int* formats,
+    std::set<ui::ClipboardFormatType>* format_types) {
+  format_types->insert(RowDragData::Format());
+  return true;
+}
+
+bool FavoritesGridView::AreDropTypesRequired() {
+  return true;
+}
+
+bool FavoritesGridView::CanDrop(const ui::OSExchangeData& data) {
+  return RowDragData::Read(data).has_value();
+}
+
+void FavoritesGridView::OnDragEntered(const ui::DropTargetEvent& event) {
+  drag_payload_ = RowDragData::Read(event.data());
+}
+
+int FavoritesGridView::OnDragUpdated(const ui::DropTargetEvent& event) {
+  if (!drag_payload_) {
+    drag_payload_ = RowDragData::Read(event.data());
+  }
+  if (!drag_payload_) {
+    SetDropIndex(std::nullopt);
+    return ui::DragDropTypes::DRAG_NONE;
+  }
+  SetDropIndex(DropTileIndex(event.location()));
+  return ui::DragDropTypes::DRAG_MOVE;
+}
+
+void FavoritesGridView::OnDragExited() {
+  drag_payload_.reset();
+  SetDropIndex(std::nullopt);
+}
+
+views::View::DropCallback FavoritesGridView::GetDropCallback(
+    const ui::DropTargetEvent& event) {
+  std::optional<RowDragData> payload = drag_payload_;
+  if (!payload) {
+    payload = RowDragData::Read(event.data());
+  }
+  const size_t index = DropTileIndex(event.location());
+  drag_payload_.reset();
+  SetDropIndex(std::nullopt);
+  if (!payload) {
+    return base::NullCallback();
+  }
+  return base::BindOnce(&FavoritesGridView::PerformDrop,
+                        weak_factory_.GetWeakPtr(), *payload, index);
+}
+
+void FavoritesGridView::PerformDrop(
+    RowDragData payload,
+    size_t index,
+    const ui::DropTargetEvent& event,
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
+  output_drag_op = ui::mojom::DragOperation::kMove;
+  if (payload.is_entry()) {
+    // Favourites have no folders, so a tile's index is the position the model
+    // orders by; reordering inside the grid is the same command as arriving
+    // from Pinned, with the kind change turning into a no-op.
+    model_->MoveEntryToSection(payload.entry_id, SidebarSection::kFavorites,
+                               static_cast<int>(index));
+    return;
+  }
+  model_->AddToFavorites(payload.tab_index);
+}
+
+void FavoritesGridView::OnPaint(gfx::Canvas* canvas) {
+  views::View::OnPaint(canvas);
+  if (!drop_index_) {
+    return;
+  }
+  canvas->FillRect(DropIndicatorBounds(*drop_index_),
+                   GetColorProvider()->GetColor(kColorArciumSpaceAccent));
 }
 
 void FavoritesGridView::BeginRenameForTile(size_t index) {

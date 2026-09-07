@@ -4,18 +4,21 @@
 
 #include "arcium/ui/sidebar/tab_row_view.h"
 
-#include <cstdlib>
 #include <memory>
 #include <utility>
 
 #include "arcium/ui/sidebar/rename_field.h"
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/vector_icons.h"
 #include "base/functional/bind.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/events/event.h"
+#include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/accessibility/view_accessibility.h"
@@ -33,7 +36,6 @@
 namespace arcium {
 
 namespace {
-constexpr int kDragThreshold = 4;
 constexpr int kIndicatorSize = 14;
 }  // namespace
 
@@ -52,6 +54,9 @@ TabRowView::TabRowView(Delegate delegate)
       delegate_(std::move(delegate)) {
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   set_context_menu_controller(this);
+  // A row is its own drag source. What it writes is an id, never itself: see
+  // RowDragData.
+  set_drag_controller(this);
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
@@ -232,6 +237,14 @@ void TabRowView::Revert() {
   revert.Run(row);
 }
 
+bool TabRowView::BeginRenameFromDoubleClick() {
+  // Click 1 activated this row, which is why the gesture is safe here and was
+  // not on a folder header: activating the row you are about to rename is the
+  // row you meant, while click 1 on a header had already collapsed it.
+  BeginRename();
+  return is_renaming();
+}
+
 bool TabRowView::OnMousePressed(const ui::MouseEvent& event) {
   if (event.IsOnlyMiddleMouseButton()) {
     // Copies: the close destroys this view before Run() returns.
@@ -240,33 +253,64 @@ bool TabRowView::OnMousePressed(const ui::MouseEvent& event) {
     close.Run(row);
     return true;
   }
-  drag_start_ = event.location();
-  dragging_ = false;
+  rename_began_on_press_ = false;
+  // R2.4: a double-click renames the row. This is the second press of the
+  // pair, and it is also the press a drag would start from, so the two are
+  // settled here rather than by whichever handler wins later:
+  // CanStartDragForView refuses while a rename is open, and the button is not
+  // told about this press at all, so the release cannot activate the row a
+  // second time. A row with no entry has nothing to carry a name past its
+  // tab's life, and BeginRename refuses it — the press then falls through and
+  // behaves like any other click.
+  if (event.IsOnlyLeftMouseButton() &&
+      (event.flags() & ui::EF_IS_DOUBLE_CLICK) && !is_renaming() &&
+      BeginRenameFromDoubleClick()) {
+    rename_began_on_press_ = true;
+    return true;
+  }
   return views::Button::OnMousePressed(event);
 }
 
-bool TabRowView::OnMouseDragged(const ui::MouseEvent& event) {
-  if (!dragging_ &&
-      std::abs(event.location().y() - drag_start_.y()) > kDragThreshold) {
-    dragging_ = true;
+void TabRowView::OnMouseReleased(const ui::MouseEvent& event) {
+  if (rename_began_on_press_) {
+    // The press opened the field; the release must not also fire the button,
+    // which would activate the row underneath the edit.
+    rename_began_on_press_ = false;
+    return;
   }
-  if (dragging_) {
-    // Ask the list to move us when the pointer crosses a neighbour's midline.
-    const int rows_moved = (event.location().y() - drag_start_.y()) / height();
-    if (rows_moved != 0) {
-      delegate_.drag_move.Run(tab_index(), tab_index() + rows_moved);
-    }
-    return true;
-  }
-  return views::Button::OnMouseDragged(event);
+  views::Button::OnMouseReleased(event);
 }
 
-void TabRowView::OnMouseReleased(const ui::MouseEvent& event) {
-  const bool was_dragging = dragging_;
-  dragging_ = false;
-  if (!was_dragging) {
-    views::Button::OnMouseReleased(event);
+void TabRowView::WriteDragDataForView(views::View* sender,
+                                      const gfx::Point& press_pt,
+                                      ui::OSExchangeData* data) {
+  RowDragData payload;
+  payload.entry_id = row_.entry_id;
+  payload.tab_index = row_.tab_index;
+  payload.Write(data);
+}
+
+int TabRowView::GetDragOperationsForView(views::View* sender,
+                                         const gfx::Point& p) {
+  // A row that names neither an entry nor a tab is not a row anything can be
+  // told to move, and while a rename is open the field owns the row.
+  if (is_renaming() || (!row_.entry_id.is_valid() && row_.tab_index < 0)) {
+    return ui::DragDropTypes::DRAG_NONE;
   }
+  // Never DRAG_COPY: a sidebar row is one thing in one place, and two rows
+  // for one entry is a state the model cannot hold.
+  return ui::DragDropTypes::DRAG_MOVE;
+}
+
+bool TabRowView::CanStartDragForView(views::View* sender,
+                                     const gfx::Point& press_pt,
+                                     const gfx::Point& p) {
+  if (rename_began_on_press_ || is_renaming()) {
+    return false;
+  }
+  // Views' own threshold, the same one ProcessMouseDragged already applied,
+  // so a row starts dragging exactly when every other draggable view does.
+  return views::View::ExceededDragThreshold(press_pt - p);
 }
 
 void TabRowView::OnMouseEntered(const ui::MouseEvent& event) {

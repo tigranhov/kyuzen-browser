@@ -6,14 +6,23 @@
 #define ARCIUM_UI_SIDEBAR_TAB_LIST_VIEW_H_
 
 #include <memory>
+#include <optional>
+#include <set>
 #include <string>
 #include <vector>
 
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/view.h"
+
+namespace ui {
+class ClipboardFormatType;
+class OSExchangeData;
+}  // namespace ui
 
 namespace views {
 class LabelButton;
@@ -42,6 +51,22 @@ class TabListView : public views::View {
 
   size_t row_count() const { return rows_.size(); }
   size_t folder_count() const { return headers_.size(); }
+  // Where the insertion line is being drawn, or nothing when no drag is over
+  // this list. An index into the laid-out rows; row_count() means "after the
+  // last one".
+  std::optional<size_t> drop_index_for_testing() const { return drop_index_; }
+
+  // views::View:
+  bool GetDropFormats(int* formats,
+                      std::set<ui::ClipboardFormatType>* format_types) override;
+  bool AreDropTypesRequired() override;
+  bool CanDrop(const ui::OSExchangeData& data) override;
+  void OnDragEntered(const ui::DropTargetEvent& event) override;
+  int OnDragUpdated(const ui::DropTargetEvent& event) override;
+  void OnDragExited() override;
+  views::View::DropCallback GetDropCallback(
+      const ui::DropTargetEvent& event) override;
+  void OnPaint(gfx::Canvas* canvas) override;
 
  private:
   // Where one child of this list sits in the laid-out order.
@@ -57,7 +82,6 @@ class TabListView : public views::View {
   // tab. Only the first can be cold, and a cold row has no tab index.
   void OnActivateRow(const SidebarRow& row);
   void OnCloseRow(const SidebarRow& row);
-  void OnDragMove(int from, int to);
   void OnRenameRow(EntryId id, const std::u16string& title);
   void OnRevertRow(const SidebarRow& row);
   void OnShowRowMenu(TabRowView* source,
@@ -68,6 +92,29 @@ class TabListView : public views::View {
   void OnShowFolderMenu(FolderHeaderView* source,
                         const SidebarFolder& folder,
                         const gfx::Point& point);
+  // A row dropped on one of this list's folder headers.
+  void OnDropOnFolder(EntryId id, const SidebarFolder& folder);
+
+  // Where in the laid-out rows a drop at `y` would insert: 0..rows_.size().
+  size_t DropRowIndex(int y) const;
+  // The y of the boundary the insertion line is drawn on for `index`.
+  int DropLineY(size_t index) const;
+  // The drop index turned into a position among this section's entries.
+  // `rows_` is in laid-out order — a folder's members come before the top
+  // level — which is not the order the model keeps positions in, so this
+  // reads the position each row carries rather than assuming its own index
+  // is one.
+  int EntryPositionForDropIndex(size_t index) const;
+  // Today only: turns the drop index into a tab-strip move.
+  void MoveTabToDropIndex(int from_index, size_t index);
+  void SetDropIndex(std::optional<size_t> index);
+  // Bound at drop time with the payload and index already resolved, because
+  // the drop runs after the event that produced it.
+  void PerformDrop(RowDragData payload,
+                   size_t index,
+                   const ui::DropTargetEvent& event,
+                   ui::mojom::DragOperation& output_drag_op,
+                   std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
 
   TabRowView* MakeRow();
   FolderHeaderView* MakeHeader();
@@ -75,11 +122,25 @@ class TabListView : public views::View {
   raw_ptr<SidebarModel> model_;
   const SidebarSection section_;
   std::vector<raw_ptr<TabRowView>> rows_;
+  // Parallel to `rows_`: each row's position among this section's rows, which
+  // for an entry section is the position the model orders by. Kept because
+  // `rows_` is in laid-out order and that order is not the model's.
+  std::vector<int> row_positions_;
+  // How many rows this section has, including the members of collapsed
+  // folders that were never built. The end of the section, for a drop past
+  // the last visible row.
+  int section_row_count_ = 0;
   std::vector<raw_ptr<FolderHeaderView>> headers_;
   raw_ptr<views::LabelButton> new_tab_ = nullptr;
   // Outlives the menu it is running, so a command that arrives after the
   // click still finds its model and its snapshot.
   std::unique_ptr<RowContextMenu> context_menu_;
+  // Read once when a drag enters and reused for every move over the list:
+  // reading it back out of the pickle costs an allocation, and a drag-move
+  // arrives on every pixel of pointer motion.
+  std::optional<RowDragData> drag_payload_;
+  std::optional<size_t> drop_index_;
+  base::WeakPtrFactory<TabListView> weak_factory_{this};
 };
 
 }  // namespace arcium

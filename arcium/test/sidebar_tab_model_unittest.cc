@@ -284,6 +284,129 @@ TEST_F(SidebarTabModelTest, UnpinningAColdEntryJustRemovesIt) {
   EXPECT_TRUE(model->rows().empty());
 }
 
+// What a drop between sections issues. One command rather than a kind change
+// followed by a reorder, so no observer can see the entry half-moved.
+TEST_F(SidebarTabModelTest, MoveEntryToSectionChangesKindAndPosition) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  AddTab(browser(), GURL("https://c.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  // One entry per tab: AddEntryForTab binds the tab it is given, and handing
+  // it the same index twice would rebind and leave the first entry cold.
+  model->AddToFavorites(0);
+  model->PinTab(1);
+  model->PinTab(2);
+  // Favourites lead, then pinned in position order.
+  ASSERT_EQ(3u, model->rows().size());
+  const EntryId favourite = model->rows()[0].entry_id;
+  const EntryId second_pinned = model->rows()[2].entry_id;
+
+  model->MoveEntryToSection(second_pinned, SidebarSection::kFavorites,
+                            /*position=*/0);
+
+  std::vector<SidebarRow> rows = model->rows();
+  ASSERT_EQ(3u, rows.size());
+  EXPECT_EQ(second_pinned, rows[0].entry_id);
+  EXPECT_EQ(SidebarSection::kFavorites, rows[0].section);
+  EXPECT_EQ(favourite, rows[1].entry_id);
+  EXPECT_EQ(SidebarSection::kPinned, rows[2].section);
+}
+
+TEST_F(SidebarTabModelTest, MoveEntryToSectionReordersWithinASection) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  AddTab(browser(), GURL("https://c.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  model->PinTab(1);
+  model->PinTab(2);
+  const EntryId last = model->rows()[2].entry_id;
+
+  model->MoveEntryToSection(last, SidebarSection::kPinned, /*position=*/0);
+  EXPECT_EQ(last, model->rows()[0].entry_id);
+}
+
+// The kind change and the reorder are two ArciumModel writes; the sidebar
+// must still see one change, or a rebuild lands on the intermediate state.
+TEST_F(SidebarTabModelTest, MoveEntryToSectionNotifiesOnce) {
+  MakeBrowserUiUpdatesImmediate();
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  task_environment()->RunUntilIdle();
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  model->PinTab(1);
+  task_environment()->RunUntilIdle();
+  const EntryId id = model->rows()[1].entry_id;
+
+  CountingObserver observer;
+  model->AddObserver(&observer);
+  model->MoveEntryToSection(id, SidebarSection::kFavorites, /*position=*/0);
+  EXPECT_EQ(0, observer.count);  // Nothing until the posted task runs.
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(1, observer.count);
+  model->RemoveObserver(&observer);
+}
+
+// Dropping a warm entry into Today drops the entry, not the page: nothing
+// claims the tab any more, so it falls back into Today.
+TEST_F(SidebarTabModelTest, MovingAWarmEntryToTodayLeavesItsTab) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  const EntryId id = model->rows()[0].entry_id;
+  const int count_before = strip()->count();
+
+  model->MoveEntryToSection(id, SidebarSection::kToday, /*position=*/0);
+
+  EXPECT_EQ(count_before, strip()->count());
+  std::vector<SidebarRow> rows = model->rows();
+  ASSERT_EQ(1u, rows.size());
+  EXPECT_EQ(SidebarSection::kToday, rows[0].section);
+  EXPECT_TRUE(arcium_model_.entries().empty());
+}
+
+// A cold entry has no tab to leave behind, so one is opened first. Without
+// this the drop would delete the entry and everything it stood for, which is
+// what an undo would otherwise have to exist to take back.
+TEST_F(SidebarTabModelTest, MovingAColdEntryToTodayOpensItsUrlFirst) {
+  AddTab(browser(), GURL("https://a.example/"));
+  const EntryId id = arcium_model_.AddEntry(
+      EntryKind::kPinned, GURL("https://cold.example/"), u"Cold");
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  ASSERT_TRUE(model->rows()[0].is_cold);
+  const int count_before = strip()->count();
+
+  model->MoveEntryToSection(id, SidebarSection::kToday, /*position=*/0);
+  task_environment()->RunUntilIdle();
+
+  EXPECT_EQ(count_before + 1, strip()->count());
+  EXPECT_TRUE(arcium_model_.entries().empty());
+  // A tab for the URL the entry stood for, and every row now a live Today
+  // row: the entry went, the page did not.
+  bool found = false;
+  for (int i = 0; i < strip()->count(); ++i) {
+    found = found || strip()->GetWebContentsAt(i)->GetVisibleURL() ==
+                         GURL("https://cold.example/");
+  }
+  EXPECT_TRUE(found);
+  for (const SidebarRow& row : model->rows()) {
+    EXPECT_EQ(SidebarSection::kToday, row.section);
+    EXPECT_FALSE(row.is_cold);
+  }
+}
+
+// The drag that issued this began from a snapshot of rows(), which the model
+// can outrun.
+TEST_F(SidebarTabModelTest, MoveEntryToSectionIgnoresAnUnknownEntry) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->MoveEntryToSection(EntryId::Generate(), SidebarSection::kFavorites, 0);
+  model->MoveEntryToSection(EntryId::Generate(), SidebarSection::kToday, 0);
+  EXPECT_EQ(1, strip()->count());
+  EXPECT_TRUE(arcium_model_.entries().empty());
+}
+
 TEST_F(SidebarTabModelTest, NavigatingAwayOffersAReturnToThePinnedUrl) {
   AddTab(browser(), GURL("https://pinned.example/"));
   std::unique_ptr<SidebarTabModel> model = MakeModel();

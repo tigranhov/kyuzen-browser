@@ -5,16 +5,25 @@
 #include "arcium/ui/sidebar/folder_header_view.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "arcium/ui/sidebar/rename_field.h"
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/vector_icons.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/string_number_conversions.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/drop_target_event.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/compositor/layer_tree_owner.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/insets.h"
@@ -195,10 +204,83 @@ void FolderHeaderView::ShowContextMenuForViewImpl(
 
 void FolderHeaderView::OnThemeChanged() {
   views::Button::OnThemeChanged();
-  SetBackground(
-      hovered_ ? views::CreateRoundedRectBackground(
-                     kColorArciumRowHoverBackground, metrics::kRowCornerRadius)
-               : nullptr);
+  if (drop_target_) {
+    // The accent tint, not the hover grey: a drop is a commitment and has to
+    // read as more than the pointer passing over.
+    SetBackground(views::CreateRoundedRectBackground(
+        kColorArciumSpaceChipActiveBackground, metrics::kRowCornerRadius));
+  } else if (hovered_) {
+    SetBackground(views::CreateRoundedRectBackground(
+        kColorArciumRowHoverBackground, metrics::kRowCornerRadius));
+  } else {
+    SetBackground(nullptr);
+  }
+}
+
+void FolderHeaderView::SetDropTarget(bool drop_target) {
+  if (drop_target_ == drop_target) {
+    return;
+  }
+  drop_target_ = drop_target;
+  OnThemeChanged();
+}
+
+bool FolderHeaderView::GetDropFormats(
+    int* formats,
+    std::set<ui::ClipboardFormatType>* format_types) {
+  format_types->insert(RowDragData::Format());
+  return true;
+}
+
+bool FolderHeaderView::AreDropTypesRequired() {
+  return true;
+}
+
+bool FolderHeaderView::CanDrop(const ui::OSExchangeData& data) {
+  // Entries only. A Today tab has no entry to put in a folder, and refusing
+  // it here is what lets DropHelper walk up to the Pinned list, which turns
+  // it into one.
+  std::optional<RowDragData> payload = RowDragData::Read(data);
+  return payload.has_value() && payload->is_entry();
+}
+
+void FolderHeaderView::OnDragEntered(const ui::DropTargetEvent& event) {
+  SetDropTarget(true);
+}
+
+int FolderHeaderView::OnDragUpdated(const ui::DropTargetEvent& event) {
+  // No per-event work: the whole header is one target, so where inside it the
+  // pointer is does not change the answer.
+  return ui::DragDropTypes::DRAG_MOVE;
+}
+
+void FolderHeaderView::OnDragExited() {
+  SetDropTarget(false);
+}
+
+views::View::DropCallback FolderHeaderView::GetDropCallback(
+    const ui::DropTargetEvent& event) {
+  SetDropTarget(false);
+  std::optional<RowDragData> payload = RowDragData::Read(event.data());
+  if (!payload || !payload->is_entry() || !delegate_.drop_entry) {
+    return base::NullCallback();
+  }
+  return base::BindOnce(&FolderHeaderView::PerformDrop,
+                        weak_factory_.GetWeakPtr(), payload->entry_id);
+}
+
+void FolderHeaderView::PerformDrop(
+    EntryId id,
+    const ui::DropTargetEvent& event,
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
+  output_drag_op = ui::mojom::DragOperation::kMove;
+  // A copy of the folder, and of the callback: the command rebuilds the list
+  // and can destroy this view before Run() returns.
+  base::RepeatingCallback<void(EntryId, const SidebarFolder&)> drop =
+      delegate_.drop_entry;
+  const SidebarFolder folder = folder_;
+  drop.Run(id, folder);
 }
 
 gfx::Size FolderHeaderView::CalculatePreferredSize(

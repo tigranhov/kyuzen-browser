@@ -7,25 +7,43 @@
 #include <algorithm>
 #include <limits>
 #include <memory>
+#include <optional>
 #include <set>
 #include <utility>
 
 #include "arcium/ui/sidebar/folder_header_view.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/tab_row_view.h"
 #include "arcium/ui/sidebar/vector_icons.h"
 #include "base/functional/bind.h"
+#include "base/functional/callback_helpers.h"
+#include "ui/base/clipboard/clipboard_format_type.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/drop_target_event.h"
+#include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/compositor/layer_tree_owner.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view_class_properties.h"
 
 namespace arcium {
+
+namespace {
+// The insertion line. Two device-independent pixels, which is exactly the
+// gap BoxLayout leaves between rows, so it sits between them rather than
+// over one.
+constexpr int kDropLineThickness = 2;
+}  // namespace
 
 TabListView::TabListView(SidebarModel* model, SidebarSection section)
     : model_(model), section_(section) {
@@ -58,8 +76,6 @@ TabRowView* TabListView::MakeRow() {
       base::BindRepeating(&TabListView::OnActivateRow, base::Unretained(this));
   delegate.close =
       base::BindRepeating(&TabListView::OnCloseRow, base::Unretained(this));
-  delegate.drag_move =
-      base::BindRepeating(&TabListView::OnDragMove, base::Unretained(this));
   delegate.rename =
       base::BindRepeating(&TabListView::OnRenameRow, base::Unretained(this));
   delegate.return_to_pinned_url =
@@ -77,6 +93,8 @@ FolderHeaderView* TabListView::MakeHeader() {
       base::BindRepeating(&TabListView::OnRenameFolder, base::Unretained(this));
   delegate.show_context_menu = base::BindRepeating(
       &TabListView::OnShowFolderMenu, base::Unretained(this));
+  delegate.drop_entry =
+      base::BindRepeating(&TabListView::OnDropOnFolder, base::Unretained(this));
   return AddChildView(std::make_unique<FolderHeaderView>(std::move(delegate)));
 }
 
@@ -153,12 +171,19 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
   // BoxLayout lays them out by child index.
   size_t next_row = 0;
   size_t child_index = 0;
+  row_positions_.clear();
+  row_positions_.reserve(rows_needed);
+  section_row_count_ = static_cast<int>(mine.size());
   for (const PlanItem& item : plan) {
     views::View* view = nullptr;
     if (item.is_header) {
       view = headers_[item.index];
     } else {
       TabRowView* row = rows_[next_row++];
+      // `mine` is in the order the model hands the section over, which for an
+      // entry section is position order. The plan is not, so the position
+      // travels with the row rather than being read off its slot later.
+      row_positions_.push_back(static_cast<int>(item.index));
       row->SetRow(*mine[item.index]);
       row->SetProperty(
           views::kMarginsKey,
@@ -190,33 +215,42 @@ void TabListView::OnCloseRow(const SidebarRow& row) {
   }
 }
 
-void TabListView::OnDragMove(int from, int to) {
+void TabListView::MoveTabToDropIndex(int from_index, size_t index) {
   // Clamp to this section's range in tab-index space. `rows_` is in laid-out
   // order — a folder's entries come before the top level — so the first and
   // last row are not the smallest and largest tab index, and a cold row has
   // no tab index at all. Taking the ends instead of the extremes hands
   // std::clamp lo > hi, which is a hard abort under libc++ hardening.
   //
-  // A two-variable scan rather than a collected std::vector<int>: this runs
-  // on every mouse-drag event while a row is being dragged, so an allocation
-  // per pixel of motion is the 8ms-per-frame budget's kind of problem.
+  // A two-variable scan rather than a collected std::vector<int>: nothing on
+  // a drag path may allocate per event.
   int lo = std::numeric_limits<int>::max();
   int hi = std::numeric_limits<int>::min();
   for (const TabRowView* row : rows_) {
-    const int index = row->tab_index();
-    if (index >= 0) {
-      lo = std::min(lo, index);
-      hi = std::max(hi, index);
+    const int tab_index = row->tab_index();
+    if (tab_index >= 0) {
+      lo = std::min(lo, tab_index);
+      hi = std::max(hi, tab_index);
     }
   }
   // A section of nothing but cold rows has no tab-index range to move within,
   // and a cold row is not being dragged anywhere the tab strip understands.
-  if (lo > hi || from < 0) {
+  if (lo > hi || from_index < 0) {
     return;
   }
+  int to = hi;
+  if (index < rows_.size() && rows_[index]->tab_index() >= 0) {
+    to = rows_[index]->tab_index();
+    // The drop index names the row the dragged one lands *before*. Lifting
+    // the dragged row out first shifts everything after it up one, so landing
+    // before a row that is already below it means one index less.
+    if (from_index < to) {
+      --to;
+    }
+  }
   to = std::clamp(to, lo, hi);
-  if (to != from) {
-    model_->MoveTab(from, to);
+  if (to != from_index) {
+    model_->MoveTab(from_index, to);
   }
 }
 
@@ -259,6 +293,154 @@ void TabListView::OnShowFolderMenu(FolderHeaderView* source,
       folder, source, point,
       base::BindRepeating(&FolderHeaderView::BeginRename,
                           source->GetWeakPtr()));
+}
+
+void TabListView::OnDropOnFolder(EntryId id, const SidebarFolder& folder) {
+  // The model is the authority on what a folder may hold — a favourite is a
+  // tile in the grid with nowhere to be indented to — so this refuses
+  // nothing and lets MoveEntryToFolder no-op.
+  model_->MoveEntryToFolder(id, folder.id);
+}
+
+size_t TabListView::DropRowIndex(int y) const {
+  // `rows_` is in laid-out order and BoxLayout lays out by child index, so
+  // their y's ascend with the vector even though their tab indices and model
+  // positions do not.
+  size_t index = 0;
+  for (const TabRowView* row : rows_) {
+    if (y < row->bounds().CenterPoint().y()) {
+      break;
+    }
+    ++index;
+  }
+  return index;
+}
+
+int TabListView::DropLineY(size_t index) const {
+  if (rows_.empty()) {
+    return 0;
+  }
+  if (index < rows_.size()) {
+    return std::max(0, rows_[index]->y() - kDropLineThickness);
+  }
+  return rows_.back()->bounds().bottom();
+}
+
+int TabListView::EntryPositionForDropIndex(size_t index) const {
+  if (index < row_positions_.size()) {
+    return row_positions_[index];
+  }
+  // Past the last row that was built. A collapsed folder's members are real
+  // entries that no row was made for, so the end of the section is the count
+  // the model gave, not the number of views.
+  return section_row_count_;
+}
+
+void TabListView::SetDropIndex(std::optional<size_t> index) {
+  if (drop_index_ == index) {
+    return;
+  }
+  drop_index_ = index;
+  SchedulePaint();
+}
+
+bool TabListView::GetDropFormats(
+    int* formats,
+    std::set<ui::ClipboardFormatType>* format_types) {
+  format_types->insert(RowDragData::Format());
+  return true;
+}
+
+bool TabListView::AreDropTypesRequired() {
+  return true;
+}
+
+bool TabListView::CanDrop(const ui::OSExchangeData& data) {
+  // Favourites are the grid's, not a list's; the other two sections take any
+  // row, and which command that becomes is PerformDrop's business.
+  return section_ != SidebarSection::kFavorites &&
+         RowDragData::Read(data).has_value();
+}
+
+void TabListView::OnDragEntered(const ui::DropTargetEvent& event) {
+  // Once per entry, not once per move: unpickling allocates and a drag-move
+  // arrives on every pixel of pointer motion.
+  drag_payload_ = RowDragData::Read(event.data());
+}
+
+int TabListView::OnDragUpdated(const ui::DropTargetEvent& event) {
+  if (!drag_payload_) {
+    drag_payload_ = RowDragData::Read(event.data());
+  }
+  if (!drag_payload_) {
+    SetDropIndex(std::nullopt);
+    return ui::DragDropTypes::DRAG_NONE;
+  }
+  SetDropIndex(DropRowIndex(event.location().y()));
+  return ui::DragDropTypes::DRAG_MOVE;
+}
+
+void TabListView::OnDragExited() {
+  drag_payload_.reset();
+  SetDropIndex(std::nullopt);
+}
+
+views::View::DropCallback TabListView::GetDropCallback(
+    const ui::DropTargetEvent& event) {
+  std::optional<RowDragData> payload = drag_payload_;
+  if (!payload) {
+    payload = RowDragData::Read(event.data());
+  }
+  const size_t index = DropRowIndex(event.location().y());
+  drag_payload_.reset();
+  SetDropIndex(std::nullopt);
+  if (!payload) {
+    return base::NullCallback();
+  }
+  // Weak, and with the payload and index already resolved: the drop runs
+  // after the event that produced it, and a model change from another window
+  // can rebuild — or destroy — this list in between.
+  return base::BindOnce(&TabListView::PerformDrop, weak_factory_.GetWeakPtr(),
+                        *payload, index);
+}
+
+void TabListView::PerformDrop(
+    RowDragData payload,
+    size_t index,
+    const ui::DropTargetEvent& event,
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
+  output_drag_op = ui::mojom::DragOperation::kMove;
+  if (section_ == SidebarSection::kPinned) {
+    if (payload.is_entry()) {
+      model_->MoveEntryToSection(payload.entry_id, SidebarSection::kPinned,
+                                 EntryPositionForDropIndex(index));
+    } else {
+      // A Today tab becomes a pinned entry bound to that same tab. The
+      // section decides the kind; the position is where AddEntry puts it,
+      // which is the end.
+      model_->PinTab(payload.tab_index);
+    }
+    return;
+  }
+  if (payload.is_entry()) {
+    // Today holds tabs. The entry goes and its page stays; see
+    // SidebarModel::MoveEntryToSection for why that needs no undo.
+    model_->MoveEntryToSection(payload.entry_id, SidebarSection::kToday,
+                               /*position=*/0);
+    return;
+  }
+  MoveTabToDropIndex(payload.tab_index, index);
+}
+
+void TabListView::OnPaint(gfx::Canvas* canvas) {
+  views::View::OnPaint(canvas);
+  if (!drop_index_) {
+    return;
+  }
+  canvas->FillRect(
+      gfx::Rect(0, DropLineY(*drop_index_), width(), kDropLineThickness),
+      GetColorProvider()->GetColor(kColorArciumSpaceAccent));
 }
 
 BEGIN_METADATA(TabListView)
