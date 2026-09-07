@@ -26,6 +26,21 @@ namespace arcium {
 class ArchiveStore;
 class TabBinding;
 
+// One read of the archive. `readable` is the store's own is_open(), captured
+// on the store's sequence in the same task as the rows, because the two
+// answers have to agree: an empty vector means "nothing archived" only when
+// the file is actually open, and the caller cannot tell the difference from
+// the rows alone.
+struct ArchiveReadResult {
+  ArchiveReadResult();
+  ArchiveReadResult(ArchiveReadResult&&);
+  ArchiveReadResult& operator=(ArchiveReadResult&&);
+  ~ArchiveReadResult();
+
+  std::vector<ArchivedTab> tabs;
+  bool readable = false;
+};
+
 // Writes idle Today tabs to the archive and closes them, and reads it back
 // for the archive list. Both halves are here because both need the same two
 // things — the store and the sequence that owns it — and a second object
@@ -69,11 +84,16 @@ class ArchiveService : public TabStripModelObserver,
   // hold back the automatic sweep: the user asked.
   void ArchiveAllToday();
 
-  using RecentCallback = base::OnceCallback<void(std::vector<ArchivedTab>)>;
+  using RecentCallback = base::OnceCallback<void(ArchiveReadResult)>;
 
-  // Whether there is a store behind this service. False off the record and
-  // when the archive file would not open — the two cases where there is
-  // nothing to show and no point offering to show it.
+  // Whether this service was given a store at all. False off the record,
+  // where there is no archive file and cannot be one, and true everywhere
+  // else — including on a profile whose archive file will not open, because
+  // ArciumProfileState keeps the ArchiveStore either way and the open is
+  // posted, so at the moment the sidebar is built the answer is not yet
+  // known. Whether the file opened is ArchiveReadResult::readable, which
+  // travels back with the rows; this flag is only "is there an archive in
+  // this window's world", which is what decides whether the button exists.
   bool has_store() const { return store_ != nullptr; }
 
   // The `limit` most recently archived tabs of `space_id`, newest first.

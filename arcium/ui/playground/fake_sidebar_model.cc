@@ -477,6 +477,23 @@ void FakeSidebarModel::SetHasArchive(bool has_archive) {
   has_archive_ = has_archive;
 }
 
+void FakeSidebarModel::SetArchiveReadable(bool readable) {
+  archive_readable_ = readable;
+}
+
+void FakeSidebarModel::SetHoldArchiveReplies(bool hold) {
+  hold_archive_replies_ = hold;
+}
+
+void FakeSidebarModel::DeliverHeldArchiveReplies() {
+  std::vector<std::pair<int, ArchivedRowsCallback>> held;
+  held.swap(held_replies_);
+  for (auto& [limit, callback] : held) {
+    --pending_archive_requests_;
+    std::move(callback).Run(RowsFor(limit), archive_readable_);
+  }
+}
+
 bool FakeSidebarModel::has_archive() const {
   return has_archive_;
 }
@@ -495,12 +512,26 @@ void FakeSidebarModel::RequestArchivedRows(int limit,
 
 void FakeSidebarModel::DeliverArchivedRows(int limit,
                                            ArchivedRowsCallback callback) {
+  if (hold_archive_replies_) {
+    // Still pending: it has not been answered, it is only parked. The real
+    // reply is a background SQLite read and can take arbitrarily long.
+    held_replies_.emplace_back(limit, std::move(callback));
+    return;
+  }
   --pending_archive_requests_;
+  std::move(callback).Run(RowsFor(limit), archive_readable_);
+}
+
+std::vector<ArchivedRow> FakeSidebarModel::RowsFor(int limit) const {
+  if (!archive_readable_) {
+    // An archive that will not open lists nothing, whatever was put in it.
+    return {};
+  }
   std::vector<ArchivedRow> rows = archived_;
   if (limit >= 0 && rows.size() > static_cast<size_t>(limit)) {
     rows.resize(static_cast<size_t>(limit));
   }
-  std::move(callback).Run(std::move(rows));
+  return rows;
 }
 
 void FakeSidebarModel::ReopenArchived(const GURL& url, base::Time archived_at) {

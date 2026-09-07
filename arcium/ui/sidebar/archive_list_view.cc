@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <optional>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -51,6 +52,13 @@ constexpr int kMaxListHeight = 10 * metrics::kRowHeight;
 // this view is a lid on a bin, not a history browser — Stage 6's library is
 // the thing that pages.
 constexpr int kMaxRows = 50;
+
+// The two things an empty list can mean, which must never be confused: an
+// archive with nothing in it, and an archive that could not be read. Telling
+// a user whose file will not open that nothing was archived is telling them
+// their tabs were thrown away.
+constexpr char16_t kNothingArchived[] = u"Nothing archived yet";
+constexpr char16_t kArchiveUnreadable[] = u"The archive could not be opened";
 
 // "2 h ago". A clock that has moved backwards since the row was written — a
 // timezone correction, an NTP step — must not print a negative elapsed time,
@@ -163,12 +171,12 @@ ArchiveListView::ArchiveListView(views::View* anchor, SidebarModel* model)
   contents->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
 
-  empty_ = contents->AddChildView(
-      std::make_unique<views::Label>(u"Nothing archived yet"));
-  empty_->SetEnabledColor(kColorArciumRowTextSecondary);
-  empty_->SetBorder(views::CreateEmptyBorder(
+  status_ = contents->AddChildView(std::make_unique<views::Label>());
+  status_->SetEnabledColor(kColorArciumRowTextSecondary);
+  status_->SetBorder(views::CreateEmptyBorder(
       gfx::Insets::VH(4, metrics::kRowHorizontalPadding)));
-  empty_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  status_->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  status_->SetMultiLine(true);
 
   // ScrollWithLayers is the macOS default, and the Today list documents why
   // it is turned off there: a layer-backed viewport is not opaque over the
@@ -201,17 +209,23 @@ ArchiveListView::ArchiveListView(views::View* anchor, SidebarModel* model)
   model_->RequestArchivedRows(
       kMaxRows,
       base::BindOnce(&ArchiveListView::OnRowsRead, weak_factory_.GetWeakPtr()));
+  // Lays the empty contents out; `loaded_` is false, so it shows neither rows
+  // nor a message. See Rebuild().
   Rebuild();
 }
 
 ArchiveListView::~ArchiveListView() = default;
 
-bool ArchiveListView::is_empty_message_showing_for_testing() const {
-  return empty_->GetVisible();
+std::u16string ArchiveListView::status_message_for_testing() const {
+  return status_->GetVisible() ? std::u16string(status_->GetText())
+                               : std::u16string();
 }
 
-void ArchiveListView::OnRowsRead(std::vector<ArchivedRow> rows) {
+void ArchiveListView::OnRowsRead(std::vector<ArchivedRow> rows,
+                                 bool archive_readable) {
   archived_ = std::move(rows);
+  archive_readable_ = archive_readable;
+  loaded_ = true;
   Rebuild();
 }
 
@@ -231,7 +245,19 @@ void ArchiveListView::Rebuild() {
                             weak_factory_.GetWeakPtr(), row),
         row, now)));
   }
-  empty_->SetVisible(archived_.empty());
+  // Three states, and the first one is silence. Before the reply lands there
+  // is nothing true to say — the read is posted, so the list is empty for a
+  // turn of the run loop whatever the archive holds — and the bubble is a
+  // title over a blank strip until it can say something that is not a guess.
+  if (!loaded_) {
+    status_->SetVisible(false);
+  } else if (!archive_readable_) {
+    status_->SetText(kArchiveUnreadable);
+    status_->SetVisible(true);
+  } else {
+    status_->SetText(kNothingArchived);
+    status_->SetVisible(archived_.empty());
+  }
   scroll_->SetVisible(!archived_.empty());
   if (GetWidget()) {
     SizeToContents();

@@ -71,14 +71,21 @@ ArciumProfileState::ArciumProfileState(const base::FilePath& profile_path,
                                        bool off_the_record) {
   if (!off_the_record) {
     store_ = std::make_unique<ModelStore>(&model_, ModelPath(profile_path));
-    // BEST_EFFORT: nothing waits on an archive write, and the open below is
-    // posted rather than done here, so it is off the startup path. It is not
-    // lazy — every regular profile opens the file whether or not anything is
-    // ever archived, and carries the connection for the life of the process.
-    // BLOCK_SHUTDOWN so a tab archived during teardown is not lost between the
-    // close and the write.
+    // USER_VISIBLE, not BEST_EFFORT. Writes are the majority of what runs
+    // here and nothing waits on them, but sql::Database is sequence-affine,
+    // so one sequence has to serve every user of the store — and the archive
+    // list's read is a click the user is watching. A BEST_EFFORT task can be
+    // held well past a frame on a loaded machine, which would show as a
+    // bubble that opens blank and fills in later. The priority has to suit
+    // the most latency-sensitive user of the sequence, which is now the read.
+    //
+    // The open below is posted rather than done here, so it is off the
+    // startup path. It is not lazy — every regular profile opens the file
+    // whether or not anything is ever archived, and carries the connection
+    // for the life of the process. BLOCK_SHUTDOWN so a tab archived during
+    // teardown is not lost between the close and the write.
     archive_runner_ = base::ThreadPool::CreateSequencedTaskRunner(
-        {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
+        {base::MayBlock(), base::TaskPriority::USER_VISIBLE,
          base::TaskShutdownBehavior::BLOCK_SHUTDOWN});
     archive_ = std::make_unique<ArchiveStore>();
     // Constructed here, used only there. Without this the sql::Database would

@@ -113,6 +113,11 @@ void ArchiveStore::DetachFromSequence() {
 }
 
 bool ArchiveStore::Open(const base::FilePath& path) {
+  open_ = OpenInternal(path);
+  return open_;
+}
+
+bool ArchiveStore::OpenInternal(const base::FilePath& path) {
   int sqlite_error = kSqliteOk;
   if (db_.Open(path) && InitSchema(&sqlite_error)) {
     return true;

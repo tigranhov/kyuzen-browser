@@ -43,6 +43,15 @@ class ArchiveStore {
   // browser from opening either way.
   [[nodiscard]] bool Open(const base::FilePath& path);
 
+  // Whether the last Open() succeeded, so a reader on this sequence can tell
+  // "the archive holds nothing" from "the archive could not be read". Every
+  // other method of this class is a no-op or an empty result while this is
+  // false, and the two are indistinguishable from the result alone — which is
+  // how the archive list came to tell the user their tabs were never archived
+  // when in fact the file would not open. False before Open() has run at all:
+  // the owner posts Open() and the UI thread can ask sooner than that.
+  bool is_open() const { return open_; }
+
   // sql::Database is sequence-affine and binds to whichever sequence first
   // touches it — which, for a store constructed on the UI thread, is the UI
   // thread. An owner that constructs the store here and then hands it to a
@@ -77,7 +86,14 @@ class ArchiveStore {
   // on success.
   bool InitSchema(int* sqlite_error);
 
+  // Open()'s body. Open() is the wrapper that records the answer in `open_`,
+  // so there is exactly one place the flag can be set and no early return can
+  // skip it.
+  [[nodiscard]] bool OpenInternal(const base::FilePath& path);
+
   sql::Database db_;
+  // The result of the last OpenInternal(). See is_open().
+  bool open_ = false;
 };
 
 }  // namespace arcium

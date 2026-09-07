@@ -159,8 +159,22 @@ void SidebarView::ShowArchiveList() {
   // already deactivated the open one — so in practice this is a fresh open
   // every time. The guard is for the paths that are not a mouse press: an
   // accessibility action, or a test firing the button twice.
+  //
+  // It reuses the widget rather than closing it, which is what
+  // BrowserSidebarController::ShowQuickEntry does with its bubble. Closing
+  // was wrong twice over: CreateBubble arms the close through
+  // MakeCloseSynchronous, whose override_close_ is a OnceCallback the first
+  // close consumes, so a second Close() before DestroyArchiveList runs falls
+  // through Widget's deprecated asynchronous path on a CLIENT_OWNS_WIDGET
+  // widget — and the archive_widget_.reset() already queued then lands on top
+  // of whatever that started.
   if (archive_widget_) {
-    archive_widget_->Close();
+    if (!archive_closing_) {
+      archive_widget_->Show();
+    }
+    // Already closing: DestroyArchiveList is queued and the next press opens
+    // a fresh bubble. Building one here would overwrite archive_list_ while
+    // the closing widget still points at it.
     return;
   }
   // Anchored to the divider rather than to the button that opened it: the
@@ -177,6 +191,7 @@ void SidebarView::ShowArchiveList() {
 void SidebarView::OnArchiveListClosed(views::Widget::ClosedReason reason) {
   // Runs synchronously from inside the close; free both once the stack has
   // unwound, the way BrowserSidebarController does for quick entry.
+  archive_closing_ = true;
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&SidebarView::DestroyArchiveList,
                                 weak_factory_.GetWeakPtr()));
@@ -185,6 +200,7 @@ void SidebarView::OnArchiveListClosed(views::Widget::ClosedReason reason) {
 void SidebarView::DestroyArchiveList() {
   archive_widget_.reset();
   archive_list_.reset();
+  archive_closing_ = false;
 }
 
 void SidebarView::Rebuild() {

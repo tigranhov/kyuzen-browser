@@ -184,6 +184,33 @@ TEST_F(ArchiveStoreTest, OnlyCorruptionCodesRazeTheFile) {
   EXPECT_TRUE(ArchiveStore::IsFileUnusableForTesting(SQLITE_CORRUPT_VTAB));
 }
 
+// is_open() is how a reader on this sequence tells "the archive holds
+// nothing" from "the archive could not be read". Every method of this class
+// answers a closed store with nothing, so the results alone cannot say which
+// happened — which is how the archive list came to tell users their tabs were
+// never archived when the file simply would not open.
+TEST_F(ArchiveStoreTest, IsOpenFollowsTheResultOfOpen) {
+  ArchiveStore store;
+  // Before Open() has run at all. The owner posts the open, so the UI thread
+  // can ask sooner than this.
+  EXPECT_FALSE(store.is_open());
+
+  // A path inside a directory that does not exist: sqlite cannot create the
+  // file, the code is not a corruption code, so Open() fails open — it leaves
+  // the file alone and returns false rather than razing anything.
+  const base::FilePath missing =
+      dir_.GetPath().AppendASCII("no-such-dir").AppendASCII("archive.db");
+  EXPECT_FALSE(store.Open(missing));
+  EXPECT_FALSE(store.is_open());
+
+  // Deliberately no query against the closed store: ArchiveService's reader
+  // checks is_open() before it calls ListRecent for exactly that reason, and
+  // ASchemaFailureInsideTheTransactionDoesNotCrash guards its own query the
+  // same way.
+  EXPECT_TRUE(store.Open(dir_.GetPath().AppendASCII("reopened.db")));
+  EXPECT_TRUE(store.is_open());
+}
+
 TEST_F(ArchiveStoreTest, OpeningACorruptFileStartsAFreshDatabase) {
   const base::FilePath path = dir_.GetPath().AppendASCII("corrupt.db");
   ASSERT_TRUE(base::WriteFile(path, "this is not a sqlite database"));

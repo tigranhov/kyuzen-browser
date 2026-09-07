@@ -18,6 +18,7 @@
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "chrome/browser/tab_list/tab_removed_reason.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
@@ -588,10 +589,16 @@ ArchiveTimeout SidebarTabModel::archive_timeout() const {
 }
 
 bool SidebarTabModel::has_archive() const {
-  // Two conditions, not one: off the record there is no service at all
-  // (BrowserSidebarController does not build one), and a service whose file
-  // would not open has nothing to list. Neither can be shown, so neither gets
-  // a button.
+  // Two conditions, not one. Off the record there is no service at all —
+  // BrowserSidebarController does not build one — and the playground and the
+  // model's own tests run without one too. A service can also exist with no
+  // store behind it, which is what a window over a context with no archive
+  // file is; it has nothing to list and never will, so it gets no button.
+  //
+  // What this is NOT is "the archive can be read". The file is opened on a
+  // background sequence and this is asked while the sidebar is being built,
+  // so the answer would be a race. An archive that will not open keeps its
+  // button and says so in the list; see ArchiveReadResult::readable.
   return archive_service_ && archive_service_->has_store();
 }
 
@@ -602,11 +609,14 @@ void SidebarTabModel::RequestArchivedRows(int limit,
     // weak pointer the real path uses, so this branch answers on the same
     // turn of the run loop and is dropped in the same circumstances. A rare
     // branch that behaves differently is the branch nobody tested.
-    base::SingleThreadTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&SidebarTabModel::DeliverArchivedRows,
-                       weak_factory_.GetWeakPtr(), std::move(callback),
-                       std::vector<ArchivedTab>()));
+    //
+    // SequencedTaskRunner rather than SingleThreadTaskRunner, matching
+    // ArchiveService::RequestRecent and SidebarView::OnArchiveListClosed:
+    // nothing on this path needs thread affinity, only ordering.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE, base::BindOnce(&SidebarTabModel::DeliverArchivedRows,
+                                  weak_factory_.GetWeakPtr(),
+                                  std::move(callback), ArchiveReadResult()));
     return;
   }
   archive_service_->RequestRecent(
@@ -616,10 +626,10 @@ void SidebarTabModel::RequestArchivedRows(int limit,
 }
 
 void SidebarTabModel::DeliverArchivedRows(ArchivedRowsCallback callback,
-                                          std::vector<ArchivedTab> tabs) {
+                                          ArchiveReadResult result) {
   std::vector<ArchivedRow> rows;
-  rows.reserve(tabs.size());
-  for (ArchivedTab& tab : tabs) {
+  rows.reserve(result.tabs.size());
+  for (ArchivedTab& tab : result.tabs) {
     ArchivedRow row;
     row.url = std::move(tab.url);
     // A page that never got a title archives with an empty one, and a blank
@@ -630,7 +640,7 @@ void SidebarTabModel::DeliverArchivedRows(ArchivedRowsCallback callback,
     row.archived_at = tab.archived_at;
     rows.push_back(std::move(row));
   }
-  std::move(callback).Run(std::move(rows));
+  std::move(callback).Run(std::move(rows), result.readable);
 }
 
 void SidebarTabModel::ReopenArchived(const GURL& url, base::Time archived_at) {

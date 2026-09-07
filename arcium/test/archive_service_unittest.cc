@@ -18,8 +18,12 @@
 #include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/files/scoped_temp_dir.h"
+#include "base/memory/scoped_refptr.h"
+#include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
@@ -553,10 +557,13 @@ TEST_F(ArchiveServiceTest, TheArchiveReadIsPostedAndComesBackNewestFirst) {
   task_environment()->RunUntilIdle();
 
   std::optional<std::vector<ArchivedRow>> got;
+  std::optional<bool> readable;
   sidebar_model_->RequestArchivedRows(
-      10, base::BindLambdaForTesting([&got](std::vector<ArchivedRow> rows) {
-        got = std::move(rows);
-      }));
+      10, base::BindLambdaForTesting(
+              [&got, &readable](std::vector<ArchivedRow> rows, bool ok) {
+                got = std::move(rows);
+                readable = ok;
+              }));
   EXPECT_FALSE(got.has_value());
 
   task_environment()->RunUntilIdle();
@@ -565,6 +572,104 @@ TEST_F(ArchiveServiceTest, TheArchiveReadIsPostedAndComesBackNewestFirst) {
   EXPECT_EQ(GURL("https://new.example/"), (*got)[0].url);
   EXPECT_EQ(GURL("https://old.example/"), (*got)[1].url);
   EXPECT_FALSE((*got)[0].archived_at.is_null());
+  // The store opened in SetUp, so an empty list here would mean "nothing
+  // archived", not "could not be read".
+  ASSERT_TRUE(readable.has_value());
+  EXPECT_TRUE(*readable);
+}
+
+// A page that never got a title archives with an empty one, and a blank row
+// is unclickable-looking, so the URL stands in. The fallback lives in
+// SidebarTabModel::DeliverArchivedRows; the playground cannot reach it,
+// because the playground has no SidebarTabModel.
+TEST_F(ArchiveServiceTest, AnArchivedRowWithNoTitleFallsBackToItsUrl) {
+  sidebar_model_->SetArchiveService(service_.get());
+  ArchivedTab row;
+  row.url = GURL("https://untitled.example/page");
+  row.space_id = model_.default_space_id();
+  row.archived_at = base::Time::Now();
+  archive_.Add(row);
+
+  std::optional<std::vector<ArchivedRow>> got;
+  sidebar_model_->RequestArchivedRows(
+      10,
+      base::BindLambdaForTesting([&got](std::vector<ArchivedRow> rows,
+                                        bool ok) { got = std::move(rows); }));
+  task_environment()->RunUntilIdle();
+  ASSERT_TRUE(got.has_value());
+  ASSERT_EQ(1u, got->size());
+  EXPECT_EQ(u"https://untitled.example/page", (*got)[0].title);
+}
+
+// The other half of has_archive(). A window can hold a service with no store
+// behind it — a context with no archive file — and that has nothing to list
+// and never will, so it gets no button. Without this, dropping the
+// has_store() half of has_archive() changes no test result at all.
+TEST_F(ArchiveServiceTest, AServiceWithNoStoreIsNotAnArchive) {
+  ArchiveService storeless(strip(), &model_, &binding_, /*store=*/nullptr,
+                           base::SequencedTaskRunner::GetCurrentDefault());
+  EXPECT_FALSE(storeless.has_store());
+  sidebar_model_->SetArchiveService(&storeless);
+  EXPECT_FALSE(sidebar_model_->has_archive());
+
+  // And it still answers, on a later turn, saying the archive is not readable
+  // rather than that it is empty.
+  std::optional<bool> readable;
+  sidebar_model_->RequestArchivedRows(
+      10, base::BindLambdaForTesting([&readable](std::vector<ArchivedRow> rows,
+                                                 bool ok) { readable = ok; }));
+  EXPECT_FALSE(readable.has_value());
+  task_environment()->RunUntilIdle();
+  ASSERT_TRUE(readable.has_value());
+  EXPECT_FALSE(*readable);
+
+  // `storeless` is about to go out of scope; the model must not keep pointing
+  // at it into TearDown.
+  sidebar_model_->SetArchiveService(nullptr);
+}
+
+// A read that genuinely crosses sequences, and a model destroyed while it is
+// out there. The reply is bound through SidebarTabModel's WeakPtr, so it is
+// dropped on the way back rather than delivered into a dead model — and
+// unlike the no-service test in sidebar_tab_model_unittest.cc, this one goes
+// through PostTaskAndReplyWithResult on a real thread-pool sequence, which is
+// the path the browser actually takes.
+TEST_F(ArchiveServiceTest,
+       AnArchiveReadCrossingSequencesIsDroppedWhenTheModelGoes) {
+  scoped_refptr<base::SequencedTaskRunner> store_runner =
+      base::ThreadPool::CreateSequencedTaskRunner(
+          {base::MayBlock(), base::TaskPriority::USER_VISIBLE});
+  auto store = std::make_unique<ArchiveStore>();
+  store->DetachFromSequence();
+  bool store_opened = false;
+  base::RunLoop opened;
+  store_runner->PostTaskAndReply(
+      FROM_HERE, base::BindLambdaForTesting([&] {
+        // No gtest assertion here: this runs off the main thread.
+        store_opened = store->Open(temp_dir_.GetPath().AppendASCII("Crossing"));
+      }),
+      opened.QuitClosure());
+  opened.Run();
+  ASSERT_TRUE(store_opened);
+
+  auto model = std::make_unique<SidebarTabModel>(strip(), &model_, &binding_);
+  ArchiveService service(strip(), &model_, &binding_, store.get(),
+                         store_runner);
+  model->SetArchiveService(&service);
+
+  bool ran = false;
+  model->RequestArchivedRows(
+      10, base::BindLambdaForTesting(
+              [&ran](std::vector<ArchivedRow> rows, bool ok) { ran = true; }));
+  // Gone while the read is on the store's sequence.
+  model.reset();
+
+  task_environment()->RunUntilIdle();
+  EXPECT_FALSE(ran);
+
+  // Tear the store down on its own sequence, as ArciumProfileState does.
+  store_runner->DeleteSoon(FROM_HERE, std::move(store));
+  task_environment()->RunUntilIdle();
 }
 
 // Reopening puts the page back in Today and takes the row out of the archive,

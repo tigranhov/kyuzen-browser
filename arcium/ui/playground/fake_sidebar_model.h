@@ -7,6 +7,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "arcium/ui/sidebar/sidebar_model.h"
@@ -56,6 +57,21 @@ class FakeSidebarModel : public SidebarModel {
   // archive button. The playground and the view tests need to be able to sit
   // on both sides of that.
   void SetHasArchive(bool has_archive);
+  // What the real model reports when the archive file would not open: the
+  // window has an archive, the button is there, and the read comes back with
+  // no rows and readable=false. Distinct from an archive that is simply
+  // empty, which is what this fake does by default.
+  void SetArchiveReadable(bool readable);
+  // Holds every reply instead of delivering it, so a test can decide the
+  // instant it lands. The real reply comes back from a SQLite read on a
+  // background sequence and can arrive at any point after the request,
+  // including after the view that asked for it is gone — which is the one
+  // ordering a test cannot otherwise produce, because closing the bubble
+  // frees the delegate in a task posted *after* the reply is already queued.
+  void SetHoldArchiveReplies(bool hold);
+  // Delivers everything SetHoldArchiveReplies held back, in order.
+  void DeliverHeldArchiveReplies();
+  size_t held_archive_reply_count() const { return held_replies_.size(); }
   // What ReopenArchived was asked to reopen, in order.
   const std::vector<ArchivedRow>& reopened() const { return reopened_; }
   // Whether a RequestArchivedRows reply is still queued. The reply is posted,
@@ -134,6 +150,8 @@ class FakeSidebarModel : public SidebarModel {
                                            int position);
 
   void DeliverArchivedRows(int limit, ArchivedRowsCallback callback);
+  // The rows `limit` would answer with, applying the readable flag.
+  std::vector<ArchivedRow> RowsFor(int limit) const;
 
   std::vector<SidebarRow> rows_;
   std::vector<FakeFolder> folders_;
@@ -144,8 +162,13 @@ class FakeSidebarModel : public SidebarModel {
   // before it is laid out pass here and fail in the browser.
   std::vector<ArchivedRow> archived_;
   std::vector<ArchivedRow> reopened_;
+  // Replies parked by SetHoldArchiveReplies, each already stripped of its
+  // limit. They count as pending until they are delivered.
+  std::vector<std::pair<int, ArchivedRowsCallback>> held_replies_;
   int pending_archive_requests_ = 0;
   bool has_archive_ = true;
+  bool archive_readable_ = true;
+  bool hold_archive_replies_ = false;
   base::ObserverList<Observer> observers_;
   base::WeakPtrFactory<FakeSidebarModel> weak_factory_{this};
 };

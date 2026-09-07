@@ -5,6 +5,7 @@
 #ifndef ARCIUM_UI_SIDEBAR_ARCHIVE_LIST_VIEW_H_
 #define ARCIUM_UI_SIDEBAR_ARCHIVE_LIST_VIEW_H_
 
+#include <string>
 #include <vector>
 
 #include "arcium/ui/sidebar/sidebar_model.h"
@@ -49,13 +50,16 @@ class ArchiveListView : public views::BubbleDialogDelegate {
   // Rows built so far, for tests. Empty until the read comes back.
   size_t row_count_for_testing() const { return rows_.size(); }
   views::Button* row_at_for_testing(size_t index) { return rows_[index]; }
-  bool is_empty_message_showing_for_testing() const;
+  // The status line under the title, or the empty string when none is
+  // showing. Three states, and a test that only asked "is something showing"
+  // could not tell the two failures apart any better than the user could.
+  std::u16string status_message_for_testing() const;
 
  private:
   // The read's reply. Bound through `weak_factory_`, so a bubble the user
   // dismissed while SQLite was still seeking is simply not told: the delegate
   // is gone with its Widget by then, and the reply lands on nothing.
-  void OnRowsRead(std::vector<ArchivedRow> rows);
+  void OnRowsRead(std::vector<ArchivedRow> rows, bool archive_readable);
   void Rebuild();
   // Reopens `row`'s page and takes it out of `rows_`. Not a re-read: the
   // delete is posted to a background sequence, so asking the archive again
@@ -65,10 +69,19 @@ class ArchiveListView : public views::BubbleDialogDelegate {
   raw_ptr<SidebarModel> model_;
   raw_ptr<views::ScrollView> scroll_ = nullptr;
   raw_ptr<views::View> contents_ = nullptr;
-  raw_ptr<views::Label> empty_ = nullptr;
+  raw_ptr<views::Label> status_ = nullptr;
   // Model-side rows, in the order they are drawn. The child views are rebuilt
   // from this, never read back out of.
   std::vector<ArchivedRow> archived_;
+  // False until the first reply lands. Before that the bubble shows neither
+  // rows nor a message: the read is posted, so a list built at construction
+  // is always empty, and "Nothing archived yet" flashed at a user whose tabs
+  // were archived a second ago is the exact message this feature exists to
+  // stop them believing.
+  bool loaded_ = false;
+  // Whether that reply said the archive could be read at all. Only meaningful
+  // once `loaded_`.
+  bool archive_readable_ = false;
   std::vector<raw_ptr<views::Button>> rows_;
   base::WeakPtrFactory<ArchiveListView> weak_factory_{this};
 };

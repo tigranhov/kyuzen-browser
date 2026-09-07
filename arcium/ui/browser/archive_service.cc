@@ -41,7 +41,25 @@ std::optional<ArchivedTab> MakeRow(tabs::TabInterface* tab, SpaceId space_id) {
   return row;
 }
 
+// Runs on the store's sequence. Both halves of the answer are read in the one
+// task on purpose: is_open() asked from the UI thread would be a race, and
+// asked in a second posted task it could disagree with the rows it is meant
+// to explain.
+ArchiveReadResult ReadRecent(ArchiveStore* store, SpaceId space_id, int limit) {
+  ArchiveReadResult result;
+  result.readable = store->is_open();
+  if (result.readable) {
+    result.tabs = store->ListRecent(space_id, limit);
+  }
+  return result;
+}
+
 }  // namespace
+
+ArchiveReadResult::ArchiveReadResult() = default;
+ArchiveReadResult::ArchiveReadResult(ArchiveReadResult&&) = default;
+ArchiveReadResult& ArchiveReadResult::operator=(ArchiveReadResult&&) = default;
+ArchiveReadResult::~ArchiveReadResult() = default;
 
 ArchiveService::ArchiveService(
     TabStripModel* tab_strip_model,
@@ -101,9 +119,12 @@ void ArchiveService::RequestRecent(SpaceId space_id,
     // Posted rather than run here. A caller that is answered from inside its
     // own call has a second order of events to be correct in, and this branch
     // is the rare one, so it would be the one nobody tested.
+    //
+    // `readable` stays false: there is no archive here to be empty. Off the
+    // record nothing reaches this — the button does not exist — so the only
+    // callers are the playground and the tests.
     base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-        FROM_HERE,
-        base::BindOnce(std::move(callback), std::vector<ArchivedTab>()));
+        FROM_HERE, base::BindOnce(std::move(callback), ArchiveReadResult()));
     return;
   }
   // base::Unretained for the same reason Add's is safe: the store belongs to
@@ -112,8 +133,7 @@ void ArchiveService::RequestRecent(SpaceId space_id,
   // and is the caller's to keep alive, or not.
   store_runner_->PostTaskAndReplyWithResult(
       FROM_HERE,
-      base::BindOnce(&ArchiveStore::ListRecent, base::Unretained(store_),
-                     space_id, limit),
+      base::BindOnce(&ReadRecent, base::Unretained(store_), space_id, limit),
       std::move(callback));
 }
 

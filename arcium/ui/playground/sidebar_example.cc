@@ -67,9 +67,14 @@ SidebarExample::SidebarExample()
   const FolderId reading = model_->AddFolderWith(u"Reading", {u"Notion"});
   model_->SetFolderCollapsed(reading, true);
   model_->SetCanReturnToPinnedUrl(5, true);
-  // Enough archived rows to see the list's three states: several ages, an
-  // empty title falling back to nothing useful, and — once a few are clicked
-  // away — the empty message.
+  // Enough archived rows to see what the list has to draw: several ages, a
+  // title long enough to elide against the timestamp column, and — once they
+  // are all clicked away — the empty message.
+  //
+  // Not the empty-title case, which cannot be reached from here: an archived
+  // row with no title falls back to its URL in
+  // SidebarTabModel::DeliverArchivedRows, and the playground has no
+  // SidebarTabModel. That fallback is covered in archive_service_unittest.cc.
   const base::Time now = base::Time::Now();
   model_->AddArchived(u"Arc Browser", "https://arc.net/", now - base::Hours(2));
   model_->AddArchived(u"WebKit Blog", "https://webkit.org/blog/",

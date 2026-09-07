@@ -27,6 +27,7 @@ class TabInterface;
 namespace arcium {
 
 class ArchiveService;
+struct ArchiveReadResult;
 struct ArchivedTab;
 struct TabEntry;
 
@@ -150,7 +151,7 @@ class SidebarTabModel : public SidebarModel,
   // then dropped here, and the interface's promise that a callback may never
   // run holds whatever the caller bound it to.
   void DeliverArchivedRows(ArchivedRowsCallback callback,
-                           std::vector<ArchivedTab> tabs);
+                           ArchiveReadResult result);
 
   // Schedules FlushNotification() unless one is already pending.
   void NotifyChanged();

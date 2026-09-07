@@ -170,15 +170,29 @@ class SidebarModel {
   // `archived_rows()` to match rows() — a synchronous getter over it could
   // only be a blocking read on the UI thread or a lie about freshness, and
   // Stage 6's library inherits whatever shape is set here.
+  // `archive_readable` is false when the archive could not be read at all —
+  // a file that would not open. It travels beside the rows because an empty
+  // vector on its own is ambiguous, and the two states have to read
+  // differently: "nothing archived yet" told to a user whose archive is
+  // broken says their tabs were never archived, which is the opposite of the
+  // truth and exactly the reassurance this feature exists to give.
   using ArchivedRowsCallback =
-      base::OnceCallback<void(std::vector<ArchivedRow>)>;
+      base::OnceCallback<void(std::vector<ArchivedRow> rows,
+                              bool archive_readable)>;
 
-  // Whether there is an archive to show at all. False off the record, where
+  // Whether this window has an archive at all. False off the record, where
   // there is no archive file and cannot be one — an off-the-record context's
   // GetPath() is the parent profile's, so an incognito archive would write
   // incognito browsing into the regular profile's file. See
   // ArciumProfileState::archive(). The affordance is then absent rather than
   // disabled: a control that can never be used reads as a bug.
+  //
+  // Deliberately *not* "the archive can be read": the file is opened on a
+  // background sequence and this is asked while the sidebar is being built,
+  // possibly before the open has run. A profile whose archive will not open
+  // still answers true here and says so in the list instead — a button that
+  // vanishes a few seconds after launch is worse than one that explains
+  // itself.
   virtual bool has_archive() const = 0;
 
   // Asks for the `limit` most recently archived rows of the active space,

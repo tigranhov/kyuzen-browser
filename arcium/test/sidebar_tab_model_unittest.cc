@@ -719,25 +719,35 @@ TEST_F(SidebarTabModelTest, WithoutAServiceThereIsNoArchive) {
 TEST_F(SidebarTabModelTest, AnArchiveRequestIsNeverAnsweredInline) {
   std::unique_ptr<SidebarTabModel> model = MakeModel();
   std::optional<std::vector<ArchivedRow>> got;
+  std::optional<bool> readable;
   model->RequestArchivedRows(
-      10, base::BindLambdaForTesting([&got](std::vector<ArchivedRow> rows) {
-        got = std::move(rows);
-      }));
+      10, base::BindLambdaForTesting(
+              [&got, &readable](std::vector<ArchivedRow> rows, bool ok) {
+                got = std::move(rows);
+                readable = ok;
+              }));
 
   EXPECT_FALSE(got.has_value());
   task_environment()->RunUntilIdle();
   ASSERT_TRUE(got.has_value());
   EXPECT_TRUE(got->empty());
+  // No service means no archive to be empty, so this empty answer must not
+  // read as "nothing archived yet" either.
+  ASSERT_TRUE(readable.has_value());
+  EXPECT_FALSE(*readable);
 }
 
 // The reply is bound through the model's WeakPtr, so a read still in flight
 // when the window closes is dropped rather than delivered into a dead model.
+// This is the no-service branch; the posted-to-another-sequence branch is
+// AnArchiveReadCrossingSequencesIsDroppedWhenTheModelGoes in
+// archive_service_unittest.cc.
 TEST_F(SidebarTabModelTest, AnArchiveRequestOutlivedByItsModelIsDropped) {
   std::unique_ptr<SidebarTabModel> model = MakeModel();
   bool ran = false;
   model->RequestArchivedRows(
       10, base::BindLambdaForTesting(
-              [&ran](std::vector<ArchivedRow> rows) { ran = true; }));
+              [&ran](std::vector<ArchivedRow> rows, bool ok) { ran = true; }));
   model.reset();
 
   task_environment()->RunUntilIdle();

@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -18,27 +19,41 @@
 #include "arcium/ui/sidebar/space_bar_view.h"
 #include "arcium/ui/sidebar/tab_list_view.h"
 #include "arcium/ui/sidebar/tab_row_view.h"
+#include "arcium/ui/sidebar/view_snapshot.h"
 #include "base/auto_reset.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/time/time.h"
+#include "cc/paint/display_item_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkBitmap.h"
+#include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/accelerators/accelerator.h"
+#include "ui/compositor/paint_context.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/fill_layout.h"
+#include "ui/views/paint_info.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_utils.h"
+#include "ui/views/window/client_view.h"
 #include "url/gurl.h"
 
 namespace arcium {
@@ -145,13 +160,36 @@ class SidebarViewsTest : public views::ViewsTestBase {
     return sidebar;
   }
 
+  // A real press at the real button, so the routing from the divider through
+  // SidebarView::ShowArchiveList is under test as much as the handler is —
+  // the button is hover-revealed, so the hover is part of the gesture.
   void OpenArchiveList(SidebarView* sidebar) {
+    Hover(sidebar->divider());
     views::LabelButton* button = sidebar->divider()->archive_button();
     CHECK(button);
-    ui::MouseEvent click(ui::EventType::kMousePressed, gfx::Point(),
-                         gfx::Point(), base::TimeTicks(),
-                         ui::EF_LEFT_MOUSE_BUTTON, 0);
-    views::test::ButtonTestApi(button).NotifyClick(click);
+    ClickOn(button);
+  }
+
+  // ClickOn for a view that lives in the archive bubble's widget rather than
+  // in the fixture's. Same generator — it is rooted at the root window, which
+  // the bubble shares — but the layout has to be run on the bubble.
+  void ClickOnInBubble(views::View* view) {
+    views::Widget* widget = view->GetWidget();
+    CHECK(widget);
+    views::test::RunScheduledLayout(widget);
+    // The bubble is a second top-level widget, and the fixture's generator is
+    // rooted at the sidebar's — a press aimed there never arrives. Mac's
+    // EventGeneratorDelegate allows exactly one live generator
+    // (DCHECK(!instance_) in event_generator_delegate_mac.mm), so the fixture's
+    // is put down for the duration and rebuilt afterwards.
+    generator_.reset();
+    {
+      ui::test::EventGenerator generator(views::GetRootWindow(widget));
+      generator.MoveMouseTo(view->GetBoundsInScreen().CenterPoint());
+      generator.ClickLeftButton();
+    }
+    generator_ = std::make_unique<ui::test::EventGenerator>(
+        views::GetRootWindow(widget_.get()));
   }
 
   // What close-on-deactivate does when the user clicks away.
@@ -1387,6 +1425,10 @@ TEST_F(SidebarViewsTest, TheArchiveButtonAppearsBesideClearOnHover) {
 // The rows are asked for when the list opens and arrive on a later turn of
 // the run loop, which is what the model's asynchrony buys and what the view
 // has to be correct about: it is laid out once with nothing in it.
+//
+// And while it is empty it says nothing. The bubble used to show "Nothing
+// archived yet" for that turn, so the first thing a user saw after archiving
+// a tab was the message telling them nothing had been archived.
 TEST_F(SidebarViewsTest, TheArchiveListFillsWhenTheReadComesBack) {
   const base::Time now = base::Time::Now();
   model_.AddArchived(u"One", "https://one.example/", now - base::Hours(2));
@@ -1397,11 +1439,11 @@ TEST_F(SidebarViewsTest, TheArchiveListFillsWhenTheReadComesBack) {
   ArchiveListView* list = sidebar->archive_list_for_testing();
   ASSERT_TRUE(list);
   EXPECT_EQ(0u, list->row_count_for_testing());
-  EXPECT_TRUE(list->is_empty_message_showing_for_testing());
+  EXPECT_EQ(u"", list->status_message_for_testing());
 
   task_environment()->RunUntilIdle();
   EXPECT_EQ(2u, list->row_count_for_testing());
-  EXPECT_FALSE(list->is_empty_message_showing_for_testing());
+  EXPECT_EQ(u"", list->status_message_for_testing());
 }
 
 // Clicking reopens the page and takes the row out of the list, without asking
@@ -1417,9 +1459,10 @@ TEST_F(SidebarViewsTest, ClickingAnArchivedRowReopensItAndDropsIt) {
   ArchiveListView* list = sidebar->archive_list_for_testing();
   ASSERT_EQ(2u, list->row_count_for_testing());
 
-  ui::MouseEvent click(ui::EventType::kMousePressed, gfx::Point(), gfx::Point(),
-                       base::TimeTicks(), ui::EF_LEFT_MOUSE_BUTTON, 0);
-  views::test::ButtonTestApi(list->row_at_for_testing(0)).NotifyClick(click);
+  // A real press at the real row, in the bubble's own widget. The handler
+  // destroys the very Button whose callback is running, so the routing is as
+  // much of the claim as the handler is.
+  ClickOnInBubble(list->row_at_for_testing(0));
 
   ASSERT_EQ(1u, model_.reopened().size());
   EXPECT_EQ(GURL("https://one.example/"), model_.reopened()[0].url);
@@ -1438,23 +1481,202 @@ TEST_F(SidebarViewsTest, AnEmptyArchiveSaysSo) {
   ArchiveListView* list = sidebar->archive_list_for_testing();
   ASSERT_TRUE(list);
   EXPECT_EQ(0u, list->row_count_for_testing());
-  EXPECT_TRUE(list->is_empty_message_showing_for_testing());
+  EXPECT_EQ(u"Nothing archived yet", list->status_message_for_testing());
+}
+
+// The other empty list, and the whole reason the reply carries a readable
+// flag: an archive whose file would not open has no rows either, and telling
+// that user "Nothing archived yet" says their tabs were never written down
+// when in fact they cannot be read back. The button stays — it is offered
+// before the open has even run — so the list is the thing that has to tell
+// the truth.
+TEST_F(SidebarViewsTest, AnUnreadableArchiveSaysSoRatherThanNothingArchived) {
+  model_.AddArchived(u"One", "https://one.example/",
+                     base::Time::Now() - base::Hours(2));
+  model_.SetArchiveReadable(false);
+  SidebarView* sidebar = MakeSidebar();
+  ASSERT_TRUE(sidebar->divider()->archive_button());
+
+  OpenArchiveList(sidebar);
+  task_environment()->RunUntilIdle();
+  ArchiveListView* list = sidebar->archive_list_for_testing();
+  ASSERT_TRUE(list);
+  EXPECT_EQ(0u, list->row_count_for_testing());
+  EXPECT_EQ(u"The archive could not be opened",
+            list->status_message_for_testing());
 }
 
 // A bubble outlives the click that opened it, and the read behind it outlives
 // the bubble. The reply must land on nothing rather than on a freed delegate.
+//
+// The ordering this needs cannot be produced by closing and draining: the
+// close callback is synchronous (CreateBubble arms it with
+// MakeCloseSynchronous, and Widget::CloseWithReason runs override_close_ on
+// the spot), so DestroyArchiveList is posted *after* the model's reply is
+// already queued and the reply therefore lands on a live view every time. An
+// earlier version of this test did exactly that and could not fail for the
+// reason it was named for. Holding the reply in the model is what puts it
+// behind the destruction, which is where a real SQLite read can land.
 TEST_F(SidebarViewsTest, ClosingTheListWhileTheReadIsInFlightIsSafe) {
+  model_.AddArchived(u"One", "https://one.example/",
+                     base::Time::Now() - base::Hours(2));
+  model_.SetHoldArchiveReplies(true);
+  SidebarView* sidebar = MakeSidebar();
+  OpenArchiveList(sidebar);
+  ASSERT_TRUE(sidebar->archive_list_for_testing());
+
+  // The request has left the view and the answer is parked, not delivered.
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(1u, model_.held_archive_reply_count());
+  ASSERT_TRUE(model_.has_pending_archive_request());
+  ASSERT_EQ(0u, sidebar->archive_list_for_testing()->row_count_for_testing());
+
+  // What close-on-deactivate does, and then the turn that frees the delegate.
+  CloseArchiveList(sidebar);
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(nullptr, sidebar->archive_list_for_testing());
+
+  // Now the read comes back, into a delegate that no longer exists. Without
+  // the WeakPtr on ArchiveListView this writes `archived_` and walks
+  // `contents_` on freed memory.
+  model_.DeliverHeldArchiveReplies();
+  EXPECT_FALSE(model_.has_pending_archive_request());
+  EXPECT_EQ(nullptr, sidebar->archive_list_for_testing());
+}
+
+// The reopen guard. A press that is not a mouse press — an accessibility
+// action, a test — can reach the button with the bubble already up, and the
+// guard must reuse that bubble rather than close it: CreateBubble's
+// override_close_ is a OnceCallback the first close consumes, so a second
+// Close() on a CLIENT_OWNS_WIDGET widget falls through Widget's deprecated
+// asynchronous path underneath the reset already queued. Reusing is also what
+// BrowserSidebarController::ShowQuickEntry does.
+TEST_F(SidebarViewsTest, OpeningTheListTwiceReusesTheOpenBubble) {
   model_.AddArchived(u"One", "https://one.example/",
                      base::Time::Now() - base::Hours(2));
   SidebarView* sidebar = MakeSidebar();
   OpenArchiveList(sidebar);
-  ASSERT_TRUE(sidebar->archive_list_for_testing());
-  ASSERT_TRUE(model_.has_pending_archive_request());
+  task_environment()->RunUntilIdle();
+  ArchiveListView* first = sidebar->archive_list_for_testing();
+  ASSERT_TRUE(first);
+  ASSERT_EQ(1u, first->row_count_for_testing());
+  views::Widget* widget = first->GetWidget();
+  ASSERT_TRUE(widget);
 
-  // What close-on-deactivate does, one turn earlier than the reply.
+  OpenArchiveList(sidebar);
+  // The same delegate and the same widget, still open, and no second read.
+  EXPECT_EQ(first, sidebar->archive_list_for_testing());
+  EXPECT_EQ(widget, sidebar->archive_list_for_testing()->GetWidget());
+  EXPECT_FALSE(model_.has_pending_archive_request());
+  EXPECT_EQ(1u, first->row_count_for_testing());
+
+  // And it survives the turn: nothing was closed, so nothing frees it.
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(first, sidebar->archive_list_for_testing());
+}
+
+// The other half of the guard: between the close and the posted
+// DestroyArchiveList the widget is still there but must not be shown again,
+// and a press in that window must not build a second delegate over the one
+// the closing widget still points at.
+TEST_F(SidebarViewsTest, PressingTheButtonWhileTheListIsClosingOpensNothing) {
+  SidebarView* sidebar = MakeSidebar();
+  OpenArchiveList(sidebar);
+  task_environment()->RunUntilIdle();
+  ArchiveListView* first = sidebar->archive_list_for_testing();
+  ASSERT_TRUE(first);
+
   CloseArchiveList(sidebar);
+  // DestroyArchiveList is posted and has not run.
+  ASSERT_EQ(first, sidebar->archive_list_for_testing());
+  OpenArchiveList(sidebar);
+  EXPECT_EQ(first, sidebar->archive_list_for_testing());
+
   task_environment()->RunUntilIdle();
   EXPECT_EQ(nullptr, sidebar->archive_list_for_testing());
+
+  // And the next press opens a fresh one, which issues its own read.
+  OpenArchiveList(sidebar);
+  EXPECT_TRUE(sidebar->archive_list_for_testing());
+  EXPECT_TRUE(model_.has_pending_archive_request());
+}
+
+// Disabled by default: it writes a PNG and asserts nothing a normal run
+// needs. Run it with
+//
+//   out/dev/arcium_unittests --single-process-tests \
+//     --gtest_also_run_disabled_tests \
+//     --gtest_filter=*ArchiveListBubbleRendersItsRows*
+//
+// and look at the file it names.
+//
+// It exists because --snapshot cannot show this bubble, and the reason is not
+// obvious: WriteViewSnapshot paints the widget's root view, and
+// BubbleDialogDelegate::CreateClientView
+// (ui/views/bubble/bubble_dialog_delegate_view.cc, SetPaintToLayer(
+// layer_type()) — on BubbleDialogDelegate, not on BubbleDialogDelegateView,
+// so a plain-delegate bubble like this one gets it too) puts the client view
+// on its own ui::Layer so its rounded-corner clip applies. A root paint skips
+// layer-backed children, so the snapshot comes out as a bubble frame with the
+// title and an empty body — a limitation, not a bug. Painting the client view
+// as its own paint root is what shows the rows. Without this test the next
+// person rediscovers that the slow way.
+//
+// The colours come out as unresolved placeholders: arcium_unittests registers
+// no AddArciumColorMixer. The geometry is the part worth looking at.
+TEST_F(SidebarViewsTest, DISABLED_ArchiveListBubbleRendersItsRows) {
+  const base::Time now = base::Time::Now();
+  model_.AddArchived(u"Arc Browser", "https://arc.net/", now - base::Hours(2));
+  model_.AddArchived(u"WebKit Blog", "https://webkit.org/blog/",
+                     now - base::Hours(9));
+  model_.AddArchived(
+      u"A very long title that has to elide before it reaches "
+      u"the timestamp column",
+      "https://example.com/long", now - base::Days(1));
+  model_.AddArchived(u"Rust Book", "https://doc.rust-lang.org/book/",
+                     now - base::Days(4));
+  SidebarView* sidebar = MakeSidebar();
+  OpenArchiveList(sidebar);
+  task_environment()->RunUntilIdle();
+
+  ArchiveListView* list = sidebar->archive_list_for_testing();
+  ASSERT_TRUE(list);
+  ASSERT_EQ(4u, list->row_count_for_testing());
+  views::Widget* bubble = list->GetWidget();
+  ASSERT_TRUE(bubble);
+  bubble->LayoutRootViewIfNecessary();
+  views::View* client = bubble->client_view();
+  ASSERT_TRUE(client->layer()) << "the client view is expected to be "
+                                  "layer-backed; that is the whole finding";
+
+  // Paint the client view as its own paint root, which is the step
+  // WriteViewSnapshot cannot take.
+  const gfx::Size size = client->size();
+  ASSERT_FALSE(size.IsEmpty());
+  constexpr float kScale = 2.f;
+  auto display_list = base::MakeRefCounted<cc::DisplayItemList>();
+  ui::PaintContext context(display_list.get(), kScale, gfx::Rect(size),
+                           /*is_pixel_canvas=*/false);
+  client->Paint(views::PaintInfo::CreateRootPaintInfo(context, size));
+  display_list->Finalize();
+  SkBitmap bitmap;
+  ASSERT_TRUE(
+      bitmap.tryAllocN32Pixels(size.width() * kScale, size.height() * kScale));
+  bitmap.eraseColor(SK_ColorBLACK);
+  SkCanvas canvas(bitmap);
+  canvas.scale(kScale, kScale);
+  display_list->Raster(&canvas, cc::PlaybackParams(nullptr));
+
+  std::optional<std::vector<uint8_t>> png =
+      gfx::PNGCodec::EncodeBGRASkBitmap(bitmap, /*discard_transparency=*/true);
+  ASSERT_TRUE(png);
+  base::FilePath dir;
+  ASSERT_TRUE(base::GetTempDir(&dir));
+  const base::FilePath path = dir.AppendASCII("arcium_archive_list_bubble.png");
+  ASSERT_TRUE(base::WriteFile(path, *png));
+  LOG(ERROR) << "archive bubble snapshot: " << path << " (" << bitmap.width()
+             << "x" << bitmap.height() << " px)";
+  LogViewHierarchy(client);
 }
 
 }  // namespace

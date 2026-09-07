@@ -116,6 +116,12 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   // divider the bubble is anchored to.
   std::unique_ptr<ArchiveListView> archive_list_;
   std::unique_ptr<views::Widget> archive_widget_;
+  // Set between the close and the posted DestroyArchiveList that frees the
+  // pair. The widget is non-null throughout that window but must not be shown
+  // again, and Widget::IsClosed() cannot be asked: CreateBubble's
+  // MakeCloseSynchronous means CloseWithReason runs the override and returns
+  // before it ever sets `widget_closed_`.
+  bool archive_closing_ = false;
   base::WeakPtrFactory<SidebarView> weak_factory_{this};
 };
 
