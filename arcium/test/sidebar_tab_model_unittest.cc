@@ -16,6 +16,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
+#include "chrome/test/base/test_browser_window.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -30,9 +31,30 @@ class CountingObserver : public SidebarModel::Observer {
   int count = 0;
 };
 
+// TestBrowserWindow::Activate() is a no-op, so raising a window leaves no
+// trace to assert on. Counting the calls is what makes "activating an entry
+// held by another window raises that window" a checkable claim.
+class CountingBrowserWindow : public TestBrowserWindow {
+ public:
+  void Activate() override {
+    ++activate_count;
+    set_is_active(true);
+  }
+  int activate_count = 0;
+};
+
 class SidebarTabModelTest : public BrowserWithTestWindowTest {
  protected:
   TabStripModel* strip() { return browser()->tab_strip_model(); }
+
+  std::unique_ptr<BrowserWindow> CreateBrowserWindow() override {
+    return std::make_unique<CountingBrowserWindow>();
+  }
+
+  // The fixture's own window, which is browser()'s.
+  CountingBrowserWindow* counting_window() {
+    return static_cast<CountingBrowserWindow*>(window());
+  }
 
   std::unique_ptr<SidebarTabModel> MakeModel() {
     return std::make_unique<SidebarTabModel>(strip(), &arcium_model_,
@@ -370,6 +392,7 @@ TEST_F(SidebarTabModelTest, ActivatingAnEntryHeldByAnotherWindowDoesNotSteal) {
   const tabs::TabHandle pinned_tab = strip()->GetTabAtIndex(0)->GetHandle();
   strip()->ActivateTabAt(1);
   ASSERT_EQ(1, strip()->active_index());
+  ASSERT_EQ(0, counting_window()->activate_count);
 
   std::unique_ptr<Browser> browser_b =
       CreateBrowser(profile(), browser()->type(), /*hosted_app=*/false);
@@ -381,9 +404,12 @@ TEST_F(SidebarTabModelTest, ActivatingAnEntryHeldByAnotherWindowDoesNotSteal) {
   model_b.ActivateEntry(id);
   task_environment()->RunUntilIdle();
 
-  // A's tab is now A's active tab...
+  // A's tab is now A's active tab, and A's window was raised rather than left
+  // behind B's...
   EXPECT_EQ(0, strip()->active_index());
   EXPECT_EQ(2, strip()->count());
+  EXPECT_EQ(1, counting_window()->activate_count);
+  EXPECT_TRUE(window()->IsActive());
   // ...B gained nothing, and the entry still points at A's tab.
   EXPECT_EQ(b_count_before, browser_b->tab_strip_model()->count());
   ASSERT_TRUE(binding_.TabForEntry(id).has_value());
