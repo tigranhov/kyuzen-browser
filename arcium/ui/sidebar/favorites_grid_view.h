@@ -55,11 +55,18 @@ class FavoritesGridView : public views::View,
  private:
   void OnTileActivated(EntryId entry_id, int tab_index);
 
-  // Swaps the tile at `index` for a RenameField bounded to that tile's row —
-  // a 40px tile has nowhere to host a field on its own, but the row it sits
-  // in does. Mirrors TabRowView::BeginRename: captures the entry id at the
-  // point the edit actually starts, not when the menu closure was built.
+  // Swaps the tile at `index`'s whole row for a RenameField bounded to that
+  // row — a tile is a quarter of the sidebar wide and has nowhere to host a
+  // field on its own, but the row it sits in does. Mirrors
+  // TabRowView::BeginRename: captures the entry id at the point the edit
+  // actually starts, not when the menu closure was built.
   void BeginRenameForTile(size_t index);
+  // Shows or hides every tile in the same grid row as `index`. The field is
+  // bounded to the whole row, so the row's other tiles would otherwise sit
+  // underneath it — still visible, still at their own columns, and unable to
+  // take the clicks they look able to take, because the field is added last
+  // and Views hit-tests front to back.
+  void SetRowTilesVisible(size_t index, bool visible);
   bool is_renaming() const { return rename_field_ != nullptr; }
   // Takes the field away without an outcome, for when the tile pool is
   // re-pointed at a different entry out from under an open rename.

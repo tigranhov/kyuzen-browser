@@ -29,6 +29,22 @@ class SidebarFoldersTest : public BrowserWithTestWindowTest {
  protected:
   TabStripModel* strip() { return browser()->tab_strip_model(); }
 
+  // Browser batches a navigation's UI updates and delivers them from a task
+  // it posts 200 ms out (kUIUpdateCoalescingTime,
+  // chrome/browser/ui/browser.cc), ending in
+  // TabStripModel::TabChangedAt(kAll) — one more notification for the
+  // sidebar. RunUntilIdle does not run a task that is not due yet, so a test
+  // that counts notifications and does not turn this off is counting
+  // whatever the wall clock happened to deliver inside its window: the
+  // update lands in the window if the tests before it ran slowly and outside
+  // it if they ran fast. That was the whole of this file's flake. This is
+  // upstream's own seam for it — with the delay at zero the same
+  // RunUntilIdle that drains everything else drains this too. Only the test
+  // that counts needs it; the rest stay on stock timing.
+  void MakeBrowserUiUpdatesImmediate() {
+    browser()->set_update_ui_immediately_for_testing();
+  }
+
   std::unique_ptr<SidebarTabModel> MakeModel() {
     return std::make_unique<SidebarTabModel>(strip(), &arcium_model_,
                                              &binding_);
@@ -239,6 +255,7 @@ TEST_F(SidebarFoldersTest, EntryCountsAreCountedPerFolder) {
 // A folder change is a model mutation like any other, so it coalesces into
 // the same one notification per burst the rest of the model uses.
 TEST_F(SidebarFoldersTest, AFolderChangeNotifiesOnce) {
+  MakeBrowserUiUpdatesImmediate();
   AddTab(browser(), GURL("https://a.example/"));
   task_environment()->RunUntilIdle();
   std::unique_ptr<SidebarTabModel> model = MakeModel();

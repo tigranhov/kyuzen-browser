@@ -236,6 +236,23 @@ class SidebarViewsTest : public views::ViewsTestBase {
     return false;
   }
 
+  // A tile the user can see is a tile the user can click. Views hit-tests
+  // front to back, so a later sibling laid out over a visible child silently
+  // takes its clicks; nothing in the grid may do that.
+  bool EveryVisibleChildTakesItsOwnClicks(views::View* grid) {
+    views::test::RunScheduledLayout(widget_.get());
+    for (views::View* child : grid->children()) {
+      if (!child->GetVisible()) {
+        continue;
+      }
+      if (grid->GetEventHandlerForPoint(child->bounds().CenterPoint()) !=
+          child) {
+        return false;
+      }
+    }
+    return true;
+  }
+
   FakeSidebarModel model_;
   std::unique_ptr<views::Widget> widget_;
   std::unique_ptr<ui::test::EventGenerator> generator_;
@@ -770,7 +787,7 @@ TEST_F(SidebarViewsTest, APinnedRowOnItsPinnedUrlIsNotOfferedTheReturn) {
 
 // A favourite is a tile in the grid, not a row in a list, and the tiles carry
 // the same menu. Rename is offered: the field goes in the tile's row, not the
-// 40px tile itself.
+// tile itself, which is a quarter of the sidebar wide.
 TEST_F(SidebarViewsTest, TheMenuForAFavouriteTile) {
   model_.AddTab(u"One", "https://one.example/", SidebarSection::kFavorites,
                 false);
@@ -787,7 +804,7 @@ TEST_F(SidebarViewsTest, TheMenuForAFavouriteTile) {
             MenuLabels(capture.menu()->menu()));
 }
 
-// The field goes up bounded to the tile's row, not the 40px tile: the grid is
+// The field goes up bounded to the tile's row, not the tile: the grid is
 // its own context menu controller, so the closure the menu's Rename item runs
 // has to find the right tile by the index it was built for.
 TEST_F(SidebarViewsTest, RenameFromAFavouriteTilesMenuOpensTheField) {
@@ -864,6 +881,10 @@ TEST_F(SidebarViewsTest, RepointingAFavouriteTilesIndexAbandonsItsOpenRename) {
   grid->SetRows(model_.rows());
 
   EXPECT_FALSE(FocusedField());
+  // The row the field was covering comes back with it, on this path too.
+  for (const views::View* tile : grid->children()) {
+    EXPECT_TRUE(tile->GetVisible());
+  }
   generator().PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
   task_environment()->RunUntilIdle();
 
@@ -872,6 +893,112 @@ TEST_F(SidebarViewsTest, RepointingAFavouriteTilesIndexAbandonsItsOpenRename) {
     if (row.entry_id == two_id) {
       EXPECT_EQ(u"Two", row.title);
     }
+    EXPECT_NE(u"Renamed", row.title);
+  }
+}
+
+// The field is bounded to the tile's whole row, so every other tile in that
+// row would sit underneath it: still visible, still laid out at its own
+// column, and — because the field is added last and Views hit-tests front to
+// back — no longer able to receive the click it looks like it can. The row
+// goes away for the duration of the edit instead, and comes back with it.
+TEST_F(SidebarViewsTest,
+       ARenameHidesTheFavouriteRowItCoversAndCommitRestoresIt) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kFavorites,
+                false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kFavorites,
+                false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kFavorites,
+                false);
+  auto* grid =
+      contents_->AddChildView(std::make_unique<FavoritesGridView>(&model_));
+  grid->SetRows(model_.rows());
+  views::test::RunScheduledLayout(widget_.get());
+  ASSERT_EQ(3u, grid->children().size());
+  // kFavoritesPerRow is 4, so all three share row 0 with the renamed tile.
+  views::View* one = grid->children()[0];
+  views::View* three = grid->children()[2];
+  const gfx::Point one_centre = one->bounds().CenterPoint();
+  const gfx::Point three_centre = three->bounds().CenterPoint();
+  ASSERT_EQ(one, grid->GetEventHandlerForPoint(one_centre));
+  ASSERT_EQ(three, grid->GetEventHandlerForPoint(three_centre));
+
+  ScopedMenuCapture capture;
+  RightClickOn(grid->children()[1]);  // "Two"
+  ASSERT_TRUE(capture.menu());
+  ASSERT_TRUE(Choose(capture.menu()->menu(), u"Rename"));
+  RenameField* field = FocusedField();
+  ASSERT_TRUE(field);
+  views::test::RunScheduledLayout(widget_.get());
+
+  // Hidden, not merely covered: a tile that cannot be clicked must not look
+  // clickable.
+  EXPECT_FALSE(one->GetVisible());
+  EXPECT_FALSE(three->GetVisible());
+  EXPECT_EQ(field, grid->GetEventHandlerForPoint(one_centre));
+  EXPECT_EQ(field, grid->GetEventHandlerForPoint(three_centre));
+  // The invariant behind both: the field owns the row it covers, and no tile
+  // is left visible underneath it losing the clicks it looks able to take.
+  EXPECT_TRUE(EveryVisibleChildTakesItsOwnClicks(grid));
+
+  field->SetText(u"Renamed");
+  generator().PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
+  task_environment()->RunUntilIdle();
+  views::test::RunScheduledLayout(widget_.get());
+
+  EXPECT_TRUE(one->GetVisible());
+  EXPECT_TRUE(three->GetVisible());
+  EXPECT_EQ(one, grid->GetEventHandlerForPoint(one_centre));
+  EXPECT_EQ(three, grid->GetEventHandlerForPoint(three_centre));
+  EXPECT_TRUE(EveryVisibleChildTakesItsOwnClicks(grid));
+  ASSERT_EQ(3u, model_.rows().size());
+  EXPECT_EQ(u"Renamed", model_.rows()[1].title);
+}
+
+// The other way an edit ends. Escape takes the same OnRenameFinished path as
+// Enter with commit=false, and it has to put the row back just as commit does.
+TEST_F(SidebarViewsTest, AbandoningAFavouriteRenameRestoresTheRowItCovered) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kFavorites,
+                false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kFavorites,
+                false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kFavorites,
+                false);
+  auto* grid =
+      contents_->AddChildView(std::make_unique<FavoritesGridView>(&model_));
+  grid->SetRows(model_.rows());
+  views::test::RunScheduledLayout(widget_.get());
+  ASSERT_EQ(3u, grid->children().size());
+  views::View* one = grid->children()[0];
+  views::View* three = grid->children()[2];
+  const gfx::Point one_centre = one->bounds().CenterPoint();
+  const gfx::Point three_centre = three->bounds().CenterPoint();
+
+  ScopedMenuCapture capture;
+  RightClickOn(grid->children()[1]);  // "Two"
+  ASSERT_TRUE(capture.menu());
+  ASSERT_TRUE(Choose(capture.menu()->menu(), u"Rename"));
+  RenameField* field = FocusedField();
+  ASSERT_TRUE(field);
+  views::test::RunScheduledLayout(widget_.get());
+
+  EXPECT_FALSE(one->GetVisible());
+  EXPECT_FALSE(three->GetVisible());
+  EXPECT_EQ(field, grid->GetEventHandlerForPoint(one_centre));
+  EXPECT_TRUE(EveryVisibleChildTakesItsOwnClicks(grid));
+
+  field->SetText(u"Renamed");
+  generator().PressAndReleaseKey(ui::VKEY_ESCAPE, ui::EF_NONE);
+  task_environment()->RunUntilIdle();
+  views::test::RunScheduledLayout(widget_.get());
+
+  EXPECT_TRUE(one->GetVisible());
+  EXPECT_TRUE(three->GetVisible());
+  EXPECT_EQ(one, grid->GetEventHandlerForPoint(one_centre));
+  EXPECT_EQ(three, grid->GetEventHandlerForPoint(three_centre));
+  EXPECT_TRUE(EveryVisibleChildTakesItsOwnClicks(grid));
+  // Escape abandons, so nothing was written.
+  for (const SidebarRow& row : model_.rows()) {
     EXPECT_NE(u"Renamed", row.title);
   }
 }

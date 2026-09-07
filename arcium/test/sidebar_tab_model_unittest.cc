@@ -45,6 +45,22 @@ class CountingBrowserWindow : public TestBrowserWindow {
 
 class SidebarTabModelTest : public BrowserWithTestWindowTest {
  protected:
+  // Browser batches a navigation's UI updates and delivers them from a task
+  // it posts 200 ms out (kUIUpdateCoalescingTime,
+  // chrome/browser/ui/browser.cc), ending in TabStripModel::TabChangedAt(kAll)
+  // — one more notification for the sidebar. RunUntilIdle does not run a task
+  // that is not due yet, so a test that counts notifications and does not turn
+  // this off is counting whatever the wall clock happened to deliver inside its
+  // window: the update lands in the window if the tests before it ran slowly
+  // and outside it if they ran fast. That is the whole of the
+  // AFolderChangeNotifiesOnce flake, and this is upstream's own seam for it —
+  // with the delay at zero the same RunUntilIdle that drains everything else
+  // drains this too. Only the tests that count need it; the rest are left on
+  // stock timing.
+  void MakeBrowserUiUpdatesImmediate() {
+    browser()->set_update_ui_immediately_for_testing();
+  }
+
   TabStripModel* strip() { return browser()->tab_strip_model(); }
 
   std::unique_ptr<BrowserWindow> CreateBrowserWindow() override {
@@ -120,31 +136,40 @@ TEST_F(SidebarTabModelTest, ClearTodayKeepsEntryTabs) {
 }
 
 TEST_F(SidebarTabModelTest, ObserverFiresOncePerBurst) {
+  MakeBrowserUiUpdatesImmediate();
   AddTab(browser(), GURL("https://a.example/"));
   task_environment()->RunUntilIdle();
   std::unique_ptr<SidebarTabModel> model = MakeModel();
   CountingObserver observer;
   model->AddObserver(&observer);
 
-  // One AddTab produces several strip callbacks (insert, title, loading
-  // state); the model must deliver exactly one notification for the burst.
+  // One AddTab produces several strip callbacks (insert, then title and
+  // loading state) and the model collapses each run-loop turn's worth of
+  // them into one notification. Chromium then hands over the rest of the
+  // insertion — the URL and title Browser batched behind
+  // ProcessPendingUIUpdates — from a second task, which is a second turn and
+  // so a second notification. Two rebuilds per tab opened, not one, and that
+  // is Chromium's shape rather than this model's: stock Chromium puts 200 ms
+  // between them, which is what made the old expectation of 1 look right.
   AddTab(browser(), GURL("https://b.example/"));
   EXPECT_EQ(0, observer.count);  // Nothing until the task runs.
   task_environment()->RunUntilIdle();
-  EXPECT_EQ(1, observer.count);
+  EXPECT_EQ(2, observer.count);
 
+  // A pinned-state change is one turn's worth on its own.
   strip()->SetTabPinned(0, true);
   task_environment()->RunUntilIdle();
-  EXPECT_EQ(2, observer.count);
+  EXPECT_EQ(3, observer.count);
 
   model->RemoveObserver(&observer);
   AddTab(browser(), GURL("https://c.example/"));
   task_environment()->RunUntilIdle();
-  EXPECT_EQ(2, observer.count);
+  EXPECT_EQ(3, observer.count);
 }
 
 // An ArciumModel mutation coalesces into the same single notification.
 TEST_F(SidebarTabModelTest, AModelMutationAlsoFiresOnce) {
+  MakeBrowserUiUpdatesImmediate();
   AddTab(browser(), GURL("https://a.example/"));
   task_environment()->RunUntilIdle();
   std::unique_ptr<SidebarTabModel> model = MakeModel();

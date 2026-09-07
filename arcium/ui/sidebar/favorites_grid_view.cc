@@ -28,7 +28,8 @@ int TileSize(int width) {
 }
 
 // The full-width strip a tile's row occupies — where the rename field goes,
-// rather than the 40px tile alone, which has nowhere to put one.
+// rather than the one tile, which is a quarter of the sidebar wide and has
+// nowhere to put one.
 gfx::Rect TileRowBounds(int width, size_t index) {
   const int size = TileSize(width);
   const int row = static_cast<int>(index) / metrics::kFavoritesPerRow;
@@ -84,6 +85,16 @@ void FavoritesGridView::SetRows(const std::vector<SidebarRow>& rows) {
                       : kColorArciumControlBackground,
         metrics::kRowCornerRadius));
   }
+  // Every tile is shown except the row an open rename covers. The pool both
+  // makes new tiles (which start visible) and hands old ones back (which keep
+  // whatever a previous rename left them at), so neither end of it can be
+  // trusted to have got this right on its own.
+  for (const raw_ptr<views::ImageButton>& tile : tiles_) {
+    tile->SetVisible(true);
+  }
+  if (is_renaming()) {
+    SetRowTilesVisible(renaming_tile_index_, false);
+  }
   SetVisible(!tiles_.empty());
   InvalidateLayout();
 }
@@ -136,9 +147,17 @@ void FavoritesGridView::BeginRenameForTile(size_t index) {
                      weak_factory_.GetWeakPtr(), renaming_entry_id_));
   rename_field_ = AddChildView(std::move(field));
   rename_field_->GetViewAccessibility().SetName(u"Favorite name");
-  tiles_[index]->SetVisible(false);
+  SetRowTilesVisible(index, false);
   rename_field_->SetBoundsRect(TileRowBounds(width(), index));
   rename_field_->RequestFocus();
+}
+
+void FavoritesGridView::SetRowTilesVisible(size_t index, bool visible) {
+  const size_t per_row = static_cast<size_t>(metrics::kFavoritesPerRow);
+  const size_t first = (index / per_row) * per_row;
+  for (size_t i = first; i < first + per_row && i < tiles_.size(); ++i) {
+    tiles_[i]->SetVisible(visible);
+  }
 }
 
 void FavoritesGridView::AbandonRename() {
@@ -149,9 +168,7 @@ void FavoritesGridView::AbandonRename() {
   field->Abandon();
   renaming_entry_id_ = EntryId();
   RemoveChildViewT(field);
-  if (renaming_tile_index_ < tiles_.size()) {
-    tiles_[renaming_tile_index_]->SetVisible(true);
-  }
+  SetRowTilesVisible(renaming_tile_index_, true);
 }
 
 void FavoritesGridView::OnRenameFinished(EntryId id,
@@ -160,9 +177,7 @@ void FavoritesGridView::OnRenameFinished(EntryId id,
   if (rename_field_) {
     RemoveChildViewT(rename_field_.ExtractAsDangling());
     renaming_entry_id_ = EntryId();
-    if (renaming_tile_index_ < tiles_.size()) {
-      tiles_[renaming_tile_index_]->SetVisible(true);
-    }
+    SetRowTilesVisible(renaming_tile_index_, true);
   }
   // `id` is the entry the edit was started on, captured when it began, not
   // whatever this pooled tile draws now; see TabRowView::OnRenameFinished.
