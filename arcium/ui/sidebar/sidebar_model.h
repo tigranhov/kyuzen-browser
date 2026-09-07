@@ -41,6 +41,16 @@ struct SidebarRow {
   std::optional<FolderId> folder_id;
 };
 
+// Everything a folder header needs to paint itself. Like SidebarRow, it is
+// prepared by the model: a header must never scan the rows to draw its count,
+// and it has no way to reach the folder's name or collapsed state otherwise.
+struct SidebarFolder {
+  FolderId id;
+  std::u16string name;
+  bool collapsed = false;
+  int entry_count = 0;
+};
+
 // The sidebar's view of a window's tabs plus the commands it can issue. The
 // browser implements it on top of TabStripModel; the playground uses a fake.
 class SidebarModel {
@@ -76,6 +86,26 @@ class SidebarModel {
   virtual void SetEntryTitle(EntryId id, const std::u16string& title) = 0;
   // Navigates the entry's bound tab back to the entry's URL.
   virtual void ReturnToPinnedUrl(EntryId id) = 0;
+
+  // Folder commands. Folders hold pinned entries only, so every one of these
+  // that names a favourite, a Today row or an id the model no longer has is a
+  // no-op rather than a crash: menus are built from a snapshot of rows() and
+  // the model can move underneath them while the menu is open.
+  //
+  // The default space's folders in `position` order, each with the number of
+  // entries inside it already counted.
+  virtual std::vector<SidebarFolder> folders() const = 0;
+  virtual void SetFolderCollapsed(FolderId id, bool collapsed) = 0;
+  // Makes a folder holding just `id`. Returns an invalid id if it could not.
+  virtual FolderId CreateFolderWithEntry(EntryId id,
+                                         const std::u16string& name) = 0;
+  // std::nullopt returns the entry to the top level of the Pinned section.
+  virtual void MoveEntryToFolder(EntryId id,
+                                 std::optional<FolderId> folder_id) = 0;
+  virtual void SetFolderName(FolderId id, const std::u16string& name) = 0;
+  // Removes the folder. Its entries return to the top level; a folder groups
+  // entries, it does not own them.
+  virtual void DeleteFolder(FolderId id) = 0;
 
   virtual void AddObserver(Observer* observer) = 0;
   virtual void RemoveObserver(Observer* observer) = 0;

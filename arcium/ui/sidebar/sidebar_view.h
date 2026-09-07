@@ -65,6 +65,7 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   // views::View:
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
+  bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
 
  private:
   void Rebuild();

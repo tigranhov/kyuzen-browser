@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/vector_icons.h"
@@ -15,6 +16,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/events/event.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
@@ -49,6 +51,7 @@ TabRowView::TabRowView(Delegate delegate)
           base::Unretained(this))),
       delegate_(std::move(delegate)) {
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+  set_context_menu_controller(this);
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
@@ -79,6 +82,15 @@ TabRowView::TabRowView(Delegate delegate)
   audio_ = AddChildView(std::make_unique<views::ImageView>());
   audio_->SetVisible(false);
 
+  revert_ = AddChildView(views::CreateVectorImageButtonWithNativeTheme(
+      base::BindRepeating(&TabRowView::Revert, base::Unretained(this)),
+      kRevertIcon, kIndicatorSize));
+  revert_->SetVisible(false);
+  revert_->SetID(kRevertButtonId);
+  revert_->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+  revert_->SetTooltipText(u"Return to pinned URL");
+  revert_->GetViewAccessibility().SetName(u"Return to pinned URL");
+
   close_ = AddChildView(views::CreateVectorImageButtonWithNativeTheme(
       base::BindRepeating(
           [](TabRowView* self) {
@@ -91,6 +103,7 @@ TabRowView::TabRowView(Delegate delegate)
           base::Unretained(this)),
       kCloseIcon, kIndicatorSize));
   close_->SetVisible(false);
+  close_->SetID(kCloseButtonId);
   close_->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   close_->GetViewAccessibility().SetName(u"Close tab");
 }
@@ -120,14 +133,73 @@ void TabRowView::UpdateVisuals() {
                                        kColorArciumRowText, kIndicatorSize));
   }
   GetViewAccessibility().SetName(row_.title);
-  UpdateCloseButtonVisibility();
+  UpdateTrailingButtons();
   OnThemeChanged();
 }
 
-void TabRowView::UpdateCloseButtonVisibility() {
-  close_->SetVisible(hovered_);
-  // The audio indicator yields its slot to the close button on hover.
-  audio_->SetVisible(!hovered_ && (row_.is_audible || row_.is_muted));
+void TabRowView::UpdateTrailingButtons() {
+  // The field owns the whole row while it is up: nothing else is actionable
+  // and a stray close would drop the edit on the floor.
+  const bool renaming = is_renaming();
+  title_->SetVisible(!renaming);
+  // A pinned entry that has navigated away offers the way back in the slot
+  // the close button would otherwise take. Closing such a row is still
+  // reachable by middle click and from the context menu.
+  const bool show_revert =
+      hovered_ && !renaming && row_.can_return_to_pinned_url;
+  revert_->SetVisible(show_revert);
+  close_->SetVisible(hovered_ && !renaming && !show_revert);
+  // The audio indicator yields its slot to the hover buttons.
+  audio_->SetVisible(!hovered_ && !renaming &&
+                     (row_.is_audible || row_.is_muted));
+}
+
+void TabRowView::BeginRename() {
+  // A Today tab has no entry, so there is nothing to carry the name past the
+  // tab's life; renaming it would be a lie.
+  if (!row_.entry_id.is_valid() || is_renaming()) {
+    return;
+  }
+  auto field = std::make_unique<RenameField>(
+      row_.title, base::BindOnce(&TabRowView::OnRenameFinished,
+                                 weak_factory_.GetWeakPtr()));
+  field->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
+                               views::MinimumFlexSizeRule::kScaleToZero,
+                               views::MaximumFlexSizeRule::kUnbounded));
+  // In the title's place, so the favicon stays to its left.
+  rename_field_ = AddChildViewAt(std::move(field), GetIndexOf(title_).value());
+  UpdateTrailingButtons();
+  rename_field_->RequestFocus();
+  InvalidateLayout();
+}
+
+void TabRowView::OnRenameFinished(bool commit, const std::u16string& title) {
+  if (rename_field_) {
+    RemoveChildViewT(rename_field_.ExtractAsDangling());
+  }
+  UpdateTrailingButtons();
+  InvalidateLayout();
+  if (!commit || title.empty() || !row_.entry_id.is_valid() ||
+      !delegate_.rename) {
+    return;
+  }
+  // Copies: the rename rebuilds the list and can destroy this view.
+  base::RepeatingCallback<void(const SidebarRow&, const std::u16string&)>
+      rename = delegate_.rename;
+  const SidebarRow row = row_;
+  rename.Run(row, title);
+}
+
+void TabRowView::Revert() {
+  if (!delegate_.return_to_pinned_url || !row_.can_return_to_pinned_url) {
+    return;
+  }
+  base::RepeatingCallback<void(const SidebarRow&)> revert =
+      delegate_.return_to_pinned_url;
+  const SidebarRow row = row_;
+  revert.Run(row);
 }
 
 bool TabRowView::OnMousePressed(const ui::MouseEvent& event) {
@@ -169,14 +241,38 @@ void TabRowView::OnMouseReleased(const ui::MouseEvent& event) {
 
 void TabRowView::OnMouseEntered(const ui::MouseEvent& event) {
   hovered_ = true;
-  UpdateCloseButtonVisibility();
+  UpdateTrailingButtons();
   OnThemeChanged();
 }
 
 void TabRowView::OnMouseExited(const ui::MouseEvent& event) {
   hovered_ = false;
-  UpdateCloseButtonVisibility();
+  UpdateTrailingButtons();
   OnThemeChanged();
+}
+
+bool TabRowView::OnKeyPressed(const ui::KeyEvent& event) {
+  // Cmd+Shift+Backspace on a row that has the focus. SidebarView carries the
+  // same binding as an accelerator for the active row, which is the reachable
+  // path while rows are only accessibility-focusable.
+  if (event.key_code() == ui::VKEY_BACK && event.IsShiftDown() &&
+      (event.IsCommandDown() || event.IsControlDown())) {
+    if (row_.can_return_to_pinned_url) {
+      Revert();
+      return true;
+    }
+  }
+  return views::Button::OnKeyPressed(event);
+}
+
+void TabRowView::ShowContextMenuForViewImpl(
+    views::View* source,
+    const gfx::Point& point,
+    ui::mojom::MenuSourceType source_type) {
+  if (!delegate_.show_context_menu || is_renaming()) {
+    return;
+  }
+  delegate_.show_context_menu.Run(this, row_, point);
 }
 
 void TabRowView::OnThemeChanged() {

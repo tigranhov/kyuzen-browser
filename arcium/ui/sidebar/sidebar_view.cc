@@ -18,7 +18,10 @@
 #include "arcium/ui/sidebar/url_pill_view.h"
 #include "base/functional/bind.h"
 #include "base/strings/utf_string_conversions.h"
+#include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/flex_layout.h"
@@ -47,8 +50,9 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   favorites_ = AddChildView(std::make_unique<FavoritesGridView>(model_));
   pinned_ = AddChildView(
       std::make_unique<TabListView>(model_, SidebarSection::kPinned));
-  divider_ = AddChildView(std::make_unique<SectionDividerView>(
-      base::BindRepeating(&SidebarModel::ClearToday, base::Unretained(model_))));
+  divider_ =
+      AddChildView(std::make_unique<SectionDividerView>(base::BindRepeating(
+          &SidebarModel::ClearToday, base::Unretained(model_))));
   // Today scrolls: with enough tabs the rows would otherwise be laid out past
   // the bottom of the column at zero height, which hides them entirely.
   // ScrollWithLayers is the macOS default, but a layer-backed viewport is not
@@ -76,6 +80,14 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
                                views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
   space_bar_ = AddChildView(std::make_unique<SpaceBarView>());
+
+  // Cmd+Shift+Backspace returns the active pinned entry to its pinned URL,
+  // the same command the row's revert button issues. It is an accelerator
+  // rather than a key handler on the row because sidebar rows are only
+  // accessibility-focusable, so there is normally no focused row to press it
+  // on; the active row is the one the user is looking at.
+  AddAccelerator(
+      ui::Accelerator(ui::VKEY_BACK, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN));
 
   observation_.Observe(model_);
   Rebuild();
@@ -106,8 +118,18 @@ void SidebarView::OnSidebarModelChanged() {
 
 gfx::Size SidebarView::CalculatePreferredSize(
     const views::SizeBounds& available_size) const {
-  return gfx::Size(metrics::kSidebarWidth,
-                   available_size.height().value_or(0));
+  return gfx::Size(metrics::kSidebarWidth, available_size.height().value_or(0));
+}
+
+bool SidebarView::AcceleratorPressed(const ui::Accelerator& accelerator) {
+  for (const SidebarRow& row : model_->rows()) {
+    if (row.is_active && row.can_return_to_pinned_url &&
+        row.entry_id.is_valid()) {
+      model_->ReturnToPinnedUrl(row.entry_id);
+      return true;
+    }
+  }
+  return false;
 }
 
 void SidebarView::Rebuild() {

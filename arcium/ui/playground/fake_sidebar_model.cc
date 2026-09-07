@@ -117,6 +117,31 @@ void FakeSidebarModel::SetAudible(int tab_index, bool audible) {
   }
 }
 
+void FakeSidebarModel::SetCanReturnToPinnedUrl(int tab_index, bool can_return) {
+  if (SidebarRow* row = FindByTabIndex(tab_index)) {
+    row->can_return_to_pinned_url = can_return;
+    Notify();
+  }
+}
+
+FolderId FakeSidebarModel::AddFolderWith(
+    const std::u16string& name,
+    const std::vector<std::u16string>& titles) {
+  FolderId folder;
+  for (const std::u16string& title : titles) {
+    SidebarRow* row = FindByTitle(title);
+    if (!row) {
+      continue;
+    }
+    if (!folder.is_valid()) {
+      folder = CreateFolderWithEntry(row->entry_id, name);
+    } else {
+      MoveEntryToFolder(row->entry_id, folder);
+    }
+  }
+  return folder;
+}
+
 std::vector<SidebarRow> FakeSidebarModel::rows() const {
   return rows_;
 }
@@ -193,6 +218,8 @@ void FakeSidebarModel::UnpinEntry(EntryId id) {
     moved.entry_id = EntryId();
     moved.section = SidebarSection::kToday;
     moved.can_return_to_pinned_url = false;
+    // Today has no folders, and the entry that was in one is gone.
+    moved.folder_id.reset();
     std::erase_if(rows_,
                   [id](const SidebarRow& r) { return r.entry_id == id; });
     rows_.push_back(std::move(moved));
@@ -243,6 +270,85 @@ void FakeSidebarModel::ReturnToPinnedUrl(EntryId id) {
   }
 }
 
+std::vector<SidebarFolder> FakeSidebarModel::folders() const {
+  std::vector<SidebarFolder> result;
+  for (const FakeFolder& folder : folders_) {
+    SidebarFolder out;
+    out.id = folder.id;
+    out.name = folder.name;
+    out.collapsed = folder.collapsed;
+    for (const SidebarRow& row : rows_) {
+      if (row.folder_id == folder.id) {
+        ++out.entry_count;
+      }
+    }
+    result.push_back(std::move(out));
+  }
+  return result;
+}
+
+void FakeSidebarModel::SetFolderCollapsed(FolderId id, bool collapsed) {
+  for (FakeFolder& folder : folders_) {
+    if (folder.id == id) {
+      folder.collapsed = collapsed;
+      Notify();
+      return;
+    }
+  }
+}
+
+FolderId FakeSidebarModel::CreateFolderWithEntry(EntryId id,
+                                                 const std::u16string& name) {
+  SidebarRow* row = FindByEntry(id);
+  // Folders hold pinned entries only, exactly as the browser model has it.
+  if (!row || row->section != SidebarSection::kPinned) {
+    return FolderId();
+  }
+  FakeFolder folder;
+  folder.id = FolderId::Generate();
+  folder.name = name;
+  folders_.push_back(folder);
+  row->folder_id = folder.id;
+  Notify();
+  return folder.id;
+}
+
+void FakeSidebarModel::MoveEntryToFolder(EntryId id,
+                                         std::optional<FolderId> folder_id) {
+  SidebarRow* row = FindByEntry(id);
+  if (!row || row->section != SidebarSection::kPinned ||
+      (folder_id.has_value() && !HasFolder(*folder_id))) {
+    return;
+  }
+  row->folder_id = folder_id;
+  Notify();
+}
+
+void FakeSidebarModel::SetFolderName(FolderId id, const std::u16string& name) {
+  for (FakeFolder& folder : folders_) {
+    if (folder.id == id) {
+      folder.name = name;
+      Notify();
+      return;
+    }
+  }
+}
+
+void FakeSidebarModel::DeleteFolder(FolderId id) {
+  const size_t before = folders_.size();
+  std::erase_if(folders_, [id](const FakeFolder& f) { return f.id == id; });
+  if (folders_.size() == before) {
+    return;
+  }
+  // The entries come back to the top level; the folder was a grouping.
+  for (SidebarRow& row : rows_) {
+    if (row.folder_id == id) {
+      row.folder_id.reset();
+    }
+  }
+  Notify();
+}
+
 void FakeSidebarModel::AddObserver(Observer* observer) {
   observers_.AddObserver(observer);
 }
@@ -282,6 +388,24 @@ SidebarRow* FakeSidebarModel::FindByEntry(EntryId id) {
     }
   }
   return nullptr;
+}
+
+SidebarRow* FakeSidebarModel::FindByTitle(const std::u16string& title) {
+  for (SidebarRow& row : rows_) {
+    if (row.title == title) {
+      return &row;
+    }
+  }
+  return nullptr;
+}
+
+bool FakeSidebarModel::HasFolder(FolderId id) const {
+  for (const FakeFolder& folder : folders_) {
+    if (folder.id == id) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void FakeSidebarModel::MakeEntry(int tab_index, SidebarSection section) {

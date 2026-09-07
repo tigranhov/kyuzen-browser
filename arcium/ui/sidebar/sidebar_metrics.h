@@ -15,6 +15,8 @@ inline constexpr int kRowCornerRadius = 8;
 inline constexpr int kRowHorizontalPadding = 8;
 inline constexpr int kRowIconTextGap = 9;
 inline constexpr int kFaviconSize = 16;
+// How far a row inside a folder sits in from a top-level one.
+inline constexpr int kFolderIndent = 16;
 inline constexpr int kFavoritesPerRow = 4;
 inline constexpr int kFavoriteTileGap = 6;
 inline constexpr int kNavButtonSize = 26;

@@ -4,6 +4,7 @@
 
 #include "arcium/ui/browser/sidebar_tab_model.h"
 
+#include <algorithm>
 #include <map>
 #include <string_view>
 #include <utility>
@@ -358,6 +359,81 @@ void SidebarTabModel::ReturnToPinnedUrl(EntryId id) {
   contents->GetController().LoadURL(entry->url, content::Referrer(),
                                     ui::PAGE_TRANSITION_AUTO_BOOKMARK,
                                     std::string());
+}
+
+std::vector<SidebarFolder> SidebarTabModel::folders() const {
+  const SpaceId space = arcium_model_->default_space_id();
+  // One pass over the entries counts every folder, so a header never scans
+  // and rows() is not walked once per folder.
+  std::map<FolderId, int> counts;
+  for (const TabEntry& entry : arcium_model_->entries()) {
+    if (entry.space_id == space && entry.folder_id.has_value()) {
+      ++counts[*entry.folder_id];
+    }
+  }
+  std::vector<SidebarFolder> result;
+  for (const Folder& folder : arcium_model_->folders()) {
+    if (folder.space_id != space) {
+      continue;
+    }
+    SidebarFolder out;
+    out.id = folder.id;
+    out.name = folder.name;
+    out.collapsed = folder.collapsed;
+    auto it = counts.find(folder.id);
+    out.entry_count = it == counts.end() ? 0 : it->second;
+    result.push_back(std::move(out));
+  }
+  // ArciumModel stores folders in insertion order and keeps `position`
+  // normalised; the sidebar wants that order, not the vector's.
+  std::sort(result.begin(), result.end(),
+            [this](const SidebarFolder& a, const SidebarFolder& b) {
+              const Folder* fa = arcium_model_->GetFolder(a.id);
+              const Folder* fb = arcium_model_->GetFolder(b.id);
+              return fa->position < fb->position;
+            });
+  return result;
+}
+
+const TabEntry* SidebarTabModel::FolderableEntry(EntryId id) const {
+  const TabEntry* entry = arcium_model_->GetEntry(id);
+  // A favourite is drawn as a tile in the grid and has nowhere to be indented
+  // to, so ArciumModel keeps folder_id empty for one; refuse here rather than
+  // write a field the model would clear behind our back.
+  return entry && entry->kind == EntryKind::kPinned ? entry : nullptr;
+}
+
+void SidebarTabModel::SetFolderCollapsed(FolderId id, bool collapsed) {
+  arcium_model_->SetFolderCollapsed(id, collapsed);
+}
+
+FolderId SidebarTabModel::CreateFolderWithEntry(EntryId id,
+                                                const std::u16string& name) {
+  if (!FolderableEntry(id)) {
+    return FolderId();
+  }
+  const FolderId folder = arcium_model_->AddFolder(name);
+  arcium_model_->SetEntryFolder(id, folder);
+  return folder;
+}
+
+void SidebarTabModel::MoveEntryToFolder(EntryId id,
+                                        std::optional<FolderId> folder_id) {
+  // The menu that issued this was built from a snapshot; the folder may be
+  // gone by the time the item is chosen.
+  if (!FolderableEntry(id) ||
+      (folder_id.has_value() && !arcium_model_->GetFolder(*folder_id))) {
+    return;
+  }
+  arcium_model_->SetEntryFolder(id, folder_id);
+}
+
+void SidebarTabModel::SetFolderName(FolderId id, const std::u16string& name) {
+  arcium_model_->SetFolderName(id, name);
+}
+
+void SidebarTabModel::DeleteFolder(FolderId id) {
+  arcium_model_->RemoveFolder(id);
 }
 
 void SidebarTabModel::AddObserver(SidebarModel::Observer* observer) {

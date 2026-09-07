@@ -38,6 +38,8 @@ SidebarExample::SidebarExample()
                  false);
   model_->AddTab(u"Linear · Arcium board", "https://linear.app/arcium",
                  SidebarSection::kPinned, false);
+  model_->AddTab(u"Notion", "https://notion.so/", SidebarSection::kPinned,
+                 false);
   model_->AddTab(u"tigranhov/arcium", "https://github.com/tigranhov/arcium",
                  SidebarSection::kToday, true);
   model_->AddTab(u"Chromium Views tutorial",
@@ -54,8 +56,16 @@ SidebarExample::SidebarExample()
   model_->AddColdEntry(u"Chromium Gerrit",
                        "https://chromium-review.googlesource.com/",
                        SidebarSection::kPinned);
-  model_->SetLoading(8, true);
-  model_->SetAudible(7, true);
+  model_->SetLoading(9, true);
+  model_->SetAudible(8, true);
+  // The four states Task 7 has to look right in: a warm row inside an
+  // expanded folder next to a cold one, a collapsed folder that contributes
+  // only its header, and a top-level pinned row offering the way back to its
+  // pinned URL on hover.
+  model_->AddFolderWith(u"Work", {u"Discord", u"Chromium Gerrit"});
+  const FolderId reading = model_->AddFolderWith(u"Reading", {u"Notion"});
+  model_->SetFolderCollapsed(reading, true);
+  model_->SetCanReturnToPinnedUrl(5, true);
 }
 
 SidebarExample::~SidebarExample() = default;

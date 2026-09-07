@@ -7,9 +7,12 @@ aggregate_vector_icons("sidebar_icons") {
     "audio.icon",
     "back.icon",
     "close.icon",
+    "disclosure_collapsed.icon",
+    "disclosure_expanded.icon",
     "forward.icon",
     "muted.icon",
     "reload.icon",
+    "revert.icon",
     "sidebar.icon",
   ]
 }
@@ -19,8 +22,14 @@ source_set("sidebar") {
   sources = [
     "favorites_grid_view.cc",
     "favorites_grid_view.h",
+    "folder_header_view.cc",
+    "folder_header_view.h",
     "nav_row_view.cc",
     "nav_row_view.h",
+    "rename_field.cc",
+    "rename_field.h",
+    "row_context_menu.cc",
+    "row_context_menu.h",
     "section_divider_view.cc",
     "section_divider_view.h",
     "sidebar_colors.cc",

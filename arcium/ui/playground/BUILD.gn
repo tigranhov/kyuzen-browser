@@ -1,16 +1,36 @@
+# The in-memory SidebarModel the playground runs on. A separate target so the
+# view tests can drive the same fake the playground does, rather than a second
+# one that could drift from it.
+source_set("fake_model") {
+  testonly = true
+  sources = [
+    "fake_sidebar_model.cc",
+    "fake_sidebar_model.h",
+  ]
+  public_deps = [
+    "//arcium/ui/sidebar",
+    "//base",
+  ]
+  deps = [
+    "//cc/paint",
+    "//skia",
+    "//ui/base",
+    "//ui/gfx",
+  ]
+}
+
 # Standalone Views host for Arcium's sidebar components. No //chrome deps.
 executable("arcium_playground") {
   testonly = true
   sources = [
     "arcium_playground_main.cc",
-    "fake_sidebar_model.cc",
-    "fake_sidebar_model.h",
     "sidebar_example.cc",
     "sidebar_example.h",
     "snapshot.cc",
     "snapshot.h",
   ]
   deps = [
+    ":fake_model",
     "//arcium/ui/sidebar",
     "//base",
     "//base/test:test_support",
@@ -23,6 +43,7 @@ executable("arcium_playground") {
     "//ui/views/examples:views_examples_lib",
     "//ui/views/examples:views_examples_proc",
   ]
+
   # ExamplesMainProc loads ui_test.pak and views_examples_resources.pak from
   # the output directory.
   data_deps = [

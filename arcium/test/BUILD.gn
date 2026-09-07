@@ -7,13 +7,16 @@ test("arcium_unittests") {
     "arcium_profile_state_unittest.cc",
     "model_serializer_unittest.cc",
     "model_store_unittest.cc",
+    "sidebar_folders_unittest.cc",
     "sidebar_tab_model_unittest.cc",
+    "sidebar_views_unittest.cc",
     "tab_binding_unittest.cc",
   ]
   deps = [
     "//arcium/browser",
     "//arcium/browser/model",
     "//arcium/ui/browser",
+    "//arcium/ui/playground:fake_model",
     "//arcium/ui/sidebar",
     "//base/test:test_support",
     "//chrome/browser/ui",
@@ -22,5 +25,6 @@ test("arcium_unittests") {
     "//content/test:test_support",
     "//testing/gtest",
     "//third_party/sqlite",
+    "//ui/views:test_support",
   ]
 }

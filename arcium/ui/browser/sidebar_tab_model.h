@@ -5,6 +5,7 @@
 #ifndef ARCIUM_UI_BROWSER_SIDEBAR_TAB_MODEL_H_
 #define ARCIUM_UI_BROWSER_SIDEBAR_TAB_MODEL_H_
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -67,6 +68,14 @@ class SidebarTabModel : public SidebarModel,
   void CloseEntryTab(EntryId id) override;
   void SetEntryTitle(EntryId id, const std::u16string& title) override;
   void ReturnToPinnedUrl(EntryId id) override;
+  std::vector<SidebarFolder> folders() const override;
+  void SetFolderCollapsed(FolderId id, bool collapsed) override;
+  FolderId CreateFolderWithEntry(EntryId id,
+                                 const std::u16string& name) override;
+  void MoveEntryToFolder(EntryId id,
+                         std::optional<FolderId> folder_id) override;
+  void SetFolderName(FolderId id, const std::u16string& name) override;
+  void DeleteFolder(FolderId id) override;
   // Qualified: ArciumModel::Observer is also in scope through the base.
   void AddObserver(SidebarModel::Observer* observer) override;
   void RemoveObserver(SidebarModel::Observer* observer) override;
@@ -102,6 +111,8 @@ class SidebarTabModel : public SidebarModel,
   SidebarRow RowForTab(int index, tabs::TabInterface* tab) const;
   // Creates an entry of `kind` from the tab at `tab_index` and binds it.
   void AddEntryForTab(int tab_index, EntryKind kind);
+  // The entry, if it exists and is one a folder may hold.
+  const TabEntry* FolderableEntry(EntryId id) const;
   // Copies the live page title of every warm entry into the model, so a row
   // that later goes cold has something better than a URL to draw.
   void SyncEntryTitles();

@@ -6,8 +6,11 @@
 
 #include <algorithm>
 #include <memory>
+#include <set>
 #include <utility>
 
+#include "arcium/ui/sidebar/folder_header_view.h"
+#include "arcium/ui/sidebar/row_context_menu.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/tab_row_view.h"
@@ -19,6 +22,7 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/view_class_properties.h"
 
 namespace arcium {
 
@@ -47,6 +51,34 @@ TabListView::TabListView(SidebarModel* model, SidebarSection section)
 
 TabListView::~TabListView() = default;
 
+TabRowView* TabListView::MakeRow() {
+  TabRowView::Delegate delegate;
+  delegate.activate =
+      base::BindRepeating(&TabListView::OnActivateRow, base::Unretained(this));
+  delegate.close =
+      base::BindRepeating(&TabListView::OnCloseRow, base::Unretained(this));
+  delegate.drag_move =
+      base::BindRepeating(&TabListView::OnDragMove, base::Unretained(this));
+  delegate.rename =
+      base::BindRepeating(&TabListView::OnRenameRow, base::Unretained(this));
+  delegate.return_to_pinned_url =
+      base::BindRepeating(&TabListView::OnRevertRow, base::Unretained(this));
+  delegate.show_context_menu =
+      base::BindRepeating(&TabListView::OnShowRowMenu, base::Unretained(this));
+  return AddChildView(std::make_unique<TabRowView>(std::move(delegate)));
+}
+
+FolderHeaderView* TabListView::MakeHeader() {
+  FolderHeaderView::Delegate delegate;
+  delegate.toggle_collapsed =
+      base::BindRepeating(&TabListView::OnToggleFolder, base::Unretained(this));
+  delegate.rename =
+      base::BindRepeating(&TabListView::OnRenameFolder, base::Unretained(this));
+  delegate.show_context_menu = base::BindRepeating(
+      &TabListView::OnShowFolderMenu, base::Unretained(this));
+  return AddChildView(std::make_unique<FolderHeaderView>(std::move(delegate)));
+}
+
 void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
   std::vector<const SidebarRow*> mine;
   for (const SidebarRow& row : all_rows) {
@@ -54,29 +86,89 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
       mine.push_back(&row);
     }
   }
-  // Grow or shrink the pool of row views, then assign in order. Views are
-  // reused by position so a title change or reorder does not allocate.
-  while (rows_.size() < mine.size()) {
-    TabRowView::Delegate delegate;
-    delegate.activate = base::BindRepeating(&TabListView::OnActivateRow,
-                                            base::Unretained(this));
-    delegate.close =
-        base::BindRepeating(&TabListView::OnCloseRow, base::Unretained(this));
-    delegate.drag_move =
-        base::BindRepeating(&TabListView::OnDragMove, base::Unretained(this));
-    auto* row = AddChildViewAt(
-        std::make_unique<TabRowView>(std::move(delegate)), rows_.size());
-    rows_.push_back(row);
+  // Only pinned entries live in folders, so no other section asks for them.
+  std::vector<SidebarFolder> folders;
+  if (section_ == SidebarSection::kPinned) {
+    folders = model_->folders();
   }
-  while (rows_.size() > mine.size()) {
+  std::set<FolderId> known;
+  for (const SidebarFolder& folder : folders) {
+    known.insert(folder.id);
+  }
+
+  // The laid-out order: each folder's header, then its entries when it is
+  // expanded, then everything at the top level. A collapsed folder
+  // contributes only its header.
+  std::vector<PlanItem> plan;
+  plan.reserve(mine.size() + folders.size());
+  for (size_t f = 0; f < folders.size(); ++f) {
+    plan.push_back({/*is_header=*/true, f, /*indented=*/false});
+    if (folders[f].collapsed) {
+      continue;
+    }
+    for (size_t r = 0; r < mine.size(); ++r) {
+      if (mine[r]->folder_id == folders[f].id) {
+        plan.push_back({/*is_header=*/false, r, /*indented=*/true});
+      }
+    }
+  }
+  for (size_t r = 0; r < mine.size(); ++r) {
+    // A row naming a folder this section did not get back is drawn at the top
+    // level rather than lost: the model is the authority on which folders
+    // exist, and a stale id must not hide a tab.
+    if (!mine[r]->folder_id.has_value() || !known.count(*mine[r]->folder_id)) {
+      plan.push_back({/*is_header=*/false, r, /*indented=*/false});
+    }
+  }
+
+  size_t rows_needed = 0;
+  for (const PlanItem& item : plan) {
+    rows_needed += item.is_header ? 0u : 1u;
+  }
+
+  // Grow or shrink the pools, then assign in order. Views are reused by
+  // position so a title change or reorder does not allocate.
+  while (headers_.size() < folders.size()) {
+    headers_.push_back(MakeHeader());
+  }
+  while (headers_.size() > folders.size()) {
+    FolderHeaderView* header = headers_.back();
+    headers_.pop_back();
+    RemoveChildViewT(header);
+  }
+  while (rows_.size() < rows_needed) {
+    rows_.push_back(MakeRow());
+  }
+  while (rows_.size() > rows_needed) {
     TabRowView* row = rows_.back();
     rows_.pop_back();
     RemoveChildViewT(row);
   }
-  for (size_t i = 0; i < mine.size(); ++i) {
-    rows_[i]->SetRow(*mine[i]);
+
+  for (size_t f = 0; f < folders.size(); ++f) {
+    headers_[f]->SetFolder(folders[f]);
   }
-  SetVisible(!rows_.empty() || new_tab_);
+  // One walk assigns the data and puts the children in the plan's order;
+  // BoxLayout lays them out by child index.
+  size_t next_row = 0;
+  size_t child_index = 0;
+  for (const PlanItem& item : plan) {
+    views::View* view = nullptr;
+    if (item.is_header) {
+      view = headers_[item.index];
+    } else {
+      TabRowView* row = rows_[next_row++];
+      row->SetRow(*mine[item.index]);
+      row->SetProperty(
+          views::kMarginsKey,
+          gfx::Insets::TLBR(0, item.indented ? metrics::kFolderIndent : 0, 0,
+                            0));
+      view = row;
+    }
+    ReorderChildView(view, child_index++);
+  }
+
+  SetVisible(!rows_.empty() || !headers_.empty() || new_tab_);
   InvalidateLayout();
 }
 
@@ -108,6 +200,49 @@ void TabListView::OnDragMove(int from, int to) {
   if (to != from) {
     model_->MoveTab(from, to);
   }
+}
+
+void TabListView::OnRenameRow(const SidebarRow& row,
+                              const std::u16string& title) {
+  if (row.entry_id.is_valid()) {
+    model_->SetEntryTitle(row.entry_id, title);
+  }
+}
+
+void TabListView::OnRevertRow(const SidebarRow& row) {
+  if (row.entry_id.is_valid()) {
+    model_->ReturnToPinnedUrl(row.entry_id);
+  }
+}
+
+void TabListView::OnShowRowMenu(TabRowView* source,
+                                const SidebarRow& row,
+                                const gfx::Point& point) {
+  context_menu_ = std::make_unique<RowContextMenu>(model_);
+  // Weak: a command can rebuild the list before the menu's item runs, and the
+  // row the menu was opened from may be gone by then.
+  context_menu_->RunForRow(
+      row, source, point,
+      base::BindRepeating(&TabRowView::BeginRename, source->GetWeakPtr()));
+}
+
+void TabListView::OnToggleFolder(const SidebarFolder& folder) {
+  model_->SetFolderCollapsed(folder.id, !folder.collapsed);
+}
+
+void TabListView::OnRenameFolder(const SidebarFolder& folder,
+                                 const std::u16string& name) {
+  model_->SetFolderName(folder.id, name);
+}
+
+void TabListView::OnShowFolderMenu(FolderHeaderView* source,
+                                   const SidebarFolder& folder,
+                                   const gfx::Point& point) {
+  context_menu_ = std::make_unique<RowContextMenu>(model_);
+  context_menu_->RunForFolder(
+      folder, source, point,
+      base::BindRepeating(&FolderHeaderView::BeginRename,
+                          source->GetWeakPtr()));
 }
 
 BEGIN_METADATA(TabListView)

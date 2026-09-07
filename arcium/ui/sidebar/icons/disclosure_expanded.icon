@@ -1,0 +1,10 @@
+// Copyright 2026 The Arcium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+CANVAS_DIMENSIONS, 16,
+FILL_RULE_NONZERO,
+MOVE_TO, 3.5f, 6,
+LINE_TO, 12.5f, 6,
+LINE_TO, 8, 11.5f,
+CLOSE
