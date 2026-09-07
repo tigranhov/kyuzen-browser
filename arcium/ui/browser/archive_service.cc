@@ -13,6 +13,7 @@
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
+#include "arcium/ui/browser/tab_close_types.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/sequenced_task_runner.h"
@@ -25,8 +26,6 @@
 namespace arcium {
 
 namespace {
-
-constexpr uint32_t kCloseTypes = TabCloseTypes::CLOSE_CREATE_HISTORICAL_TAB;
 
 // The row `tab` would be archived as, or nullopt when there is nothing worth
 // recording. Read before the close, because afterwards the tab is gone.
@@ -131,7 +130,7 @@ void ArchiveService::ArchiveAllToday() {
     }
   }
   for (const tabs::TabHandle& handle : today) {
-    ArchiveAndClose(handle);
+    ArchiveAndClose(handle, kUserCloseTypes);
   }
   RescheduleTimer();
 }
@@ -410,7 +409,7 @@ void ArchiveService::OnTimerFired() {
     }
   }
   for (const tabs::TabHandle& handle : expired) {
-    ArchiveAndClose(handle);
+    ArchiveAndClose(handle, kSweepCloseTypes);
     // A close the strip declined to perform (an unload handler registered
     // between the check and here, a delegate that refused) must not leave the
     // tab expired, or the next reschedule would ask for a zero delay and the
@@ -422,7 +421,8 @@ void ArchiveService::OnTimerFired() {
   RescheduleTimer();
 }
 
-void ArchiveService::ArchiveAndClose(tabs::TabHandle handle) {
+void ArchiveService::ArchiveAndClose(tabs::TabHandle handle,
+                                     uint32_t close_types) {
   tabs::TabInterface* tab = handle.Get();
   if (!tab) {
     return;
@@ -446,7 +446,7 @@ void ArchiveService::ArchiveAndClose(tabs::TabHandle handle) {
     // at most one row is ever written for the tab.
     pending_archive_[handle] = *row;
   }
-  tab_strip_model_->CloseWebContentsAt(index, kCloseTypes);
+  tab_strip_model_->CloseWebContentsAt(index, close_types);
 }
 
 }  // namespace arcium

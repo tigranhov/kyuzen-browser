@@ -5,6 +5,7 @@
 #ifndef ARCIUM_UI_BROWSER_ARCHIVE_SERVICE_H_
 #define ARCIUM_UI_BROWSER_ARCHIVE_SERVICE_H_
 
+#include <cstdint>
 #include <map>
 #include <optional>
 #include <string>
@@ -196,7 +197,10 @@ class ArchiveService : public TabStripModelObserver,
   // tab is known to be actually gone, and the row is stamped there rather than
   // here. A declined close drops its row at the tab's next page change; see
   // `pending_archive_`.
-  void ArchiveAndClose(tabs::TabHandle handle);
+  // `close_types` says whose close this is: kUserCloseTypes for Clear, which
+  // the user pressed, kSweepCloseTypes for the timer, which they did not. See
+  // tab_close_types.h.
+  void ArchiveAndClose(tabs::TabHandle handle, uint32_t close_types);
 
   raw_ptr<TabStripModel> tab_strip_model_;
   raw_ptr<ArciumModel> model_;

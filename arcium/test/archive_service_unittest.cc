@@ -629,6 +629,64 @@ TEST_F(ArchiveServiceTest, AParkedRowIsStampedWhenTheTabActuallyGoes) {
   EXPECT_GE(rows[0].archived_at, confirmed_at);
 }
 
+// M3. Clear closed tabs two different ways depending on whether the profile
+// had an archive: the sidebar's own path set CLOSE_USER_GESTURE and the
+// archive service's did not, because each had written its own close-types
+// constant. One button must not take two paths. It is a button the user
+// pressed, so both say so; the automatic sweep is the one that does not,
+// because nothing the user did closed those tabs.
+//
+// The close is held by the unload handler on purpose: TabStripModel stamps
+// the flag before it runs the unload listener, so a tab that stays is a tab
+// whose close-types can still be read.
+TEST_F(ArchiveServiceTest, ClearIsAUserGestureWithOrWithoutAnArchive) {
+  auto handler = std::make_unique<DecliningUnloadHandler>();
+  DecliningUnloadHandler* handler_ptr = handler.get();
+  UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  AddTab(browser(), GURL("https://today.example/"));
+
+  // No archive: SidebarTabModel closes the Today tabs itself.
+  sidebar_model_->ClearToday();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(1, strip()->count());
+  EXPECT_TRUE(strip()->GetWebContentsAt(0)->GetClosedByUserGesture());
+
+  handler_ptr->set_intercept(false);
+  strip()->CloseAllTabs();
+  task_environment()->RunUntilIdle();
+
+  // With an archive: the same button, through ArchiveService, says the same
+  // thing about the same gesture.
+  handler_ptr->set_intercept(true);
+  AddTab(browser(), GURL("https://today.example/"));
+  ASSERT_FALSE(strip()->GetWebContentsAt(0)->GetClosedByUserGesture());
+  sidebar_model_->SetArchiveService(service_.get());
+  sidebar_model_->ClearToday();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(1, strip()->count());
+  EXPECT_TRUE(strip()->GetWebContentsAt(0)->GetClosedByUserGesture());
+
+  handler_ptr->set_intercept(false);
+}
+
+// And the sweep, which is the case the flag is genuinely wrong for: no
+// gesture closed these tabs, so nothing claims one did.
+TEST_F(ArchiveServiceTest, TheIdleSweepIsNotAUserGesture) {
+  auto handler = std::make_unique<DecliningUnloadHandler>();
+  DecliningUnloadHandler* handler_ptr = handler.get();
+  UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  AddTab(browser(), GURL("https://idle.example/"));
+  AddTab(browser(), GURL("https://active.example/"));  // active, never swept
+
+  PassTime(base::Hours(13));
+  ASSERT_EQ(2, strip()->count());  // Held by the handler, not closed.
+  const int idle_index = strip()->GetIndexOfTab(HandleAt(1).Get());
+  ASSERT_NE(TabStripModel::kNoTab, idle_index);
+  EXPECT_FALSE(strip()->GetWebContentsAt(idle_index)->GetClosedByUserGesture());
+
+  handler_ptr->set_intercept(false);
+}
+
 // The archive list's read path, end to end and through the real store: the
 // model asks, the service posts to the store's sequence, and the rows come
 // back converted and newest first. Reads get the same "posted, never inline"

@@ -11,6 +11,8 @@
 
 #include "arcium/ui/browser/sidebar_tab_model.h"
 
+#include "arcium/ui/browser/tab_close_types.h"
+
 #include <algorithm>
 #include <map>
 #include <string>
@@ -265,7 +267,7 @@ void SidebarTabModel::CloseEntryTab(EntryId id) {
   }
   // The entry stays; only the tab goes, and the row turns cold.
   tab_strip_model_->CloseWebContentsAt(tab_strip_model_->GetIndexOfTab(tab),
-                                       kCloseTypes);
+                                       kUserCloseTypes);
 }
 
 void SidebarTabModel::SetEntryTitle(EntryId id, const std::u16string& title) {

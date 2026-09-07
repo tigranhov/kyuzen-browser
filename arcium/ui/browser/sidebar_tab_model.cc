@@ -17,6 +17,7 @@
 #include "arcium/browser/model/reorder_index.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/ui/browser/archive_service.h"
+#include "arcium/ui/browser/tab_close_types.h"
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -105,7 +106,7 @@ void SidebarTabModel::ActivateTab(int tab_index) {
 
 void SidebarTabModel::CloseTab(int tab_index) {
   if (tab_index >= 0 && tab_index < tab_strip_model_->count()) {
-    tab_strip_model_->CloseWebContentsAt(tab_index, kCloseTypes);
+    tab_strip_model_->CloseWebContentsAt(tab_index, kUserCloseTypes);
   }
 }
 
@@ -136,7 +137,7 @@ void SidebarTabModel::ClearToday() {
   // Chromium thinks of its pinned state.
   for (int i = tab_strip_model_->count() - 1; i >= 0; --i) {
     if (!IsClaimedByEntry(tab_strip_model_->GetTabAtIndex(i))) {
-      tab_strip_model_->CloseWebContentsAt(i, kCloseTypes);
+      tab_strip_model_->CloseWebContentsAt(i, kUserCloseTypes);
     }
   }
 }

@@ -16,6 +16,7 @@ source_set("browser") {
     "sidebar_tab_model.cc",
     "sidebar_tab_model.h",
     "sidebar_tab_model_entries.cc",
+    "tab_close_types.h",
     "tab_search_service.cc",
     "tab_search_service.h",
   ]
