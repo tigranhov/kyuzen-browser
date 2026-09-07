@@ -52,6 +52,15 @@ std::optional<EntryId> TabBinding::EntryForTab(tabs::TabHandle handle) const {
   return it->second;
 }
 
+std::vector<EntryId> TabBinding::BoundEntries() const {
+  std::vector<EntryId> ids;
+  ids.reserve(entry_to_tab_.size());
+  for (const auto& [id, handle] : entry_to_tab_) {
+    ids.push_back(id);
+  }
+  return ids;
+}
+
 bool TabBinding::IsBound(tabs::TabHandle handle) const {
   return tab_to_entry_.contains(handle);
 }

@@ -90,6 +90,12 @@ class SidebarTabModel : public SidebarModel,
   tabs::TabInterface* BoundTabAnywhere(EntryId id) const;
   // The entry's tab if it is live and in this window's strip, else null.
   tabs::TabInterface* LiveTabForEntry(EntryId id) const;
+  // True when an entry that *still exists* claims `tab`. A binding alone is
+  // not enough: ArciumModel::ReplaceAll (which ModelStore::Load calls once
+  // the window is interactive) removes entries without touching TabBinding,
+  // and a tab left bound to a removed entry belongs in Today, not nowhere.
+  // Every "does an entry own this tab" decision routes through here.
+  bool IsClaimedByEntry(tabs::TabInterface* tab) const;
   // Selects `tab` in the strip that actually holds it and raises its window.
   void ActivateTabInItsOwnWindow(tabs::TabInterface* tab);
   SidebarRow RowForEntry(const TabEntry& entry) const;

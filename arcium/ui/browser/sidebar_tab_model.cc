@@ -82,7 +82,7 @@ std::vector<SidebarRow> SidebarTabModel::rows() const {
   const int count = tab_strip_model_->count();
   for (int i = 0; i < count; ++i) {
     tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(i);
-    if (binding_->IsBound(tab->GetHandle())) {
+    if (IsClaimedByEntry(tab)) {
       continue;
     }
     rows.push_back(RowForTab(i, tab));
@@ -108,6 +108,11 @@ tabs::TabInterface* SidebarTabModel::LiveTabForEntry(EntryId id) const {
     return nullptr;
   }
   return tab;
+}
+
+bool SidebarTabModel::IsClaimedByEntry(tabs::TabInterface* tab) const {
+  const std::optional<EntryId> id = binding_->EntryForTab(tab->GetHandle());
+  return id.has_value() && arcium_model_->GetEntry(*id) != nullptr;
 }
 
 void SidebarTabModel::ActivateTabInItsOwnWindow(tabs::TabInterface* tab) {
@@ -215,7 +220,7 @@ void SidebarTabModel::ClearToday() {
   // Close from the end so indices stay valid. A tab an entry claims is not a
   // Today tab, whatever Chromium thinks of its pinned state.
   for (int i = tab_strip_model_->count() - 1; i >= 0; --i) {
-    if (!binding_->IsBound(tab_strip_model_->GetTabAtIndex(i)->GetHandle())) {
+    if (!IsClaimedByEntry(tab_strip_model_->GetTabAtIndex(i))) {
       tab_strip_model_->CloseWebContentsAt(i, kCloseTypes);
     }
   }

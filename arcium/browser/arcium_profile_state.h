@@ -33,7 +33,8 @@ namespace arcium {
 // An off-the-record context gets its own state, with a model and a binding
 // but no store: incognito pins are session-scoped, which is what incognito
 // means. See store().
-class ArciumProfileState : public base::SupportsUserData::Data {
+class ArciumProfileState : public base::SupportsUserData::Data,
+                           public ArciumModel::Observer {
  public:
   // Creates the state on first call for `context` and starts the load, then
   // returns the same object for the life of the profile.
@@ -58,13 +59,16 @@ class ArciumProfileState : public base::SupportsUserData::Data {
   // writer for it. Every caller must null-check.
   ModelStore* store() { return store_.get(); }
 
+  // ArciumModel::Observer:
+  void OnArciumModelChanged() override;
+
  private:
   ArciumProfileState(const base::FilePath& profile_path, bool off_the_record);
 
   ArciumModel model_;
   TabBinding binding_;
-  // Null while off the record. Declared after the two objects it reads, so
-  // it is destroyed first.
+  // Null while off the record. Declared after the two objects it observes and
+  // reads, so it is destroyed first.
   std::unique_ptr<ModelStore> store_;
 };
 

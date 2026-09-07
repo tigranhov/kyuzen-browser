@@ -4,15 +4,21 @@
 
 #include "arcium/browser/arcium_profile_state.h"
 
+#include <vector>
+
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/entry_id.h"
+#include "arcium/browser/model/space.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/model_store.h"
 #include "arcium/browser/tab_binding.h"
 #include "base/files/file_util.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/profiles/profile.h"
+#include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
+#include "components/tabs/public/tab_interface.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -91,6 +97,54 @@ TEST_F(ArciumProfileStateTest, IncognitoGetsItsOwnIndependentModel) {
 TEST_F(ArciumProfileStateTest, TheSameStateComesBackForTheSameContext) {
   EXPECT_EQ(ArciumProfileState::GetForBrowserContext(profile()),
             ArciumProfileState::GetForBrowserContext(profile()));
+}
+
+// I3, second half: the state owns both the model and the binding, so it is
+// the one place that can drop a binding whose entry has gone away. Once per
+// profile rather than once per window.
+TEST_F(ArciumProfileStateTest, ABindingWhoseEntryVanishesIsReleased) {
+  ArciumProfileState* state =
+      ArciumProfileState::GetForBrowserContext(profile());
+  AddTab(browser(), GURL("https://a.example/"));
+  const tabs::TabHandle handle =
+      browser()->tab_strip_model()->GetTabAtIndex(0)->GetHandle();
+
+  const EntryId id = state->model()->AddEntry(EntryKind::kPinned,
+                                              GURL("https://a.example/"), u"A");
+  state->binding()->Bind(id, handle);
+  ASSERT_TRUE(state->binding()->IsBound(handle));
+
+  // What ModelStore::Load's completion does: entries replaced wholesale,
+  // TabBinding untouched.
+  std::vector<Space> spaces = state->model()->spaces();
+  state->model()->ReplaceAll(std::move(spaces), {}, {});
+
+  EXPECT_FALSE(state->binding()->IsBound(handle));
+  EXPECT_FALSE(state->binding()->TabForEntry(id).has_value());
+
+  task_environment()->FastForwardBy(ModelStore::kSaveDelay * 2);
+  task_environment()->RunUntilIdle();
+}
+
+TEST_F(ArciumProfileStateTest, ALiveEntrysBindingSurvivesAReplaceAll) {
+  ArciumProfileState* state =
+      ArciumProfileState::GetForBrowserContext(profile());
+  AddTab(browser(), GURL("https://a.example/"));
+  const tabs::TabHandle handle =
+      browser()->tab_strip_model()->GetTabAtIndex(0)->GetHandle();
+
+  const EntryId id = state->model()->AddEntry(EntryKind::kPinned,
+                                              GURL("https://a.example/"), u"A");
+  state->binding()->Bind(id, handle);
+
+  std::vector<Space> spaces = state->model()->spaces();
+  std::vector<TabEntry> entries = state->model()->entries();
+  state->model()->ReplaceAll(std::move(spaces), {}, std::move(entries));
+
+  EXPECT_TRUE(state->binding()->IsBound(handle));
+
+  task_environment()->FastForwardBy(ModelStore::kSaveDelay * 2);
+  task_environment()->RunUntilIdle();
 }
 
 }  // namespace

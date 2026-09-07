@@ -60,8 +60,27 @@ ArciumProfileState::ArciumProfileState(const base::FilePath& profile_path,
   if (!off_the_record) {
     store_ = std::make_unique<ModelStore>(&model_, ModelPath(profile_path));
   }
+  model_.AddObserver(this);
 }
 
-ArciumProfileState::~ArciumProfileState() = default;
+ArciumProfileState::~ArciumProfileState() {
+  model_.RemoveObserver(this);
+}
+
+void ArciumProfileState::OnArciumModelChanged() {
+  // ArciumModel::ReplaceAll - which ModelStore::Load calls once the first
+  // window is already interactive - drops entries without telling the
+  // binding, and Task 9's archiving will do the same. Release the orphans
+  // here, once per profile, so the binding cannot accumulate dead ids.
+  //
+  // Observer order relative to a window's SidebarTabModel is not guaranteed,
+  // which is why SidebarTabModel also checks the model itself rather than
+  // trusting the binding alone.
+  for (const EntryId& id : binding_.BoundEntries()) {
+    if (!model_.GetEntry(id)) {
+      binding_.UnbindEntry(id);
+    }
+  }
+}
 
 }  // namespace arcium

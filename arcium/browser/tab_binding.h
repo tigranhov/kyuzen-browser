@@ -7,6 +7,7 @@
 
 #include <map>
 #include <optional>
+#include <vector>
 
 #include "arcium/browser/model/entry_id.h"
 #include "components/tabs/public/tab_interface.h"
@@ -36,6 +37,11 @@ class TabBinding {
   std::optional<tabs::TabHandle> TabForEntry(EntryId id) const;
   std::optional<EntryId> EntryForTab(tabs::TabHandle handle) const;
   bool IsBound(tabs::TabHandle handle) const;
+
+  // Every entry that currently holds a binding. The caller that owns both
+  // this and the model uses it to drop bindings whose entry has gone away:
+  // ArciumModel::ReplaceAll removes entries without touching the binding.
+  std::vector<EntryId> BoundEntries() const;
 
  private:
   std::map<EntryId, tabs::TabHandle> entry_to_tab_;

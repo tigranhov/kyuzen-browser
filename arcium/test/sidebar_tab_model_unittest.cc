@@ -9,6 +9,7 @@
 
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/entry_id.h"
+#include "arcium/browser/model/space.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
@@ -323,6 +324,32 @@ TEST_F(SidebarTabModelTest, ActivatingAnEntryHeldByAnotherWindowDoesNotSteal) {
   EXPECT_EQ(pinned_tab, binding_.TabForEntry(id).value());
 
   browser_b->tab_strip_model()->CloseAllTabs();
+}
+
+// I3: ModelStore::Load calls ArciumModel::ReplaceAll once the window is
+// already interactive, dropping entries without touching TabBinding. A tab
+// left bound to a removed entry must fall back into Today, not vanish into
+// neither section.
+TEST_F(SidebarTabModelTest, ATabWhoseEntryVanishesFallsBackIntoToday) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  ASSERT_EQ(SidebarSection::kPinned, model->rows()[0].section);
+
+  // Exactly what a completed load does to the model.
+  std::vector<Space> spaces = arcium_model_.spaces();
+  arcium_model_.ReplaceAll(std::move(spaces), {}, {});
+
+  std::vector<SidebarRow> rows = model->rows();
+  ASSERT_EQ(1u, rows.size());
+  EXPECT_EQ(SidebarSection::kToday, rows[0].section);
+  EXPECT_EQ(0, rows[0].tab_index);
+  EXPECT_FALSE(rows[0].entry_id.is_valid());
+
+  // And it is closeable again, which it was not while it was claimed by an
+  // entry that no longer existed.
+  model->ClearToday();
+  EXPECT_EQ(0, strip()->count());
 }
 
 }  // namespace
