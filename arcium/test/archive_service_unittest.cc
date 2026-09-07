@@ -38,14 +38,10 @@ namespace arcium {
 namespace {
 
 // The production seam a close can be declined at: UnloadController asks every
-// registered TabUnloadHandler before it lets a tab go, and one that puts up its
-// own confirmation keeps the tab open until the user answers. Standing in here
-// for the beforeunload dialog, which cannot be closed in this fixture without
-// a PerformanceManager the fixture does not build.
-// Stands in for a beforeunload dialog. The real one cannot be used here: it
-// reaches PerformanceManager::GetGraph(), which CHECKs in this fixture. This
-// is a production seam with the property that matters — the answer arrives
-// after ShowCustomConfirmation has returned, not during it.
+// registered TabUnloadHandler before it lets a tab go, and one that puts up
+// its own confirmation keeps the tab open until the user answers. It stands
+// in for the beforeunload dialog, which cannot be driven in this fixture —
+// that path reaches PerformanceManager::GetGraph(), which CHECKs here.
 class DecliningUnloadHandler : public UnloadController::TabUnloadHandler {
  public:
   void set_intercept(bool intercept) { intercept_ = intercept; }

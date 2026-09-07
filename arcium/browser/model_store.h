@@ -59,7 +59,6 @@ class ModelStore : public ArciumModel::Observer,
   // can name the type; constructed only by ModelStore and its .cc helper.
   struct LoadResult {
     std::optional<base::DictValue> dict;
-    base::Time last_modified;
   };
 
  private:

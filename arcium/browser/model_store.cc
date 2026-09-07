@@ -22,19 +22,13 @@ namespace {
 
 // Runs on the background sequence. `dict` is nullopt for a missing,
 // unreadable or unparseable file; all three mean "start empty", never
-// "crash". `last_modified` is null when the file does not exist; it is read
-// alongside the contents so Load() never has to touch the filesystem again
-// on the UI thread.
+// "crash".
 ModelStore::LoadResult ReadFileOnBackgroundSequence(
     const base::FilePath& path) {
   ModelStore::LoadResult result;
   std::string contents;
   if (!base::ReadFileToString(path, &contents)) {
     return result;
-  }
-  base::File::Info info;
-  if (base::GetFileInfo(path, &info)) {
-    result.last_modified = info.last_modified;
   }
   result.dict = base::JSONReader::ReadDict(contents, base::JSON_PARSE_RFC);
   return result;
