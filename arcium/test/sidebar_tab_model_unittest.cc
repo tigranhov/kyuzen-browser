@@ -17,6 +17,7 @@
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/test/bind.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "chrome/test/base/test_browser_window.h"
@@ -645,6 +646,51 @@ TEST_F(SidebarTabModelTest, TwoWindowsOverOneModelBothShowTheEntry) {
   EXPECT_EQ(id, rows_b[0].entry_id);
   EXPECT_EQ(SidebarSection::kPinned, rows_b[0].section);
   EXPECT_TRUE(rows_b[0].is_cold);
+
+  browser_b->tab_strip_model()->CloseAllTabs();
+}
+
+// I4, the other half: an entry survives its tab being dragged from one window
+// to another. The strip reports that as a removal like any other, and the only
+// thing that tells them apart is the reason — kInsertedIntoOtherTabStrip, the
+// tab is going somewhere, versus a real close, the tab is going away. Without
+// that guard the binding is released on the way out, the entry goes cold in
+// both windows, and the row in the window that just received the tab is blank.
+// Deleting the guard used to pass the whole suite.
+TEST_F(SidebarTabModelTest, AnEntryStaysWarmWhenItsTabMovesToAnotherWindow) {
+  AddTab(browser(), GURL("https://stay.example/"));
+  AddTab(browser(), GURL("https://pinned.example/"));
+  std::unique_ptr<SidebarTabModel> model_a = MakeModel();
+  model_a->PinTab(0);
+  const EntryId id = model_a->rows()[0].entry_id;
+  ASSERT_TRUE(id.is_valid());
+  ASSERT_FALSE(model_a->rows()[0].is_cold);
+
+  std::unique_ptr<Browser> browser_b =
+      CreateBrowser(profile(), browser()->type(), /*hosted_app=*/false);
+  SidebarTabModel model_b(browser_b->tab_strip_model(), &arcium_model_,
+                          &binding_);
+
+  // The drag: detached from A for reinsertion, not closed.
+  browser_b->tab_strip_model()->InsertDetachedTabAt(
+      0, strip()->DetachTabAtForInsertion(0), AddTabTypes::ADD_ACTIVE);
+  task_environment()->RunUntilIdle();
+
+  // The entry is still there and still bound, and it is B that now holds it
+  // warm — A shows the same entry cold, which is the two-window contract.
+  EXPECT_EQ(1u, arcium_model_.entries().size());
+  EXPECT_TRUE(binding_.TabForEntry(id).has_value());
+  std::vector<SidebarRow> rows_b = model_b.rows();
+  ASSERT_FALSE(rows_b.empty());
+  EXPECT_EQ(id, rows_b[0].entry_id);
+  EXPECT_EQ(SidebarSection::kPinned, rows_b[0].section);
+  EXPECT_FALSE(rows_b[0].is_cold);
+  EXPECT_EQ(0, rows_b[0].tab_index);
+
+  std::vector<SidebarRow> rows_a = model_a->rows();
+  ASSERT_FALSE(rows_a.empty());
+  EXPECT_EQ(id, rows_a[0].entry_id);
+  EXPECT_TRUE(rows_a[0].is_cold);
 
   browser_b->tab_strip_model()->CloseAllTabs();
 }
