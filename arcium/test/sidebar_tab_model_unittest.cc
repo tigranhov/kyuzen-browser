@@ -650,6 +650,46 @@ TEST_F(SidebarTabModelTest, TwoWindowsOverOneModelBothShowTheEntry) {
   browser_b->tab_strip_model()->CloseAllTabs();
 }
 
+// The close-out obligation deferred from Task 13. Entries carry a space id and
+// rows() emits only the default space's, but IsClaimedByEntry asked the model
+// for the entry without caring which space it was in. A tab bound to an entry
+// of another space was therefore claimed — kept out of Today — while nothing
+// drew it either: an invisible tab, and one MayArchive would refuse to close
+// for as long as the browser ran. The same shape as the stale-binding bug the
+// predicate was written for, one field further along.
+TEST_F(SidebarTabModelTest, ATabClaimedByAnotherSpacesEntryIsStillATodayTab) {
+  AddTab(browser(), GURL("https://a.example/"));
+  // Two spaces, the entry in the second. Through ReplaceAll because that is
+  // the only way a second space exists in Stage 2 — it is what ModelStore
+  // hands a model read off disk, which is where a Stage 3 file would arrive
+  // from.
+  Space first;
+  first.id = SpaceId::Generate();
+  first.name = u"First";
+  Space other;
+  other.id = SpaceId::Generate();
+  other.name = u"Other";
+  TabEntry entry;
+  entry.id = EntryId::Generate();
+  entry.kind = EntryKind::kPinned;
+  entry.space_id = other.id;
+  entry.url = GURL("https://a.example/");
+  arcium_model_.ReplaceAll({first, other}, {}, {entry});
+  ASSERT_EQ(first.id, arcium_model_.default_space_id());
+  binding_.Bind(entry.id, strip()->GetTabAtIndex(0)->GetHandle());
+
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  std::vector<SidebarRow> rows = model->rows();
+  ASSERT_EQ(1u, rows.size());
+  EXPECT_EQ(SidebarSection::kToday, rows[0].section);
+  EXPECT_FALSE(rows[0].entry_id.is_valid());
+
+  // And it behaves as one: Clear takes it, rather than leaving it behind on
+  // the strength of an entry no window in this space can see.
+  model->ClearToday();
+  EXPECT_EQ(0, strip()->count());
+}
+
 // I4, the other half: an entry survives its tab being dragged from one window
 // to another. The strip reports that as a removal like any other, and the only
 // thing that tells them apart is the reason — kInsertedIntoOtherTabStrip, the
