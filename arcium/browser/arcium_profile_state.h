@@ -5,6 +5,8 @@
 #ifndef ARCIUM_BROWSER_ARCIUM_PROFILE_STATE_H_
 #define ARCIUM_BROWSER_ARCIUM_PROFILE_STATE_H_
 
+#include <memory>
+
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model_store.h"
 #include "arcium/browser/tab_binding.h"
@@ -27,6 +29,10 @@ namespace arcium {
 // own EnsureBrowserContextKeyedServiceFactoriesBuilt(), and Arcium's rule is
 // that upstream files change only through a patch. User data needs no
 // upstream registration at all, and the lifetime is the same either way.
+//
+// An off-the-record context gets its own state, with a model and a binding
+// but no store: incognito pins are session-scoped, which is what incognito
+// means. See store().
 class ArciumProfileState : public base::SupportsUserData::Data {
  public:
   // Creates the state on first call for `context` and starts the load, then
@@ -44,14 +50,22 @@ class ArciumProfileState : public base::SupportsUserData::Data {
 
   ArciumModel* model() { return &model_; }
   TabBinding* binding() { return &binding_; }
-  ModelStore* store() { return &store_; }
+
+  // NULL for an off-the-record context, which has no persistence at all.
+  // OffTheRecordProfileImpl::GetPath() returns the *parent* profile's path,
+  // so an incognito store would write incognito browsing state into the
+  // regular profile's `Arcium Model` file and race the regular profile's own
+  // writer for it. Every caller must null-check.
+  ModelStore* store() { return store_.get(); }
 
  private:
-  explicit ArciumProfileState(const base::FilePath& profile_path);
+  ArciumProfileState(const base::FilePath& profile_path, bool off_the_record);
 
   ArciumModel model_;
   TabBinding binding_;
-  ModelStore store_;
+  // Null while off the record. Declared after the two objects it reads, so
+  // it is destroyed first.
+  std::unique_ptr<ModelStore> store_;
 };
 
 }  // namespace arcium
