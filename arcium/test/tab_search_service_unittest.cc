@@ -82,14 +82,20 @@ class TabSearchServiceTest : public BrowserWithTestWindowTest {
     strip()->AppendWebContents(std::move(contents), /*foreground=*/false);
   }
 
-  ArchivedTab MakeArchived(const std::string& url,
-                           const std::u16string& title) {
+  ArchivedTab MakeArchivedAt(const std::string& url,
+                             const std::u16string& title,
+                             base::Time archived_at) {
     ArchivedTab tab;
     tab.url = GURL(url);
     tab.title = title;
     tab.space_id = model_.default_space_id();
-    tab.archived_at = base::Time::Now();
+    tab.archived_at = archived_at;
     return tab;
+  }
+
+  ArchivedTab MakeArchived(const std::string& url,
+                           const std::u16string& title) {
+    return MakeArchivedAt(url, title, base::Time::Now());
   }
 
   // The only entry point a UI caller has, so it is the one the tests drive.
@@ -278,6 +284,48 @@ TEST_F(TabSearchServiceTest, AnArchivedRowForALiveUrlIsSuppressed) {
   ASSERT_EQ(2u, results.size());
   EXPECT_EQ(SearchResult::Source::kLiveTab, results[0].source);
   EXPECT_EQ(GURL("https://other.example/"), results[1].url);
+}
+
+// The set the archive half is filtered against is built from every live tab
+// and every entry, not only the ones that match this query: a tab that misses
+// the query is still a tab the user has, and offering to un-archive its URL
+// would offer them something already in front of them. Building the set from
+// the matches instead would let both suppressed rows below through.
+TEST_F(TabSearchServiceTest, ANonMatchingTabOrEntrySuppressesItsArchivedRow) {
+  AddTabWithTitle(GURL("https://tab.example/"), u"Nothing alike");
+  model_.AddEntry(EntryKind::kPinned, GURL("https://entry.example/"),
+                  u"Nor this");
+
+  archive_.Add(MakeArchived("https://tab.example/", u"Zebra as a tab"));
+  archive_.Add(MakeArchived("https://entry.example/", u"Zebra as an entry"));
+  archive_.Add(MakeArchived("https://gone.example/", u"Zebra archived only"));
+
+  std::vector<SearchResult> results = Search(u"zebra", 10);
+  ASSERT_EQ(1u, results.size());
+  EXPECT_EQ(GURL("https://gone.example/"), results[0].url);
+}
+
+// ArchiveStore::Search applies its LIMIT by recency, in SQL, and the URL
+// suppression runs afterwards in C++. Asking the store for exactly `limit`
+// rows therefore lets suppression empty the archive half completely: here the
+// two newest matching rows are both URLs the user already has open, so they
+// are dropped and a perfectly good older match is never looked at. Neither tab
+// matches the query itself — they are here only as the thing that suppresses.
+TEST_F(TabSearchServiceTest, SuppressedNewArchiveRowsDoNotHideOlderMatches) {
+  const base::Time now = base::Time::Now();
+  AddTabWithTitle(GURL("https://open1.example/"), u"Something open");
+  AddTabWithTitle(GURL("https://open2.example/"), u"Also open");
+
+  archive_.Add(MakeArchivedAt("https://open1.example/", u"Zebra newest", now));
+  archive_.Add(MakeArchivedAt("https://open2.example/", u"Zebra newer",
+                              now - base::Minutes(1)));
+  archive_.Add(MakeArchivedAt("https://gone.example/", u"Zebra oldest",
+                              now - base::Hours(1)));
+
+  std::vector<SearchResult> results = Search(u"zebra", 2);
+  ASSERT_EQ(1u, results.size());
+  EXPECT_EQ(SearchResult::Source::kArchive, results[0].source);
+  EXPECT_EQ(GURL("https://gone.example/"), results[0].url);
 }
 
 // The suppression above must never fold two live tabs together: two tabs on

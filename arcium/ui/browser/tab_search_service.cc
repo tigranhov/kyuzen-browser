@@ -17,6 +17,8 @@
 #include "base/functional/bind.h"
 #include "base/i18n/string_search.h"
 #include "base/location.h"
+#include "base/numerics/clamped_math.h"
+#include "base/numerics/safe_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
@@ -41,12 +43,11 @@ using Matcher = base::i18n::FixedPatternStringSearchIgnoringCaseAndAccents;
 // below the level being compared. See the FoldCaseAloneWouldNotMatchAnAccent
 // test, which pins that difference so nobody simplifies this back.
 //
-// The consequence is one asymmetry worth naming: the archive half is
-// case-insensitive but not accent-insensitive, because its folded_title and
-// folded_url columns are what SQLite matches on. Fixing that is a schema
-// change and belongs with the FTS migration ArchiveStore::Search already
-// anticipates; until then the archive returns a subset of what it could, never
-// a superset, so nothing wrong is ever shown.
+// The consequence is that the two halves of one query do not fold alike: the
+// archive matches case-insensitively but not accent-insensitively. That is a
+// caller-visible caveat rather than a note for whoever edits this function, so
+// it is stated where a caller reads it — on TabSearchService::Search in the
+// header — and not repeated here.
 int ScoreFor(Matcher& matcher, const std::u16string& title, const GURL& url) {
   size_t index = 0;
   size_t length = 0;
@@ -62,31 +63,66 @@ int ScoreFor(Matcher& matcher, const std::u16string& title, const GURL& url) {
   return kNoMatch;
 }
 
-// The in-memory half of one query.
-struct LocalPass {
-  std::vector<SearchResult> results;
-  // Every URL the user can already reach in this window — matching or not —
-  // so the archive half can drop rows that would only offer to reopen
-  // something already in front of them. Built from all live tabs and all
-  // entries rather than from the matches, because a tab that does not match
-  // the query is still a tab the user has.
-  std::set<GURL> reachable;
-};
+// How many rows to ask the store for when the caller wants `limit` results.
+//
+// ArchiveStore::Search applies its LIMIT by recency, in SQL, and the URL
+// suppression in OnArchiveRead runs afterwards in C++. Asking for exactly
+// `limit` rows therefore lets suppression empty the archive half completely:
+// when the newest `limit` matching rows are all URLs the user already has
+// open, every one of them is dropped and older, non-duplicate matches are
+// never looked at at all.
+//
+// The over-fetch is additive rather than a multiplier because it can be
+// exact. At most one row is suppressed per reachable URL, and there are at
+// most (live tabs + entries) of those, so asking for limit + that many
+// guarantees `limit` unsuppressed rows survive whenever the store holds them.
+// A 2x or 4x factor would only make the hole rarer, and rare is how this one
+// got as far as a review.
+//
+// The counts are read here rather than from the reachable set, which does not
+// exist until the reply: both are O(1) — count() is a size, and entries() is
+// the whole vector rather than the default space's slice precisely so no
+// per-kind vector has to be built to count it — and both are upper bounds, so
+// the fetch errs high. It cannot grow independently of the user either: every
+// extra row it asks for stands for a tab or an entry already resident in
+// memory.
+int StoreFetchLimit(int limit,
+                    TabStripModel* tab_strip_model,
+                    const ArciumModel& model) {
+  const size_t reachable_bound =
+      (tab_strip_model ? static_cast<size_t>(tab_strip_model->count()) : 0u) +
+      model.entries().size();
+  return base::ClampAdd(limit, base::saturated_cast<int>(reachable_bound));
+}
 
 // Live tabs first, then favourites, then pinned entries. That order is the
 // stable-sort tie-break within one score, and it is the sidebar's own order.
-LocalPass CollectLocal(TabStripModel* tab_strip_model,
-                       const ArciumModel& model,
-                       const TabBinding& binding,
-                       Matcher& matcher) {
-  LocalPass pass;
+//
+// `reachable`, when non-null, collects every URL the user can already reach in
+// this window — matching or not — so the archive half can drop rows that would
+// only offer to reopen something already in front of them. It is built from
+// all live tabs and all entries rather than from the matches, because a tab
+// that misses this query is still a tab the user has;
+// ANonMatchingTabOrEntrySuppressesItsArchivedRow is what says so.
+//
+// Only the archive half reads it, so SearchLocal — the synchronous,
+// per-keystroke path — passes null and pays neither the GURL copy nor the tree
+// node per tab and per entry.
+std::vector<SearchResult> CollectLocal(TabStripModel* tab_strip_model,
+                                       const ArciumModel& model,
+                                       const TabBinding& binding,
+                                       Matcher& matcher,
+                                       std::set<GURL>* reachable) {
+  std::vector<SearchResult> results;
 
   if (tab_strip_model) {
     for (int i = 0; i < tab_strip_model->count(); ++i) {
       tabs::TabInterface* tab = tab_strip_model->GetTabAtIndex(i);
       TabUIHelper* const ui_helper = TabUIHelper::From(tab);
       const GURL url = ui_helper->GetVisibleURL();
-      pass.reachable.insert(url);
+      if (reachable) {
+        reachable->insert(url);
+      }
 
       // IsClaimedByEntry, not TabBinding::IsBound. A tab bound to an entry the
       // model no longer holds — what ArciumModel::ReplaceAll leaves behind —
@@ -108,18 +144,22 @@ LocalPass CollectLocal(TabStripModel* tab_strip_model,
       result.tab_handle = tab->GetHandle();
       result.score = ScoreFor(matcher, result.title, result.url);
       if (result.score != kNoMatch) {
-        pass.results.push_back(std::move(result));
+        results.push_back(std::move(result));
       }
     }
   }
 
   // Stage 2 has exactly one space, and searching the space the window is
   // showing is what the command bar will want. Stage 3 has to revisit this
-  // when a window can switch spaces.
+  // when a window can switch spaces — and has to decide the same question for
+  // the archive half, which ArchiveStore::Search does not scope at all. See
+  // the note on TabSearchService::Search, where both halves are visible.
   const SpaceId space_id = model.default_space_id();
   for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
     for (const TabEntry* entry : model.EntriesForKind(space_id, kind)) {
-      pass.reachable.insert(entry->url);
+      if (reachable) {
+        reachable->insert(entry->url);
+      }
 
       SearchResult result;
       result.source = SearchResult::Source::kEntry;
@@ -128,11 +168,11 @@ LocalPass CollectLocal(TabStripModel* tab_strip_model,
       result.entry_id = entry->id;
       result.score = ScoreFor(matcher, result.title, result.url);
       if (result.score != kNoMatch) {
-        pass.results.push_back(std::move(result));
+        results.push_back(std::move(result));
       }
     }
   }
-  return pass;
+  return results;
 }
 
 // Score first, then source. std::stable_sort so the discovery order above
@@ -179,9 +219,12 @@ std::vector<SearchResult> TabSearchService::SearchLocal(
     return {};
   }
   Matcher matcher(query);
-  LocalPass pass = CollectLocal(tab_strip_model_, *model_, *binding_, matcher);
-  RankAndTruncate(pass.results, limit);
-  return std::move(pass.results);
+  // No reachable set: nothing on this path reads it, and building one would
+  // cost a GURL copy and a tree node per tab and per entry, per keystroke.
+  std::vector<SearchResult> results = CollectLocal(
+      tab_strip_model_, *model_, *binding_, matcher, /*reachable=*/nullptr);
+  RankAndTruncate(results, limit);
+  return results;
 }
 
 void TabSearchService::Search(const std::u16string& query,
@@ -203,8 +246,11 @@ void TabSearchService::Search(const std::u16string& query,
     // goes through the same async read path the archive list uses. A second
     // wrapper over that one sequence-affine sql::Database is how the sequence
     // rule gets broken by accident.
+    // Over-fetch, so that dropping rows the user can already reach cannot
+    // empty the archive half. See StoreFetchLimit. The reply still truncates
+    // to `limit`, so the caller's contract is unchanged.
     archive_service_->RequestSearch(
-        query, limit,
+        query, StoreFetchLimit(limit, tab_strip_model_, *model_),
         base::BindOnce(&TabSearchService::OnArchiveRead,
                        weak_factory_.GetWeakPtr(), query, limit,
                        std::move(callback)));
@@ -221,14 +267,16 @@ void TabSearchService::OnArchiveRead(std::u16string query,
                                      ResultsCallback callback,
                                      ArchiveReadResult archive) {
   Matcher matcher(query);
-  LocalPass pass = CollectLocal(tab_strip_model_, *model_, *binding_, matcher);
+  std::set<GURL> reachable;
+  std::vector<SearchResult> results =
+      CollectLocal(tab_strip_model_, *model_, *binding_, matcher, &reachable);
 
   // ArchiveReadResult::readable is deliberately dropped. The archive list
   // needs it because "nothing archived" and "the file would not open" are
   // different things to tell the user; a ranked result list says neither, and
   // an unreadable archive simply contributes no rows.
   for (ArchivedTab& row : archive.tabs) {
-    if (pass.reachable.contains(row.url)) {
+    if (reachable.contains(row.url)) {
       continue;
     }
     SearchResult result;
@@ -243,11 +291,11 @@ void TabSearchService::OnArchiveRead(std::u16string query,
     // then hid would be exactly as unfindable as no row at all.
     result.score =
         std::max(ScoreFor(matcher, result.title, result.url), kUrlSubstring);
-    pass.results.push_back(std::move(result));
+    results.push_back(std::move(result));
   }
 
-  RankAndTruncate(pass.results, limit);
-  std::move(callback).Run(std::move(pass.results));
+  RankAndTruncate(results, limit);
+  std::move(callback).Run(std::move(results));
 }
 
 }  // namespace arcium

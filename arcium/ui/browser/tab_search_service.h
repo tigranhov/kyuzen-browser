@@ -112,6 +112,33 @@ class TabSearchService {
   // The live and entry passes run when the answer is assembled, not when the
   // read is posted, so no result names a tab by anything that could have gone
   // stale while the archive was read.
+  //
+  // Three caveats about the archive half, none of them visible in the results
+  // themselves, so a caller has to be told rather than shown:
+  //
+  //   * It is limited by RECENCY, NOT BY SCORE. ArchiveStore::Search takes the
+  //     newest matching rows and the ranking here re-sorts whatever it gets,
+  //     so an old row with a title-prefix match can fall outside that window
+  //     and never be seen while a recent URL-only match survives. The store
+  //     fetch deliberately over-asks — enough that dropping rows the user can
+  //     already reach cannot empty the archive half — but that only widens the
+  //     window; it does not order it by score. Ordering it properly means
+  //     ranking in SQL, which is the FTS migration ArchiveStore::Search
+  //     already anticipates.
+  //
+  //   * It is case-insensitive but NOT accent-insensitive, while the live and
+  //     entry halves are both. The store matches on its folded_title and
+  //     folded_url columns, and base::i18n::FoldCase is case-only, so a query
+  //     of "cafe" finds a live tab titled "Café" but not an archived one. The
+  //     archive therefore returns a subset of what it could and never a
+  //     superset — nothing wrong is ever shown, some things are missing.
+  //     Fixing it is a schema change, and also the FTS migration.
+  //
+  //   * It is NOT SCOPED TO A SPACE, while the live and entry halves are both
+  //     scoped to ArciumModel::default_space_id(). ArchiveStore::Search has no
+  //     space filter, so it searches every space. Stage 2 has exactly one
+  //     space, so the two halves agree today and nothing is wrong. Stage 3 has
+  //     to pick one answer for both when a window can switch spaces.
   void Search(const std::u16string& query, int limit, ResultsCallback callback);
 
  private:
