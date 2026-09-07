@@ -42,6 +42,11 @@ class ArciumProfileState : public base::SupportsUserData::Data,
       content::BrowserContext* context);
 
   // Extension-less data files beside Chromium's own `Bookmarks`.
+  //
+  // Never build either path from an off-the-record context's GetPath(): it
+  // returns the PARENT profile's directory, so an incognito writer lands on
+  // the regular profile's file. `store_` is null off the record for exactly
+  // that reason, and whatever wires ArchiveStore up must do the same.
   static base::FilePath ModelPath(const base::FilePath& profile_path);
   static base::FilePath ArchivePath(const base::FilePath& profile_path);
 
