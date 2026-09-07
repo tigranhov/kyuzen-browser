@@ -337,6 +337,18 @@ title is set back to empty, which is the only way to undo a rename. The weaker r
 page's title wins after a navigation, would make renaming a pinned tab useless precisely on the
 pinned tabs that navigate.
 
+**D2-4. A restored tab's idle clock comes from the tab, not from the model file.** Section 5 of
+the Stage 2 spec says tabs restored after a restart "take the model's last-save time as their
+last-active floor". They did, briefly, through a floor plumbed from `ModelStore` into
+`ArchiveService`; it was deleted at `fc0e067` and replaced by `WebContents::GetLastActiveTime()`.
+Session restore already carries the saved last-active time into `WebContents::CreateParams`, so
+the tab itself knows when it was last on screen and that answer survives a quit — which is what
+the floor was invented to supply. The floor was also worse than nothing: it was one clock for
+every tab, so a tab genuinely used minutes before the quit was aged to the same instant as one
+untouched for a week. The stated behaviour is unchanged — a browser closed overnight still
+archives yesterday's Today tabs on launch — and there is now one source for a tab's idle time
+instead of two, which is the failure mode this feature had already been bitten by once.
+
 ## 8. Testing strategy
 
 - Unit tests for every model and service in `arcium/test/`, run with Chromium's test runner.
