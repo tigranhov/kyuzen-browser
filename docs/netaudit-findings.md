@@ -27,3 +27,39 @@ Same four hosts as the baseline, so disabling sign-in did not stop the sign-in t
 
 Allowed and seen: `clients2.google.com` (component updater).
 
+## 2026-09-07, Stage 2 (Arc tab model, patches 0010 to 0140)
+
+`scripts/netaudit 120`, fresh profile, `about:blank`, config `dev`, arcium `92523d6`. The allowlist
+is **unchanged** — nothing Stage 2 added talks to the network at all. The live model is a local
+JSON file, the archive is a local SQLite database, tab search is an in-memory index over both, and
+none of the three has a fetcher. Same four unexpected hosts as Stage 0 and Stage 1, with the same
+owners and the same open decisions; no new host appeared and none went away.
+
+```
+[arcium] running 120 s with fresh profile; net-log at /tmp/arcium-netaudit.ihjDl8/netlog.json
+contacted hosts:
+   ! accounts.google.com
+   ! android.clients.google.com
+     clients2.google.com
+   ! csp.withgoogle.com
+     edgedl.me.gvt1.com
+     update.googleapis.com
+   ! www.google.com
+unexpected hosts: 4
+```
+
+Exit code 1, as at Stage 0 and Stage 1: the script fails on any unexpected host, and these four
+are carried deliberately rather than fixed. They are not a Stage 2 regression.
+
+| Host | Change since Stage 1 | Decision |
+|---|---|---|
+| `android.clients.google.com` | unchanged | GCM check-in, still kept on purpose for Web Push. Stage 7 measures the idle cost |
+| `accounts.google.com` | unchanged; `signin.allowed` is still false and still does not stop it | Stage 3 owns profiles and sign-in and disables the fetcher there |
+| `csp.withgoogle.com` | unchanged | Follows the `accounts.google.com` response; goes away with it |
+| `www.google.com` | unchanged | Default search engine, as decided in Stage 0 |
+
+Allowed and seen: `clients2.google.com`, `update.googleapis.com` and `edgedl.me.gvt1.com`, all
+three component updater and all three already on the allowlist. Stage 1's run named only the
+first; the doubled window (120 s against 60 s) is the likely reason the other two appeared, since
+the component updater's first check is on a delay. No allowlist change was needed for them.
+
