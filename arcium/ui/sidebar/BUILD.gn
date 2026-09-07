@@ -48,6 +48,7 @@ source_set("sidebar") {
     "sidebar_view.h",
     "space_bar_view.cc",
     "space_bar_view.h",
+    "tab_list_drop.cc",
     "tab_list_view.cc",
     "tab_list_view.h",
     "tab_row_view.cc",
