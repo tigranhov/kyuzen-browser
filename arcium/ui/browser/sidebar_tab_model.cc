@@ -475,6 +475,12 @@ void SidebarTabModel::OnTabStripModelChanged(
 void SidebarTabModel::OnTabChangedAt(tabs::TabInterface* tab,
                                      int index,
                                      TabChangeType change_type) {
+  // Opening one tab reaches here twice: once for the insert, and again about
+  // 200ms later when Browser::ProcessPendingUIUpdates flushes the deferred
+  // title as TabChangeType::kAll. A test that counts notifications will see
+  // one or two depending on how fast the tests before it ran, so it must call
+  // MakeBrowserUiUpdatesImmediate() (arcium/test/sidebar_tab_model_unittest.cc)
+  // to collapse Browser's 200ms coalescing window first.
   NotifyChanged();
 }
 
