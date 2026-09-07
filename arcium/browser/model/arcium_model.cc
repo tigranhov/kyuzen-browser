@@ -38,6 +38,15 @@ SpaceId ArciumModel::default_space_id() const {
   return spaces_.empty() ? SpaceId() : spaces_.front().id;
 }
 
+const Space* ArciumModel::GetSpace(SpaceId id) const {
+  for (const Space& space : spaces_) {
+    if (space.id == id) {
+      return &space;
+    }
+  }
+  return nullptr;
+}
+
 void ArciumModel::SetArchiveTimeout(SpaceId space_id, ArchiveTimeout timeout) {
   for (Space& space : spaces_) {
     if (space.id == space_id) {

@@ -182,13 +182,11 @@ void SidebarTabModel::SetArchiveTimeout(ArchiveTimeout timeout) {
 }
 
 ArchiveTimeout SidebarTabModel::archive_timeout() const {
-  const SpaceId id = arcium_model_->default_space_id();
-  for (const Space& space : arcium_model_->spaces()) {
-    if (space.id == id) {
-      return space.archive_timeout;
-    }
-  }
-  return ArchiveTimeout::kTwelveHours;
+  // See ArchiveService::TimeoutForDefaultSpace, which asks the same question
+  // for the same space through the same accessor.
+  const Space* space =
+      arcium_model_->GetSpace(arcium_model_->default_space_id());
+  return space ? space->archive_timeout : Space().archive_timeout;
 }
 
 bool SidebarTabModel::has_archive() const {

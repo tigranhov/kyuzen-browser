@@ -36,6 +36,11 @@ class ArciumModel {
   // Spaces. Stage 2 always has exactly one.
   const std::vector<Space>& spaces() const { return spaces_; }
   SpaceId default_space_id() const;
+  // The space `id` names, or null. The accessor GetEntry and GetFolder always
+  // had: without it every caller that wanted a space's settings wrote its own
+  // scan over spaces() with its own fallback beside it, and two of them had
+  // drifted into being byte-identical copies.
+  const Space* GetSpace(SpaceId id) const;
   void SetArchiveTimeout(SpaceId space_id, ArchiveTimeout timeout);
 
   // Entries. Every mutation notifies observers, and every one that names an

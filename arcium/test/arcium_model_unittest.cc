@@ -199,6 +199,30 @@ TEST_F(ArciumModelTest, ReplaceAllSwapsTheWholeModelAndNotifies) {
   model_.RemoveObserver(&observer);
 }
 
+// The lookup two adapters were each doing by hand: a linear scan over spaces_
+// with a hardcoded twelve-hour fallback beside it. GetSpace is the accessor
+// GetEntry and GetFolder already had, and the fallback is now Space's own
+// default rather than a literal repeated per caller.
+TEST_F(ArciumModelTest, GetSpaceFindsASpaceAndRefusesAnUnknownId) {
+  Space first;
+  first.id = SpaceId::Generate();
+  first.name = u"First";
+  first.archive_timeout = ArchiveTimeout::kSevenDays;
+  Space other;
+  other.id = SpaceId::Generate();
+  other.name = u"Other";
+  other.archive_timeout = ArchiveTimeout::kNever;
+  model_.ReplaceAll({first, other}, {}, {});
+
+  ASSERT_TRUE(model_.GetSpace(first.id));
+  EXPECT_EQ(ArchiveTimeout::kSevenDays,
+            model_.GetSpace(first.id)->archive_timeout);
+  ASSERT_TRUE(model_.GetSpace(other.id));
+  EXPECT_EQ(ArchiveTimeout::kNever, model_.GetSpace(other.id)->archive_timeout);
+  EXPECT_FALSE(model_.GetSpace(SpaceId::Generate()));
+  EXPECT_FALSE(model_.GetSpace(SpaceId()));
+}
+
 TEST_F(ArciumModelTest, ReplaceAllWithNoSpacesStillLeavesOneUsableSpace) {
   model_.ReplaceAll({}, {}, {});
   EXPECT_EQ(1u, model_.spaces().size());

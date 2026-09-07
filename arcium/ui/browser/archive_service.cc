@@ -336,13 +336,11 @@ base::Time ArchiveService::IdleSince(tabs::TabHandle handle) const {
 }
 
 ArchiveTimeout ArchiveService::TimeoutForDefaultSpace() const {
-  const SpaceId id = model_->default_space_id();
-  for (const Space& space : model_->spaces()) {
-    if (space.id == id) {
-      return space.archive_timeout;
-    }
-  }
-  return ArchiveTimeout::kTwelveHours;
+  // A model with no space at all is a model mid-construction; Space's own
+  // default is the honest answer, and it is the only place twelve hours is
+  // written down.
+  const Space* space = model_->GetSpace(model_->default_space_id());
+  return space ? space->archive_timeout : Space().archive_timeout;
 }
 
 std::optional<base::Time> ArchiveService::ExpiryFor(
