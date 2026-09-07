@@ -78,6 +78,9 @@ ArciumProfileState::ArciumProfileState(const base::FilePath& profile_path,
     // held well past a frame on a loaded machine, which would show as a
     // bubble that opens blank and fills in later. The priority has to suit
     // the most latency-sensitive user of the sequence, which is now the read.
+    // No test covers this line: base::TaskRunner exposes no priority getter,
+    // and neither does SequencedTaskRunner — UpdateableSequencedTaskRunner has
+    // only a setter. It is one token and this reasoning, not a tested claim.
     //
     // The open below is posted rather than done here, so it is off the
     // startup path. It is not lazy — every regular profile opens the file

@@ -171,8 +171,9 @@ class SidebarViewsTest : public views::ViewsTestBase {
   }
 
   // ClickOn for a view that lives in the archive bubble's widget rather than
-  // in the fixture's. Same generator — it is rooted at the root window, which
-  // the bubble shares — but the layout has to be run on the bubble.
+  // in the fixture's. The bubble is a separate top-level widget with its own
+  // NSWindow, so the fixture's generator cannot reach it and the layout has to
+  // be run on the bubble itself.
   void ClickOnInBubble(views::View* view) {
     views::Widget* widget = view->GetWidget();
     CHECK(widget);
