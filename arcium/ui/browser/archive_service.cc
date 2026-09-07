@@ -141,9 +141,29 @@ void ArchiveService::OnTabStripModelChanged(
     const TabStripModelChange::Remove* remove = change.GetRemove();
     if (remove) {
       for (const TabStripModelChange::RemovedTab& removed : remove->contents) {
-        if (removed.tab) {
-          last_active_.erase(removed.tab->GetHandle());
+        if (!removed.tab) {
+          continue;
         }
+        const tabs::TabHandle handle = removed.tab->GetHandle();
+        last_active_.erase(handle);
+        // The one place a tab this service asked to close is known to be
+        // actually gone, whether the close finished inline or arrived later
+        // through a confirmation the user gave. See ArchiveAndClose().
+        const auto pending = pending_archive_.find(handle);
+        if (pending == pending_archive_.end()) {
+          continue;
+        }
+        // sql::Database blocks and is sequence-affine. The store belongs to
+        // `store_runner_` and is only ever touched there; base::Unretained is
+        // safe because its owner deletes it on that same sequence, behind
+        // this task.
+        if (store_ && store_runner_) {
+          store_runner_->PostTask(
+              FROM_HERE,
+              base::BindOnce(&ArchiveStore::Add, base::Unretained(store_),
+                             pending->second));
+        }
+        pending_archive_.erase(pending);
       }
     }
   }
@@ -288,29 +308,22 @@ void ArchiveService::ArchiveAndClose(tabs::TabHandle handle) {
   if (index == TabStripModel::kNoTab) {
     return;
   }
-  // Read the row first — after the close the tab is gone — but do not write it
-  // yet. A close can be declined: a beforeunload dialog the user cancels, or a
-  // TabUnloadHandler that puts up its own confirmation. "The user asked to
-  // close it" is not "the tab closed", and a row written for a tab that stayed
-  // open is another row every time Clear is pressed, in an archive nothing
-  // reads, dedups or prunes.
+  // Read the row first — after the close the tab is gone — but park it rather
+  // than writing it. A close can be declined (a beforeunload dialog the user
+  // cancels, a TabUnloadHandler with its own confirmation), and it can also be
+  // confirmed long after this call returns. Deciding here, synchronously, gets
+  // one of those two wrong whichever way it is written: checking whether the
+  // tab survived this call missed the confirmed-later case entirely. Only the
+  // kRemoved branch knows.
   const std::optional<ArchivedTab> row =
       MakeRow(tab, model_->default_space_id());
+  if (row) {
+    // Keyed by handle: pressing Clear again while the first close is still
+    // waiting on a dialog replaces this row rather than queuing a second, so
+    // at most one row is ever written for the tab.
+    pending_archive_[handle] = *row;
+  }
   tab_strip_model_->CloseWebContentsAt(index, kCloseTypes);
-  tabs::TabInterface* survivor = handle.Get();
-  if (survivor &&
-      tab_strip_model_->GetIndexOfTab(survivor) != TabStripModel::kNoTab) {
-    return;  // Still open: the close was declined.
-  }
-  if (!row || !store_ || !store_runner_) {
-    return;  // Nothing worth recording, or incognito, or no archive at all.
-  }
-  // sql::Database blocks and is sequence-affine. The store belongs to
-  // `store_runner_` and is only ever touched there; base::Unretained is safe
-  // because its owner deletes it on that same sequence, behind this task.
-  store_runner_->PostTask(
-      FROM_HERE,
-      base::BindOnce(&ArchiveStore::Add, base::Unretained(store_), *row));
 }
 
 }  // namespace arcium

@@ -9,6 +9,7 @@
 #include <optional>
 #include <vector>
 
+#include "arcium/browser/archive_store.h"
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/space.h"
 #include "base/memory/raw_ptr.h"
@@ -77,6 +78,12 @@ class ArchiveService : public TabStripModelObserver,
   int live_timer_count_for_testing() const {
     return timer_.IsRunning() ? 1 : 0;
   }
+  // Rows read for a close that has not completed yet. Keyed by handle, so
+  // asking the same tab to close again while its first attempt is still
+  // outstanding replaces its parked row instead of queuing a second one.
+  size_t pending_archive_count_for_testing() const {
+    return pending_archive_.size();
+  }
 
   // TabStripModelObserver:
   void OnTabStripModelChanged(
@@ -103,8 +110,11 @@ class ArchiveService : public TabStripModelObserver,
 
   void RescheduleTimer();
   void OnTimerFired();
-  // Closes `handle`'s tab and, only once the close has actually happened,
-  // writes it to the archive on the store's sequence.
+  // Reads `handle`'s row, parks it in `pending_archive_`, and asks the strip
+  // to close the tab. The close may finish inside this call, or arbitrarily
+  // later behind a beforeunload dialog, or never. The write happens only from
+  // the kRemoved branch of OnTabStripModelChanged, which is the one place the
+  // tab is known to be actually gone.
   void ArchiveAndClose(tabs::TabHandle handle);
 
   raw_ptr<TabStripModel> tab_strip_model_;
@@ -123,6 +133,12 @@ class ArchiveService : public TabStripModelObserver,
   // clock with two sources is an idle clock with two answers, and this feature
   // has already been bitten by exactly that.
   std::map<tabs::TabHandle, base::Time> last_active_;
+
+  // A row already read for a tab whose close is still outstanding. It waits
+  // here until OnTabStripModelChanged reports the tab actually removed; a
+  // close the strip never completes simply leaves it parked. See
+  // ArchiveAndClose().
+  std::map<tabs::TabHandle, ArchivedTab> pending_archive_;
 
   base::OneShotTimer timer_;
   std::optional<base::Time> next_expiry_;

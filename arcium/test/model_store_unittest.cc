@@ -17,33 +17,6 @@
 namespace arcium {
 namespace {
 
-// Reads ModelStore::last_save_time() from inside the model notification, which
-// is the only place an observer woken by the load can read it.
-class SaveTimeWatcher : public ArciumModel::Observer {
- public:
-  SaveTimeWatcher(ArciumModel* model, ModelStore* store)
-      : model_(model), store_(store) {
-    model_->AddObserver(this);
-  }
-  ~SaveTimeWatcher() override { model_->RemoveObserver(this); }
-
-  void OnArciumModelChanged() override {
-    notified_ = true;
-    save_time_when_notified_ = store_->last_save_time();
-  }
-
-  bool was_notified() const { return notified_; }
-  base::Time save_time_when_notified() const {
-    return save_time_when_notified_;
-  }
-
- private:
-  const raw_ptr<ArciumModel> model_;
-  const raw_ptr<ModelStore> store_;
-  bool notified_ = false;
-  base::Time save_time_when_notified_;
-};
-
 class ModelStoreTest : public testing::Test {
  protected:
   void SetUp() override { ASSERT_TRUE(dir_.CreateUniqueTempDir()); }
@@ -123,57 +96,6 @@ TEST_F(ModelStoreTest, ACorruptFileLeavesAUsableModel) {
   loop.Run();
   EXPECT_TRUE(model.entries().empty());
   EXPECT_EQ(1u, model.spaces().size());
-}
-
-TEST_F(ModelStoreTest, LoadRecordsTheFilesSaveTime) {
-  {
-    ArciumModel model;
-    ModelStore store(&model, path());
-    model.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
-    task_environment_.FastForwardBy(ModelStore::kSaveDelay);
-    task_environment_.RunUntilIdle();
-  }
-
-  ArciumModel restored;
-  ModelStore store(&restored, path());
-  EXPECT_TRUE(store.last_save_time().is_null());
-  base::RunLoop loop;
-  store.Load(loop.QuitClosure());
-  loop.Run();
-  EXPECT_FALSE(store.last_save_time().is_null());
-}
-
-// ArciumModel::Notify is synchronous, so the load's ReplaceAll runs every
-// observer before OnLoaded returns. Assigning last_save_time_ after that
-// delivered the one notification that announces the load with the value still
-// null — the moment it exists to be read.
-TEST_F(ModelStoreTest, TheLoadsNotificationAlreadyCarriesTheSaveTime) {
-  {
-    ArciumModel model;
-    ModelStore store(&model, path());
-    model.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
-    task_environment_.FastForwardBy(ModelStore::kSaveDelay);
-    task_environment_.RunUntilIdle();
-  }
-
-  ArciumModel restored;
-  ModelStore store(&restored, path());
-  SaveTimeWatcher watcher(&restored, &store);
-  base::RunLoop loop;
-  store.Load(loop.QuitClosure());
-  loop.Run();
-
-  ASSERT_TRUE(watcher.was_notified());
-  EXPECT_FALSE(watcher.save_time_when_notified().is_null());
-}
-
-TEST_F(ModelStoreTest, LoadingAMissingFileLeavesTheSaveTimeNull) {
-  ArciumModel model;
-  ModelStore store(&model, path());
-  base::RunLoop loop;
-  store.Load(loop.QuitClosure());
-  loop.Run();
-  EXPECT_TRUE(store.last_save_time().is_null());
 }
 
 TEST_F(ModelStoreTest, LoadingDoesNotScheduleAWriteOfWhatWasJustRead) {

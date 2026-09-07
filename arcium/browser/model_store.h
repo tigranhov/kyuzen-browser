@@ -44,12 +44,6 @@ class ModelStore : public ArciumModel::Observer,
   // production code relies on the debounced schedule, not a forced flush.
   void SaveNowForTesting();
 
-  // When the model was last written, either by a debounced save or by
-  // loading an existing file from disk. Used as the idle floor for tabs
-  // restored after a quit, so a browser closed overnight archives
-  // yesterday's tabs.
-  base::Time last_save_time() const { return last_save_time_; }
-
   int scheduled_save_count_for_testing() const { return scheduled_saves_; }
   int initiated_save_count_for_testing() const { return initiated_saves_; }
 
@@ -79,7 +73,6 @@ class ModelStore : public ArciumModel::Observer,
   raw_ptr<ArciumModel> model_;
   scoped_refptr<base::SequencedTaskRunner> background_runner_;
   base::ImportantFileWriter writer_;
-  base::Time last_save_time_;
   int scheduled_saves_ = 0;
   int initiated_saves_ = 0;
   // Suppresses OnArciumModelChanged() while Load() is applying a file to the

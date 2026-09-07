@@ -80,17 +80,6 @@ void ModelStore::SaveNowIfScheduled() {
 }
 
 void ModelStore::OnLoaded(base::OnceClosure done, LoadResult result) {
-  // Before the model is filled, not after. DeserializeModel ends in
-  // ArciumModel::ReplaceAll, which notifies synchronously, and an observer
-  // woken by that notification reads last_save_time(). Assigning afterwards
-  // delivered the notification with the value still null — the one moment it
-  // was supposed to be available.
-  //
-  // Null when the file did not exist; leaving last_save_time_ null in that
-  // case is correct — nothing has been saved yet.
-  if (!result.last_modified.is_null()) {
-    last_save_time_ = result.last_modified;
-  }
   // Suppress OnArciumModelChanged() for the duration of ReplaceAll()'s
   // notification: reading a file must not dirty the model and schedule a
   // rewrite of the bytes just read.
@@ -122,7 +111,6 @@ void ModelStore::OnArciumModelChanged() {
 // JSON work.
 base::ImportantFileWriter::BackgroundDataProducerCallback
 ModelStore::GetSerializedDataProducerForBackgroundSequence() {
-  last_save_time_ = base::Time::Now();
   ++initiated_saves_;
   return base::BindOnce(
       [](base::DictValue snapshot) -> std::optional<std::string> {

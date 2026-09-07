@@ -42,6 +42,10 @@ namespace {
 // own confirmation keeps the tab open until the user answers. Standing in here
 // for the beforeunload dialog, which cannot be closed in this fixture without
 // a PerformanceManager the fixture does not build.
+// Stands in for a beforeunload dialog. The real one cannot be used here: it
+// reaches PerformanceManager::GetGraph(), which CHECKs in this fixture. This
+// is a production seam with the property that matters — the answer arrives
+// after ShowCustomConfirmation has returned, not during it.
 class DecliningUnloadHandler : public UnloadController::TabUnloadHandler {
  public:
   void set_intercept(bool intercept) { intercept_ = intercept; }
@@ -55,12 +59,17 @@ class DecliningUnloadHandler : public UnloadController::TabUnloadHandler {
   bool ShowCustomConfirmation(
       content::WebContents* contents,
       base::OnceCallback<void(bool)> on_closed) override {
-    // Shown, and never answered: the tab stays.
-    return intercept_;
+    if (!intercept_) {
+      return false;
+    }
+    // Held, not answered. The tab stays until Confirm() runs this.
+    on_closed_ = std::move(on_closed);
+    return true;
   }
 
  private:
   bool intercept_ = true;
+  base::OnceCallback<void(bool)> on_closed_;
 };
 
 // BrowserWithTestWindowTest::AddTab inserts at index 0 and activates, so the
@@ -467,15 +476,65 @@ TEST_F(ArchiveServiceTest, AClearTheUserDoesNotConfirmWritesNoRow) {
   task_environment()->RunUntilIdle();
   ASSERT_EQ(1, strip()->count());  // The confirmation is up; nothing closed.
   EXPECT_TRUE(archive_.ListRecent(model_.default_space_id(), 10).empty());
+  EXPECT_EQ(1u, service_->pending_archive_count_for_testing());
 
-  // And pressing Clear again does not stack up a second row for the same tab.
+  // And pressing Clear again does not stack up a second row for the same tab,
+  // nor a second parked one behind it — which is what would let a tab closed
+  // once, later, write the archive twice.
   service_->ArchiveAllToday();
   task_environment()->RunUntilIdle();
   ASSERT_EQ(1, strip()->count());
   EXPECT_TRUE(archive_.ListRecent(model_.default_space_id(), 10).empty());
+  EXPECT_EQ(1u, service_->pending_archive_count_for_testing());
 
   // TearDown closes every tab; let them go.
   handler_ptr->set_intercept(false);
+}
+
+// I2, the other half — the regression round 1 introduced. ArchiveAndClose
+// used to decide synchronously, right after CloseWebContentsAt returned: if
+// the tab was still there it concluded the close had been declined and queued
+// nothing. That is wrong for every close that completes LATER than the call
+// — a beforeunload dialog the user goes on to accept — because by the time
+// the tab actually goes there is nothing left to write. The tab vanished and
+// the archive stayed empty.
+//
+// The close here is completed by the strip rather than by answering a
+// dialog: UnloadController's confirmed path posts through
+// TabInterface::GetBrowserWindowInterface(), which does not complete the
+// close in this fixture. What matters for the contract is the shape, and it
+// is the same one — the tab is removed strictly after ArchiveAndClose
+// returned, and the write must still happen.
+TEST_F(ArchiveServiceTest, ARowParkedByClearIsWrittenWhenTheTabActuallyGoes) {
+  auto handler = std::make_unique<DecliningUnloadHandler>();
+  DecliningUnloadHandler* handler_ptr = handler.get();
+  UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  // A pinned tab keeps the strip from emptying when the Today tab goes;
+  // pinned tabs are not Today tabs, so Clear leaves it alone.
+  AddTab(browser(), GURL("https://today.example/"));
+  AddTab(browser(), GURL("https://pinned.example/"));
+  sidebar_model_->PinTab(0);
+  ASSERT_EQ(2, strip()->count());
+
+  service_->ArchiveAllToday();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(2, strip()->count());  // Held: nothing has closed yet.
+  ASSERT_TRUE(archive_.ListRecent(model_.default_space_id(), 10).empty());
+  ASSERT_EQ(1u, service_->pending_archive_count_for_testing());
+
+  // The close completes, arbitrarily later than the call that asked for it.
+  handler_ptr->set_intercept(false);
+  const int today_index = strip()->GetIndexOfTab(HandleAt(1).Get());
+  ASSERT_NE(TabStripModel::kNoTab, today_index);
+  strip()->CloseWebContentsAt(today_index, TabCloseTypes::CLOSE_USER_GESTURE);
+  task_environment()->RunUntilIdle();
+
+  ASSERT_EQ(1, strip()->count());
+  const std::vector<ArchivedTab> rows =
+      archive_.ListRecent(model_.default_space_id(), 10);
+  ASSERT_EQ(1u, rows.size());
+  EXPECT_EQ(GURL("https://today.example/"), rows[0].url);
+  EXPECT_EQ(0u, service_->pending_archive_count_for_testing());
 }
 
 }  // namespace
