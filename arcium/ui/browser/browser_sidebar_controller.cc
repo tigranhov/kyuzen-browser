@@ -10,6 +10,7 @@
 #include "arcium/browser/arcium_profile_state.h"
 #include "arcium/common/arcium_features.h"
 #include "arcium/ui/browser/quick_entry_bubble.h"
+#include "arcium/ui/browser/session_rebuild_nudge.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
@@ -64,6 +65,11 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   // also starts the (asynchronous) load the first time it is asked.
   ArciumProfileState* state =
       ArciumProfileState::GetForBrowserContext(browser_view->GetProfile());
+  // Every warm/cold transition has to reach the session file, and the only
+  // thing that writes it is a command rebuild. Installed here because this is
+  // where the profile and the binding first meet on the //chrome side; it is
+  // per profile and idempotent, so a second window re-installs the same thing.
+  InstallSessionRebuildNudge(browser_view->GetProfile(), state->binding());
   model_ = std::make_unique<SidebarTabModel>(
       browser_view->browser()->tab_strip_model(), state->model(),
       state->binding());

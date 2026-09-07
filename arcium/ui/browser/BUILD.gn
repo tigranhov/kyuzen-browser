@@ -11,19 +11,34 @@ source_set("browser") {
     "color_ids_check.cc",
     "quick_entry_bubble.cc",
     "quick_entry_bubble.h",
+    "session_rebuild_nudge.cc",
+    "session_rebuild_nudge.h",
     "sidebar_tab_model.cc",
     "sidebar_tab_model.h",
     "tab_search_service.cc",
     "tab_search_service.h",
   ]
-  deps = [
+
+  # Public: this target's own headers include tab_binding.h, archive_store.h
+  # and arcium_model.h, so anything that includes them needs //arcium/browser
+  # too. //chrome/browser/ui:ui is such a target twice over — browser_view.cc
+  # through browser_sidebar_controller.h, and browser_tabrestore.cc directly,
+  # for patch 0120's hook.
+  public_deps = [
     "//arcium/browser",
     "//arcium/browser/model",
+  ]
+  deps = [
     "//arcium/common",
     "//arcium/ui/sidebar",
     "//base",
     "//base:i18n",
     "//chrome/app:command_ids",
+
+    # SessionServiceFactory, for the rebuild nudge. This target is reachable
+    # from //chrome/browser/ui:ui but does not reach back to it, so the dep
+    # is not part of that cycle.
+    "//chrome/browser/sessions",
     "//chrome/browser/ui/color:color_headers",
     "//components/omnibox/browser",
     "//components/tabs:public",

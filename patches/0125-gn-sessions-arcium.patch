@@ -1,0 +1,30 @@
+Seam: chrome/browser/sessions/BUILD.gn, source_set("impl") — the target
+      session_service.cc actually builds in, not source_set("sessions").
+Why: GN wiring for patch 0130. The hook includes an //arcium/browser header
+     and //chrome/browser/sessions has no Arcium dep at all. `gn check` on
+     that target is what says whether this is still needed after a rebase.
+
+     No cycle: //chrome/browser/sessions does not reach //chrome/browser/ui:ui,
+     and //arcium/browser depends on nothing under //chrome.
+
+     Patch 0120's seam needs no companion hunk here. //chrome/browser/ui:ui
+     already depends on //arcium/ui/browser (patch 0010), and //arcium/browser
+     is a public_dep of that target — correctly so, since its own headers
+     include tab_binding.h and archive_store.h — so it transits. Adding a
+     second dep line to chrome/browser/ui/BUILD.gn was tried and rejected: it
+     lands inside patch 0010's hunk context, which breaks 0010's
+     already-applied check and makes scripts/sync non-idempotent.
+Delegates to: nothing. GN wiring carries no call.
+
+diff --git a/chrome/browser/sessions/BUILD.gn b/chrome/browser/sessions/BUILD.gn
+--- a/chrome/browser/sessions/BUILD.gn
++++ b/chrome/browser/sessions/BUILD.gn
+@@ -122,6 +122,8 @@
+     ]
+ 
+     deps += [
++      # Arcium: session_service.cc calls arcium::AppendTabEntryCommand.
++      "//arcium/browser",
+       "//chrome/browser:after_startup_task_utils",
+       "//chrome/browser/content_settings:content_settings_factory",
+       "//chrome/browser/devtools",

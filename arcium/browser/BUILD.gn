@@ -10,11 +10,19 @@ source_set("browser") {
     "entry_claim.h",
     "model_store.cc",
     "model_store.h",
+    "session_tab_entry.cc",
+    "session_tab_entry.h",
     "tab_binding.cc",
     "tab_binding.h",
   ]
   public_deps = [
     "//arcium/browser/model",
+
+    # session_tab_entry.h names SessionID and sessions::CommandStorageManager.
+    # //components/sessions, never //chrome/browser/sessions: the session
+    # command types Arcium writes and the extra_data it reads both live in
+    # components, so the session hook costs this target no //chrome dep.
+    "//components/sessions",
     "//components/tabs:public",
     "//sql",
     "//url",
@@ -23,7 +31,7 @@ source_set("browser") {
     "//base",
     "//base:i18n",
 
-    # BrowserContext only, for the SupportsUserData key. No //chrome deps.
+    # BrowserContext and WebContentsUserData. No //chrome deps.
     "//content/public/browser",
   ]
 }

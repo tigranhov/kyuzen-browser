@@ -4,6 +4,8 @@
 
 #include "arcium/browser/tab_binding.h"
 
+#include <utility>
+
 namespace arcium {
 
 TabBinding::TabBinding() = default;
@@ -12,28 +14,63 @@ TabBinding::~TabBinding() = default;
 void TabBinding::Bind(EntryId id, tabs::TabHandle handle) {
   // Release whatever either side was previously bound to first, so the maps
   // never grow a second edge for the same entry or the same tab.
-  UnbindEntry(id);
-  UnbindTab(handle);
+  EraseEntry(id);
+  EraseTab(handle);
   entry_to_tab_[id] = handle;
   tab_to_entry_[handle] = id;
+  NotifyChanged();
 }
 
 void TabBinding::UnbindEntry(EntryId id) {
-  auto it = entry_to_tab_.find(id);
-  if (it == entry_to_tab_.end()) {
-    return;
+  if (EraseEntry(id)) {
+    NotifyChanged();
   }
-  tab_to_entry_.erase(it->second);
-  entry_to_tab_.erase(it);
 }
 
 void TabBinding::UnbindTab(tabs::TabHandle handle) {
+  if (EraseTab(handle)) {
+    NotifyChanged();
+  }
+}
+
+void TabBinding::SetChangedCallback(base::RepeatingClosure callback) {
+  changed_callback_ = std::move(callback);
+}
+
+void TabBinding::NotifyChanged() {
+  if (suppress_depth_ == 0 && changed_callback_) {
+    changed_callback_.Run();
+  }
+}
+
+TabBinding::ScopedChangeSuppression::ScopedChangeSuppression(
+    TabBinding* binding)
+    : binding_(binding) {
+  ++binding_->suppress_depth_;
+}
+
+TabBinding::ScopedChangeSuppression::~ScopedChangeSuppression() {
+  --binding_->suppress_depth_;
+}
+
+bool TabBinding::EraseEntry(EntryId id) {
+  auto it = entry_to_tab_.find(id);
+  if (it == entry_to_tab_.end()) {
+    return false;
+  }
+  tab_to_entry_.erase(it->second);
+  entry_to_tab_.erase(it);
+  return true;
+}
+
+bool TabBinding::EraseTab(tabs::TabHandle handle) {
   auto it = tab_to_entry_.find(handle);
   if (it == tab_to_entry_.end()) {
-    return;
+    return false;
   }
   entry_to_tab_.erase(it->second);
   tab_to_entry_.erase(it);
+  return true;
 }
 
 std::optional<tabs::TabHandle> TabBinding::TabForEntry(EntryId id) const {

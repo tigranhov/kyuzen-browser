@@ -5,6 +5,8 @@
 #include "arcium/browser/tab_binding.h"
 
 #include "arcium/browser/model/entry_id.h"
+#include "base/functional/bind.h"
+#include "base/test/bind.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -91,6 +93,61 @@ TEST_F(TabBindingTest, AClosedTabsHandleResolvesToNothing) {
   // resolves to a tab, so callers see the entry as cold.
   const std::optional<tabs::TabHandle> bound = binding.TabForEntry(id);
   EXPECT_TRUE(!bound.has_value() || bound->Get() == nullptr);
+}
+
+// The changed callback is what carries "the set of warm entries just moved"
+// out of this target, which cannot reach the session service itself. One call
+// per real change: Bind releases both sides first, and reporting that as three
+// changes would cost three session command rebuilds.
+TEST_F(TabBindingTest, AChangeIsReportedOncePerBind) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  TabBinding binding;
+  int changes = 0;
+  binding.SetChangedCallback(
+      base::BindLambdaForTesting([&changes] { ++changes; }));
+
+  binding.Bind(EntryId::Generate(), HandleAt(0));
+  EXPECT_EQ(1, changes);
+
+  // Displaces the first entry and the first tab's binding at once; still one
+  // change, not three.
+  binding.Bind(EntryId::Generate(), HandleAt(0));
+  EXPECT_EQ(2, changes);
+}
+
+// An unbind that unbinds nothing is not a change. Tab closes come through
+// here for every Today tab, which is most of them.
+TEST_F(TabBindingTest, AnUnbindThatChangesNothingIsNotReported) {
+  AddTab(browser(), GURL("https://a.example/"));
+  TabBinding binding;
+  int changes = 0;
+  binding.SetChangedCallback(
+      base::BindLambdaForTesting([&changes] { ++changes; }));
+
+  binding.UnbindTab(HandleAt(0));
+  binding.UnbindEntry(EntryId::Generate());
+
+  EXPECT_EQ(0, changes);
+}
+
+// Session restore binds every warm entry in a row, during startup, and
+// Chromium rewrites the session file when the restore finishes.
+TEST_F(TabBindingTest, SuppressionSilencesTheChangeCallback) {
+  AddTab(browser(), GURL("https://a.example/"));
+  TabBinding binding;
+  int changes = 0;
+  binding.SetChangedCallback(
+      base::BindLambdaForTesting([&changes] { ++changes; }));
+
+  {
+    TabBinding::ScopedChangeSuppression suppress(&binding);
+    binding.Bind(EntryId::Generate(), HandleAt(0));
+    EXPECT_EQ(0, changes);
+  }
+  // And the suppression ends with its scope, rather than latching off.
+  binding.Bind(EntryId::Generate(), HandleAt(0));
+  EXPECT_EQ(1, changes);
 }
 
 }  // namespace

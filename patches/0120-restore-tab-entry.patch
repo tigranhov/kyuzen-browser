@@ -1,0 +1,44 @@
+Seam: chrome::CreateRestoredTab and chrome::AddRestoredTabImpl in
+      chrome/browser/ui/browser_tabrestore.cc.
+Why: session restore gives a tab a fresh SessionID, so Arcium cannot key a
+     pinned entry on it. Chromium's per-tab session extra_data does survive a
+     restart and reaches this file; two upstream features already consume it
+     in CreateRestoredTab, one line each. Without this hook every pinned entry
+     comes back cold and opens a second copy of its page when clicked.
+
+     Two calls, not one, because the restore is in two halves. In
+     CreateRestoredTab the WebContents is still a unique_ptr with no place in
+     any tab strip, so there is no tabs::TabInterface and no tabs::TabHandle
+     to bind; that is precisely why the two upstream neighbours there store
+     their state on the WebContents. Arcium parks the id there too, and binds
+     in AddRestoredTabImpl, right after the existing from_session_restore
+     block, which has already resolved the tab from the contents.
+Delegates to: arcium::StashRestoredEntryId, arcium::BindStashedEntryId.
+
+diff --git a/chrome/browser/ui/browser_tabrestore.cc b/chrome/browser/ui/browser_tabrestore.cc
+--- a/chrome/browser/ui/browser_tabrestore.cc
++++ b/chrome/browser/ui/browser_tabrestore.cc
+@@ -8,6 +8,7 @@
+ #include <memory>
+ #include <utility>
+ 
++#include "arcium/browser/session_tab_entry.h"
+ #include "base/containers/span.h"
+ #include "build/build_config.h"
+ #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
+@@ -88,6 +89,7 @@
+   glic::RestoreGlicStateFromExtraData(web_contents.get(), extra_data);
+   send_tab_to_self::SendTabToSelfActivationTracker::RestoreFromExtraData(
+       web_contents.get(), extra_data);
++  arcium::StashRestoredEntryId(web_contents.get(), extra_data);
+ 
+   std::vector<std::unique_ptr<NavigationEntry>> entries =
+       ContentSerializedNavigationBuilder::ToNavigationEntries(
+@@ -201,6 +203,7 @@
+         tabs::TabInterface::GetFromContents(raw_web_contents);
+     TabUIHelper::From(tab_interface)->SetCreatedBySessionRestore(true);
+   }
++  arcium::BindStashedEntryId(raw_web_contents);
+ 
+   // We set the size of the view here, before Blink does its initial layout.
+   // If we don't, the initial layout of background tabs will be performed

@@ -1,0 +1,36 @@
+Seam: SessionService::BuildCommandsForTab in
+      chrome/browser/sessions/session_service.cc.
+Why: ScheduleResetCommands() rebuilds the session command list from live
+     browser state and re-emits no tab extra_data, so a key written earlier is
+     silently dropped. Upstream's two users tolerate that because losing their
+     bit is benign; for Arcium it would unbind a pinned tab. This is already
+     the place per-tab commands are appended on a rebuild.
+
+     The command sink is passed rather than the SessionService itself.
+     SessionService::AddTabExtraData early-returns unless the window is in
+     windows_tracking_, and on a rebuild SessionServiceBase::BuildCommandsForBrowser
+     inserts the window only after its loop over BuildCommandsForTab — so on
+     the exact path this patch exists for, that write would be dropped on the
+     floor. Appending a rebuild command is what every other per-tab command in
+     this function does.
+Delegates to: arcium::AppendTabEntryCommand.
+
+diff --git a/chrome/browser/sessions/session_service.cc b/chrome/browser/sessions/session_service.cc
+--- a/chrome/browser/sessions/session_service.cc
++++ b/chrome/browser/sessions/session_service.cc
+@@ -11,6 +11,7 @@
+ #include <utility>
+ #include <vector>
+ 
++#include "arcium/browser/session_tab_entry.h"
+ #include "base/command_line.h"
+ #include "base/debug/alias.h"
+ #include "base/debug/dump_without_crashing.h"
+@@ -659,6 +660,7 @@
+     command_storage_manager()->AppendRebuildCommand(
+         sessions::CreateSplitTabCommand(session_id, std::move(split)));
+   }
++  arcium::AppendTabEntryCommand(command_storage_manager(), session_id, tab);
+ }
+ 
+ void SessionService::ScheduleResetCommands() {
