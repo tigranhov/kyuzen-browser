@@ -85,6 +85,11 @@ class ModelStore : public ArciumModel::Observer,
   bool loading_ = false;
   // Set when Load() found a file it could neither use nor preserve. Writing
   // would destroy it, so this store writes nothing for the rest of its life.
+  // This assumes no mutation reaches the model before Load() finishes: an
+  // earlier mutation would already have armed ImportantFileWriter's timer,
+  // and setting this afterwards does not disarm it. That holds today because
+  // Load() runs synchronously right after construction and every mutator is
+  // a user command. Whoever adds one that runs during startup breaks it.
   bool saves_suppressed_ = false;
   base::WeakPtrFactory<ModelStore> weak_factory_{this};
 };

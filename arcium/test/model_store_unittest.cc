@@ -233,5 +233,35 @@ TEST_F(ModelStoreTest, AFileThatCannotBeMovedAsideIsNotOverwrittenEither) {
   EXPECT_EQ(from_the_future, on_disk);
 }
 
+// The same promise, at the other place that makes it. A file that is not
+// JSON at all takes a different branch from one whose version we refuse, and
+// each branch moves the file aside on its own line -- so a fix applied to one
+// and not the other would pass every test above.
+TEST_F(ModelStoreTest, GarbageThatCannotBeMovedAsideIsNotOverwrittenEither) {
+  const std::string garbage = "this is not json";
+  ASSERT_TRUE(base::WriteFile(path(), garbage));
+  ASSERT_TRUE(base::CreateDirectory(
+      path().AddExtension(FILE_PATH_LITERAL("unreadable"))));
+
+  ArciumModel model;
+  {
+    ModelStore store(&model, path());
+    base::RunLoop loop;
+    store.Load(loop.QuitClosure());
+    loop.Run();
+
+    EXPECT_TRUE(store.saves_suppressed_for_testing());
+
+    model.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+    EXPECT_EQ(0, store.scheduled_save_count_for_testing());
+    task_environment_.FastForwardBy(ModelStore::kSaveDelay * 2);
+    EXPECT_EQ(0, store.initiated_save_count_for_testing());
+  }
+
+  std::string on_disk;
+  ASSERT_TRUE(base::ReadFileToString(path(), &on_disk));
+  EXPECT_EQ(garbage, on_disk);
+}
+
 }  // namespace
 }  // namespace arcium
