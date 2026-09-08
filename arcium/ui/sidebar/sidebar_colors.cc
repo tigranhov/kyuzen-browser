@@ -5,6 +5,7 @@
 #include "arcium/ui/sidebar/sidebar_colors.h"
 
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/color/color_id.h"
 #include "ui/color/color_mixer.h"
 #include "ui/color/color_provider_key.h"
 #include "ui/color/color_recipe.h"
@@ -42,6 +43,16 @@ void AddArciumColorMixer(ui::ColorProvider* provider,
   mixer[kColorArciumDivider] = {ui::SetAlpha(ink, 0x14)};
   mixer[kColorArciumSpaceAccent] = {kAccent};
   mixer[kColorArciumSpaceChipActiveBackground] = {ui::SetAlpha(kAccent, 0x38)};
+
+  // The window frame, in the sidebar's own colour. Arcium hides the toolbar
+  // and floats the page inside a kContentInset margin, so the frame is not a
+  // title bar here -- it is the strip of window visible above and around the
+  // page, right next to the sidebar. Left at Chromium's default it reads as a
+  // pale line across the top of every tab. The top tint rather than the
+  // bottom one, because the strip that shows most is the one along the top,
+  // where it meets the sidebar's own lightest end.
+  mixer[ui::kColorFrameActive] = {kColorArciumSidebarBackgroundTop};
+  mixer[ui::kColorFrameInactive] = {kColorArciumSidebarBackgroundTop};
 }
 
 }  // namespace arcium

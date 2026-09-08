@@ -1,9 +1,13 @@
-Seam: BrowserViewLayoutDelegateImpl::GetBrowserLayoutParams, IsToolbarVisible.
-Why: reserve the sidebar column from the visual client area; hide the toolbar.
+Seam: BrowserViewLayoutDelegateImpl::GetBrowserLayoutParams, IsToolbarVisible,
+      IsBookmarkBarVisible.
+Why: reserve the sidebar column from the visual client area; hide the toolbar
+     and the bookmark bar. Arcium has a place for neither, and a bookmark bar
+     left visible by a profile preference shows as a stray top panel whose
+     only content is the saved-tab-group button.
 Delegates to: BrowserSidebarController::AdjustLayoutParams
 
 diff --git a/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.cc b/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.cc
-index 6a49065d92..4b4b18356e 100644
+index 6a49065d92..2a706580c1 100644
 --- a/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.cc
 +++ b/chrome/browser/ui/views/frame/layout/browser_view_layout_delegate_impl.cc
 @@ -87,8 +87,12 @@ BrowserLayoutParams BrowserViewLayoutDelegateImpl::GetBrowserLayoutParams(
@@ -20,7 +24,7 @@ index 6a49065d92..4b4b18356e 100644
    }
  
    return BrowserLayoutParams();
-@@ -118,6 +122,9 @@ views::LayoutAlignment BrowserViewLayoutDelegateImpl::GetWindowTitleAlignment()
+@@ -118,10 +122,16 @@ views::LayoutAlignment BrowserViewLayoutDelegateImpl::GetWindowTitleAlignment()
  }
  
  bool BrowserViewLayoutDelegateImpl::IsToolbarVisible() const {
@@ -28,5 +32,12 @@ index 6a49065d92..4b4b18356e 100644
 +    return false;
 +  }
    return browser_view_->IsToolbarVisible();
+ }
+ 
+ bool BrowserViewLayoutDelegateImpl::IsBookmarkBarVisible() const {
++  if (browser_view_->arcium_sidebar()) {
++    return false;
++  }
+   return browser_view_->IsBookmarkBarVisible();
  }
  
