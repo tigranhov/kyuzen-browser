@@ -672,3 +672,69 @@ direct-children count nor a whole-subtree count.
 - `src/zen/tests/folders/browser_folder_empty_tab.js`
 - `src/zen/tests/folders/browser_folder_density.js`
 - `src/zen/tests/folders/head.js`
+
+
+---
+
+## Addendum: the drag rules, read from source (for Arcium Tasks 8 and 9)
+
+Added after the first pass, from Zen's own files rather than from behaviour:
+`src/zen/folders/ZenFolders.mjs` and `src/zen/drag-and-drop/ZenDragAndDrop.js`
+on the `dev` branch, plus Zen's own test
+`src/zen/tests/folders/browser_folder_max_subfolders.js`.
+
+**The cap is 5 and Zen's own test pins it.** `#ZEN_MAX_SUBFOLDERS =
+Services.prefs.getIntPref("zen.folders.max-subfolders", 5)`
+(`ZenFolders.mjs:39`). The test builds a chain, asserting the "new subfolder"
+menu item stays enabled for levels 1..4 and is `disabled` at the 5th
+(`browser_folder_max_subfolders.js`). Five usable levels — exactly Arcium's
+`kMaxFolderDepth = 5`, depths 0 through 4.
+
+**The cap applies to dragging a folder, never to dragging a tab.**
+
+```js
+canDropElement(element, targetElement) {
+  const isZenFolder = element?.isZenFolder;
+  const level = targetElement?.group?.level + 1;
+  return !(isZenFolder && level >= this.#ZEN_MAX_SUBFOLDERS);
+}
+```
+(`ZenFolders.mjs:679-682`.) A *tab* dropped into a folder at any level is
+allowed; only a *folder* is refused. **Arcium must match this**: depth is a
+constraint on folder nesting, not on how deep an entry may live. Refusing to
+drop an entry into a deep folder would be a bug.
+
+**Zen does not count the dragged subtree's own height; Arcium does.** Zen tests
+`target.level + 1` alone, so dragging a folder that is itself three deep into a
+folder at level 3 produces a tree deeper than the cap — the cap holds for
+"create a subfolder here" and leaks under drag. Arcium's `CanMoveFolderInTree`
+asks `new_depth + height <= kMaxFolderDepth - 1`, which keeps the invariant.
+**This is a place where Arcium is deliberately stricter than Zen and should stay
+so.** It reads as a leniency in Zen rather than an intended behaviour: nothing
+in the code or tests suggests the deeper tree is wanted, and Zen's own menu path
+enforces the cap properly. Recorded as a difference, not copied.
+
+**A too-deep drop target simply does not light up.** During dragover a folder is
+highlighted only when it is not at the cap with a folder being dragged:
+
+```js
+!(folder.level >= this.#ZEN_MAX_SUBFOLDERS &&
+  movingTabs?.some(t => gBrowser.isTabGroupLabel(t)))
+```
+(`ZenFolders.mjs:1406-1414`.) There is no rejected-drop state and no error — the
+affordance is absent, and the earlier note that Zen "retargets to the parent"
+overstated it. For Arcium: a refusal should read as *nothing happening*, not as
+a visible rejection.
+
+**Hover-over-a-collapsed-folder opens its icon during a drag.** The same block
+calls `updateFolderIcon(folder, "open")` when the hovered folder is collapsed,
+and restores `"close"` when the pointer leaves (`ZenFolders.mjs:1400-1418`). That
+is an icon affordance on the drop target, not spring-loaded expansion of the
+subtree.
+
+**`#canDropIntoFolder` guards only "live" folders**, not depth and not descendants
+(`ZenDragAndDrop.js:1259-1278`): for an ordinary folder it returns `true`. So the
+folder-into-its-own-descendant case still has no explicit guard visible in Zen's
+code — consistent with the first pass's open question, and a reason for Arcium
+to keep its own explicit check rather than rely on an equivalent falling out of
+the widget hierarchy.
