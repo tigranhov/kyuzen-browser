@@ -5,6 +5,8 @@
 #include "arcium/browser/model/arcium_model.h"
 
 #include <algorithm>
+#include <limits>
+#include <map>
 
 #include "base/time/time.h"
 
@@ -180,14 +182,26 @@ std::vector<const TabEntry*> ArciumModel::EntriesForKind(SpaceId space_id,
   return result;
 }
 
-FolderId ArciumModel::AddFolder(const std::u16string& name) {
+FolderId ArciumModel::AddFolder(const std::u16string& name,
+                                std::optional<FolderId> parent_id) {
   Folder folder;
   folder.id = FolderId::Generate();
   folder.space_id = default_space_id();
   folder.name = name;
+  // A parent the model does not have, one in another space, or one already at
+  // the cap leaves the new folder at the top level rather than stranded under
+  // an id nothing can reach.
+  if (parent_id.has_value()) {
+    const Folder* parent = GetFolder(*parent_id);
+    if (parent && parent->space_id == folder.space_id &&
+        FolderDepth(*parent_id) + 1 <= kMaxFolderDepth - 1) {
+      folder.parent_id = parent_id;
+    }
+  }
   folder.position = static_cast<int>(std::count_if(
       folders_.begin(), folders_.end(), [&folder](const Folder& existing) {
-        return existing.space_id == folder.space_id;
+        return existing.space_id == folder.space_id &&
+               existing.parent_id == folder.parent_id;
       }));
   const FolderId id = folder.id;
   folders_.push_back(std::move(folder));
@@ -229,6 +243,22 @@ void ArciumModel::SetFolderCollapsed(FolderId id, bool collapsed) {
   Notify();
 }
 
+void ArciumModel::SetFolderParent(FolderId id,
+                                  std::optional<FolderId> parent_id) {
+  Folder* folder = FindFolder(id);
+  if (!folder || folder->parent_id == parent_id ||
+      !CanMoveFolderTo(id, parent_id)) {
+    return;
+  }
+  folder->parent_id = parent_id;
+  // Last among its new siblings, which is where a drop that named a folder
+  // rather than a slot should land it. NormalisePositions turns this back
+  // into a contiguous number.
+  folder->position = std::numeric_limits<int>::max();
+  NormalisePositions();
+  Notify();
+}
+
 const Folder* ArciumModel::GetFolder(FolderId id) const {
   for (const Folder& folder : folders_) {
     if (folder.id == id) {
@@ -236,6 +266,92 @@ const Folder* ArciumModel::GetFolder(FolderId id) const {
     }
   }
   return nullptr;
+}
+
+int ArciumModel::FolderDepth(FolderId id) const {
+  const Folder* folder = GetFolder(id);
+  if (!folder) {
+    return -1;
+  }
+  int depth = 0;
+  std::optional<FolderId> parent = folder->parent_id;
+  // Bounded by the folder count rather than trusting the chain to end. Every
+  // mutation refuses a cycle and the deserializer repairs one, so this cannot
+  // spin today; if a later change lets one through, failing closed beats
+  // hanging the UI thread.
+  const int limit = static_cast<int>(folders_.size());
+  while (parent.has_value() && depth <= limit) {
+    const Folder* next = GetFolder(*parent);
+    if (!next) {
+      // A parent the model does not have: what is left is a root.
+      break;
+    }
+    ++depth;
+    parent = next->parent_id;
+  }
+  return depth;
+}
+
+int ArciumModel::SubtreeHeight(FolderId id) const {
+  int height = 0;
+  std::vector<FolderId> level = {id};
+  const int limit = static_cast<int>(folders_.size());
+  // A level at a time, so the walk is bounded by the folder count however
+  // wide the tree is.
+  while (!level.empty() && height <= limit) {
+    std::vector<FolderId> next;
+    for (const Folder& folder : folders_) {
+      if (folder.parent_id.has_value() &&
+          std::find(level.begin(), level.end(), *folder.parent_id) !=
+              level.end()) {
+        next.push_back(folder.id);
+      }
+    }
+    if (next.empty()) {
+      break;
+    }
+    ++height;
+    level = std::move(next);
+  }
+  return height;
+}
+
+bool ArciumModel::CanMoveFolderTo(FolderId id,
+                                  std::optional<FolderId> parent_id) const {
+  const Folder* folder = GetFolder(id);
+  if (!folder) {
+    return false;
+  }
+  int new_depth = 0;
+  if (parent_id.has_value()) {
+    if (*parent_id == id) {
+      return false;
+    }
+    const Folder* parent = GetFolder(*parent_id);
+    if (!parent || parent->space_id != folder->space_id) {
+      return false;
+    }
+    // Walking up from the proposed parent is what catches a descendant: if
+    // `id` sits anywhere above it, the move would close the chain into a
+    // cycle.
+    std::optional<FolderId> above = parent->parent_id;
+    int guard = 0;
+    const int limit = static_cast<int>(folders_.size());
+    while (above.has_value() && guard++ <= limit) {
+      if (*above == id) {
+        return false;
+      }
+      const Folder* next = GetFolder(*above);
+      if (!next) {
+        break;
+      }
+      above = next->parent_id;
+    }
+    new_depth = FolderDepth(*parent_id) + 1;
+  }
+  // The moved folder brings its own descendants with it, so what has to fit
+  // is the whole subtree, not just its root.
+  return new_depth + SubtreeHeight(id) <= kMaxFolderDepth - 1;
 }
 
 void ArciumModel::AddObserver(Observer* observer) {
@@ -289,21 +405,25 @@ void ArciumModel::NormalisePositions() {
       }
     }
 
-    // Folders are not split by kind, so renumber them as a single sequence
-    // per space, the same way RemoveFolder and AddFolder must agree on
-    // "the next free position" within that space.
-    std::vector<Folder*> folders_in_space;
+    // Folders are numbered among their siblings -- same space, same parent --
+    // so a nested folder's position is a place in its own list rather than in
+    // the space's. stable_sort, not sort: SetFolderParent parks a moved
+    // folder on INT_MAX and two folders can briefly share a position, and a
+    // tie must resolve the same way every run.
+    std::map<std::optional<FolderId>, std::vector<Folder*>> by_parent;
     for (Folder& folder : folders_) {
       if (folder.space_id == space.id) {
-        folders_in_space.push_back(&folder);
+        by_parent[folder.parent_id].push_back(&folder);
       }
     }
-    std::sort(folders_in_space.begin(), folders_in_space.end(),
-              [](const Folder* a, const Folder* b) {
-                return a->position < b->position;
-              });
-    for (size_t i = 0; i < folders_in_space.size(); ++i) {
-      folders_in_space[i]->position = static_cast<int>(i);
+    for (auto& [parent, siblings] : by_parent) {
+      std::stable_sort(siblings.begin(), siblings.end(),
+                       [](const Folder* a, const Folder* b) {
+                         return a->position < b->position;
+                       });
+      for (size_t i = 0; i < siblings.size(); ++i) {
+        siblings[i]->position = static_cast<int>(i);
+      }
     }
   }
 }

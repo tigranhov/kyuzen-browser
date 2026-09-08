@@ -5,6 +5,7 @@
 #include "arcium/browser/model/arcium_model.h"
 
 #include <algorithm>
+#include <optional>
 #include <vector>
 
 #include "arcium/browser/model/tab_entry.h"
@@ -173,6 +174,129 @@ TEST_F(ArciumModelTest, FolderPositionsStayContiguousAcrossRemoveAndAdd) {
   EXPECT_NE(model_.GetFolder(c)->position, model_.GetFolder(d)->position);
   EXPECT_EQ(3u, model_.folders().size());
   EXPECT_TRUE(model_.GetFolder(a));
+}
+
+TEST_F(ArciumModelTest, AFolderCanBeMovedInsideAnotherFolder) {
+  const FolderId parent = model_.AddFolder(u"Work");
+  const FolderId child = model_.AddFolder(u"Clients");
+  model_.SetFolderParent(child, parent);
+
+  ASSERT_TRUE(model_.GetFolder(child));
+  EXPECT_EQ(parent, model_.GetFolder(child)->parent_id);
+  EXPECT_EQ(0, model_.FolderDepth(parent));
+  EXPECT_EQ(1, model_.FolderDepth(child));
+}
+
+TEST_F(ArciumModelTest, AFolderCannotBeMovedIntoItself) {
+  const FolderId id = model_.AddFolder(u"Work");
+  EXPECT_FALSE(model_.CanMoveFolderTo(id, id));
+  model_.SetFolderParent(id, id);
+  EXPECT_FALSE(model_.GetFolder(id)->parent_id.has_value());
+}
+
+TEST_F(ArciumModelTest, AFolderCannotBeMovedIntoItsOwnDescendant) {
+  const FolderId a = model_.AddFolder(u"A");
+  const FolderId b = model_.AddFolder(u"B");
+  model_.SetFolderParent(b, a);
+
+  // A second tree of exactly the same shape, so the depth arithmetic can be
+  // ruled out as the thing doing the refusing below: `elsewhere` sits at the
+  // depth `b` does, so moving `a` under either costs the same levels. Without
+  // this the test passes with the cycle check deleted -- which is precisely
+  // what a mutation probe caught it doing.
+  const FolderId host = model_.AddFolder(u"Host");
+  const FolderId elsewhere = model_.AddFolder(u"Elsewhere");
+  model_.SetFolderParent(elsewhere, host);
+  ASSERT_TRUE(model_.CanMoveFolderTo(a, elsewhere));
+
+  // So only the cycle rule can be refusing this one.
+  EXPECT_FALSE(model_.CanMoveFolderTo(a, b));
+  model_.SetFolderParent(a, b);
+  // Refused, and the tree it would have closed into a cycle is untouched.
+  EXPECT_FALSE(model_.GetFolder(a)->parent_id.has_value());
+  EXPECT_EQ(a, model_.GetFolder(b)->parent_id);
+}
+
+TEST_F(ArciumModelTest, TheFolderTreeStopsAtTheDepthCap) {
+  // Written against kMaxFolderDepth rather than against a literal, so raising
+  // or lowering the cap moves this test with it instead of leaving it
+  // asserting a number nothing else believes.
+  std::vector<FolderId> chain = {model_.AddFolder(u"Root")};
+  while (static_cast<int>(chain.size()) < kMaxFolderDepth) {
+    chain.push_back(model_.AddFolder(u"Deeper", chain.back()));
+  }
+  ASSERT_EQ(kMaxFolderDepth - 1, model_.FolderDepth(chain.back()));
+
+  const FolderId one_too_deep = model_.AddFolder(u"One too deep");
+  EXPECT_FALSE(model_.CanMoveFolderTo(one_too_deep, chain.back()));
+  model_.SetFolderParent(one_too_deep, chain.back());
+  EXPECT_FALSE(model_.GetFolder(one_too_deep)->parent_id.has_value());
+  // One level up is still allowed, so what refused it was the cap and not a
+  // blanket no.
+  EXPECT_TRUE(model_.CanMoveFolderTo(one_too_deep, chain[chain.size() - 2]));
+}
+
+TEST_F(ArciumModelTest, MovingASubtreeCountsItsOwnHeightAgainstTheCap) {
+  // A host chain whose deepest folder sits exactly one level short of the cap,
+  // so what fits inside it is decided entirely by what the moved folder brings
+  // with it.
+  std::vector<FolderId> host = {model_.AddFolder(u"Host")};
+  while (static_cast<int>(host.size()) < kMaxFolderDepth - 1) {
+    host.push_back(model_.AddFolder(u"Host deeper", host.back()));
+  }
+  ASSERT_EQ(kMaxFolderDepth - 2, model_.FolderDepth(host.back()));
+
+  const FolderId top = model_.AddFolder(u"Top");
+  const FolderId mid = model_.AddFolder(u"Mid", top);
+
+  // `top` would land on the last legal level and carry `mid` one past it.
+  EXPECT_FALSE(model_.CanMoveFolderTo(top, host.back()));
+  // `mid` brings no height of its own, so it fits exactly.
+  EXPECT_TRUE(model_.CanMoveFolderTo(mid, host.back()));
+}
+
+TEST_F(ArciumModelTest, AddFolderNumbersANewFolderAmongItsSiblings) {
+  const FolderId parent = model_.AddFolder(u"Parent");
+  const FolderId first = model_.AddFolder(u"First", parent);
+  const FolderId second = model_.AddFolder(u"Second", parent);
+  const FolderId other_root = model_.AddFolder(u"Other root");
+
+  EXPECT_EQ(0, model_.GetFolder(parent)->position);
+  EXPECT_EQ(1, model_.GetFolder(other_root)->position);
+  // Numbered among their siblings, not among every folder in the space.
+  EXPECT_EQ(0, model_.GetFolder(first)->position);
+  EXPECT_EQ(1, model_.GetFolder(second)->position);
+}
+
+TEST_F(ArciumModelTest, RenumberingKeepsSiblingsWithinTheirOwnParent) {
+  const FolderId parent = model_.AddFolder(u"Parent");
+  const FolderId first = model_.AddFolder(u"First", parent);
+  const FolderId second = model_.AddFolder(u"Second", parent);
+  const FolderId third = model_.AddFolder(u"Third", parent);
+  const FolderId other_root = model_.AddFolder(u"Other root");
+
+  // AddFolder does its own counting and never calls NormalisePositions, so a
+  // test that only adds folders does not reach the renumbering at all -- which
+  // is how the first version of this coverage passed with that code broken.
+  // RemoveFolder is one of the paths that does reach it.
+  model_.RemoveFolder(second);
+
+  EXPECT_EQ(0, model_.GetFolder(parent)->position);
+  EXPECT_EQ(1, model_.GetFolder(other_root)->position);
+  // Renumbered contiguously among their own siblings. Renumbered as one
+  // sequence across the space instead, these would come out 1 and 3.
+  EXPECT_EQ(0, model_.GetFolder(first)->position);
+  EXPECT_EQ(1, model_.GetFolder(third)->position);
+}
+
+TEST_F(ArciumModelTest, MovingAFolderToTheTopLevelIsAllowed) {
+  const FolderId parent = model_.AddFolder(u"Parent");
+  const FolderId child = model_.AddFolder(u"Child", parent);
+  ASSERT_EQ(parent, model_.GetFolder(child)->parent_id);
+
+  model_.SetFolderParent(child, std::nullopt);
+  EXPECT_FALSE(model_.GetFolder(child)->parent_id.has_value());
+  EXPECT_EQ(0, model_.FolderDepth(child));
 }
 
 TEST_F(ArciumModelTest, ReplaceAllSwapsTheWholeModelAndNotifies) {

@@ -60,12 +60,27 @@ class ArciumModel {
                                               EntryKind kind) const;
   const std::vector<TabEntry>& entries() const { return entries_; }
 
-  // Folders. Removing one returns its entries to the top level rather than
+  // Folders. Removing one returns its contents to its own parent rather than
   // deleting them: a folder is a grouping, not an owner.
-  FolderId AddFolder(const std::u16string& name);
+  FolderId AddFolder(const std::u16string& name,
+                     std::optional<FolderId> parent_id = std::nullopt);
   void RemoveFolder(FolderId id);
   void SetFolderName(FolderId id, const std::u16string& name);
   void SetFolderCollapsed(FolderId id, bool collapsed);
+  // How deep `id` sits: 0 at the top level, -1 for an id the model does not
+  // have.
+  int FolderDepth(FolderId id) const;
+  // Whether `id` could become a child of `parent_id`, or of the top level for
+  // std::nullopt. False for an unknown id, a parent in another space, the
+  // folder itself, any of its own descendants, and any move that would carry
+  // the moved subtree past kMaxFolderDepth.
+  bool CanMoveFolderTo(FolderId id, std::optional<FolderId> parent_id) const;
+  // Re-parents `id`, or does nothing when CanMoveFolderTo says no. One
+  // command rather than a check the caller is trusted to have made first: a
+  // drag asks from a snapshot of the tree that another window can invalidate
+  // while the nested drag loop runs, so the answer has to be taken at the
+  // moment of the move.
+  void SetFolderParent(FolderId id, std::optional<FolderId> parent_id);
   const Folder* GetFolder(FolderId id) const;
   const std::vector<Folder>& folders() const { return folders_; }
 
@@ -81,6 +96,8 @@ class ArciumModel {
  private:
   TabEntry* FindEntry(EntryId id);
   Folder* FindFolder(FolderId id);
+  // The greatest number of levels below `id`: 0 when it holds no folders.
+  int SubtreeHeight(FolderId id) const;
   // Renumbers positions 0..n-1 within each (space, kind) so a reorder never
   // leaves gaps that would make the order depend on insertion history.
   void NormalisePositions();
