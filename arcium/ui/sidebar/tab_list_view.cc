@@ -73,7 +73,7 @@ TabRowView* TabListView::MakeRow() {
   return AddChildView(std::make_unique<TabRowView>(std::move(delegate)));
 }
 
-FolderHeaderView* TabListView::MakeHeader() {
+std::unique_ptr<FolderHeaderView> TabListView::MakeHeader() {
   FolderHeaderView::Delegate delegate;
   delegate.toggle_collapsed =
       base::BindRepeating(&TabListView::OnToggleFolder, base::Unretained(this));
@@ -85,7 +85,9 @@ FolderHeaderView* TabListView::MakeHeader() {
       base::BindRepeating(&TabListView::OnDropOnFolder, base::Unretained(this));
   delegate.can_accept_entry = base::BindRepeating(
       &TabListView::CanFolderAcceptEntry, base::Unretained(this));
-  return AddChildView(std::make_unique<FolderHeaderView>(std::move(delegate)));
+  // Not added to the child list here: SetRows adds the headers it draws, in
+  // the plan's order, and leaves a hidden one out.
+  return std::make_unique<FolderHeaderView>(std::move(delegate));
 }
 
 void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
@@ -105,34 +107,49 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
     known.insert(folder.id);
   }
 
-  // The laid-out order: each folder's header, then its entries when it is
-  // expanded, then everything at the top level. A collapsed folder
-  // contributes only its header.
+  // The laid-out order. `folders` is pre-order with a depth on each, so one
+  // linear walk lays the whole tree out: a folder's own entries follow its
+  // header one level in, and a collapsed folder's subtree is exactly the run
+  // of folders after it with a greater depth -- skipped here, headers and
+  // rows alike, so a big collapsed tree costs nothing to draw.
   std::vector<PlanItem> plan;
   plan.reserve(mine.size() + folders.size());
   for (size_t f = 0; f < folders.size(); ++f) {
-    plan.push_back({/*is_header=*/true, f, /*indented=*/false});
-    if (folders[f].collapsed) {
+    plan.push_back({/*is_header=*/true, f, folders[f].depth});
+    if (!folders[f].collapsed) {
+      for (size_t r = 0; r < mine.size(); ++r) {
+        if (mine[r]->folder_id == folders[f].id) {
+          plan.push_back({/*is_header=*/false, r, folders[f].depth + 1});
+        }
+      }
       continue;
     }
-    for (size_t r = 0; r < mine.size(); ++r) {
-      if (mine[r]->folder_id == folders[f].id) {
-        plan.push_back({/*is_header=*/false, r, /*indented=*/true});
-      }
+    const int depth = folders[f].depth;
+    while (f + 1 < folders.size() && folders[f + 1].depth > depth) {
+      ++f;
     }
   }
   for (size_t r = 0; r < mine.size(); ++r) {
     // A row naming a folder this section did not get back is drawn at the top
     // level rather than lost: the model is the authority on which folders
-    // exist, and a stale id must not hide a tab.
+    // exist, and a stale id must not hide a tab. A row inside a *hidden*
+    // folder is a different case and is not drawn here -- its folder is
+    // known, it is just collapsed away.
     if (!mine[r]->folder_id.has_value() || !known.count(*mine[r]->folder_id)) {
-      plan.push_back({/*is_header=*/false, r, /*indented=*/false});
+      plan.push_back({/*is_header=*/false, r, /*depth=*/0});
     }
   }
 
   size_t rows_needed = 0;
+  // Which folders the plan draws. A folder inside a collapsed one is still in
+  // `folders`, and still gets a header built for it, but must not be a child
+  // of this list while it is hidden.
+  std::vector<bool> drawn(folders.size(), false);
   for (const PlanItem& item : plan) {
     rows_needed += item.is_header ? 0u : 1u;
+    if (item.is_header) {
+      drawn[item.index] = true;
+    }
   }
 
   // Grow or shrink the pools, then assign in order. Views are reused by
@@ -141,9 +158,9 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
     headers_.push_back(MakeHeader());
   }
   while (headers_.size() > folders.size()) {
-    FolderHeaderView* header = headers_.back();
+    // The pool owns it, so dropping it deletes it; ~View takes it out of the
+    // child list on the way if it was in one.
     headers_.pop_back();
-    RemoveChildViewT(header);
   }
   while (rows_.size() < rows_needed) {
     rows_.push_back(MakeRow());
@@ -156,6 +173,11 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
 
   for (size_t f = 0; f < folders.size(); ++f) {
     headers_[f]->SetFolder(folders[f]);
+    // Taken out here rather than during the walk below, so the walk sees the
+    // child list the plan describes and nothing else.
+    if (!drawn[f] && headers_[f]->parent() == this) {
+      RemoveChildView(headers_[f].get());
+    }
   }
   // One walk assigns the data and puts the children in the plan's order;
   // BoxLayout lays them out by child index.
@@ -167,7 +189,14 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
   for (const PlanItem& item : plan) {
     views::View* view = nullptr;
     if (item.is_header) {
-      view = headers_[item.index];
+      FolderHeaderView* header = headers_[item.index].get();
+      // Already a child unless it was hidden inside a collapsed folder until
+      // now: re-added rather than rebuilt, and never detached and reattached
+      // in the same pass, which would take the focus off a rename in flight.
+      if (header->parent() != this) {
+        AddChildViewRaw(header);
+      }
+      view = header;
     } else {
       TabRowView* row = rows_[next_row++];
       // `mine` is in the order the model hands the section over, which for an
@@ -175,12 +204,13 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
       // travels with the row rather than being read off its slot later.
       row_positions_.push_back(static_cast<int>(item.index));
       row->SetRow(*mine[item.index]);
-      row->SetProperty(
-          views::kMarginsKey,
-          gfx::Insets::TLBR(0, item.indented ? metrics::kFolderIndent : 0, 0,
-                            0));
       view = row;
     }
+    // One rule for both kinds of child: the plan already worked out that a
+    // header sits at its folder's depth and a row one level further in.
+    view->SetProperty(
+        views::kMarginsKey,
+        gfx::Insets::TLBR(0, item.depth * metrics::kFolderIndent, 0, 0));
     ReorderChildView(view, child_index++);
   }
 

@@ -110,7 +110,9 @@ class TabListView : public views::View, public RowDragSession::Observer {
     // Index into the folder list for a header, into the section's rows for a
     // row. Both are positions in the vectors SetRows built.
     size_t index = 0;
-    bool indented = false;
+    // How far in it is drawn, in folder levels: a header sits at its folder's
+    // depth and its rows one level further in.
+    int depth = 0;
   };
 
   // A row backed by an entry commands the entry; a Today row commands the
@@ -187,7 +189,7 @@ class TabListView : public views::View, public RowDragSession::Observer {
   void UpdateVisibility();
 
   TabRowView* MakeRow();
-  FolderHeaderView* MakeHeader();
+  std::unique_ptr<FolderHeaderView> MakeHeader();
 
   raw_ptr<SidebarModel> model_;
   const SidebarSection section_;
@@ -200,7 +202,13 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // folders that were never built. The end of the section, for a drop past
   // the last visible row.
   int section_row_count_ = 0;
-  std::vector<raw_ptr<FolderHeaderView>> headers_;
+  // One header per folder the model handed over, hidden ones included. Owned
+  // here rather than by the child list, because a header inside a collapsed
+  // folder is taken out of the child list — a subtree nobody can see is not
+  // laid out and not painted — and a view with no parent has no other owner.
+  // It is kept rather than destroyed so reopening the folder allocates
+  // nothing.
+  std::vector<std::unique_ptr<FolderHeaderView>> headers_;
   raw_ptr<views::LabelButton> new_tab_ = nullptr;
   // Outlives the menu it is running, so a command that arrives after the
   // click still finds its model and its snapshot.

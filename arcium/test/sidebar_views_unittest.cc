@@ -17,6 +17,7 @@
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
 #include "arcium/ui/sidebar/section_divider_view.h"
+#include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
 #include "arcium/ui/sidebar/space_bar_view.h"
@@ -55,6 +56,7 @@
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/widget/widget_utils.h"
 #include "ui/views/window/client_view.h"
@@ -352,6 +354,99 @@ TEST_F(SidebarViewsTest, ACollapsedFolderContributesOnlyItsHeader) {
             ChildClasses());
   // The row inside it is not built at all, so a big collapsed folder costs
   // one view rather than one per entry.
+  EXPECT_EQ(1u, list_->row_count());
+}
+
+TEST_F(SidebarViewsTest, ANestedFolderAndItsRowsAreIndentedByDepth) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  MakeList(SidebarSection::kPinned);
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Two"});
+  model_.SetFolderParent(inner, outer);
+  Refresh();
+
+  // Outer's header, Outer's row, then Inner's header and Inner's row inside
+  // it -- pre-order, drawn.
+  EXPECT_EQ((std::vector<std::string>{"FolderHeaderView", "TabRowView",
+                                      "FolderHeaderView", "TabRowView"}),
+            ChildClasses());
+
+  const auto indent_of = [this](size_t index) {
+    const gfx::Insets* margins =
+        list_->children()[index]->GetProperty(views::kMarginsKey);
+    return margins ? margins->left() : 0;
+  };
+  EXPECT_EQ(0, indent_of(0));
+  EXPECT_EQ(metrics::kFolderIndent, indent_of(1));
+  EXPECT_EQ(metrics::kFolderIndent, indent_of(2));
+  EXPECT_EQ(2 * metrics::kFolderIndent, indent_of(3));
+}
+
+TEST_F(SidebarViewsTest, ACollapsedFolderHidesItsWholeSubtree) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kPinned,
+                false);
+  MakeList(SidebarSection::kPinned);
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Two"});
+  model_.SetFolderParent(inner, outer);
+  model_.SetFolderCollapsed(outer, true);
+  Refresh();
+
+  // Only the collapsed header and the pinned row in no folder at all. The
+  // nested header is hidden with everything under it, which is what a
+  // disclosure triangle promises.
+  EXPECT_EQ((std::vector<std::string>{"FolderHeaderView", "TabRowView"}),
+            ChildClasses());
+  // Both headers are still *built* -- `headers_` is sized to folders().size()
+  // -- and the hidden one is simply not placed in the plan, so it is not a
+  // child of this list.
+  EXPECT_EQ(2u, list_->folder_count());
+  EXPECT_EQ(1u, list_->row_count());
+}
+
+TEST_F(SidebarViewsTest, ACollapsedFolderDoesNotSwallowItsOwnSibling) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kPinned,
+                false);
+  MakeList(SidebarSection::kPinned);
+  // AddFolderWith makes the folder from its first entry, so each of these
+  // needs a tab of its own -- an empty title list returns an invalid id.
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId first_inner = model_.AddFolderWith(u"First inner", {u"Two"});
+  const FolderId second_inner =
+      model_.AddFolderWith(u"Second inner", {u"Three"});
+  model_.SetFolderParent(first_inner, outer);
+  model_.SetFolderParent(second_inner, outer);
+  model_.SetFolderCollapsed(first_inner, true);
+  Refresh();
+
+  // The skip must stop at the first folder that is *not* deeper than the
+  // collapsed one. A skip written with >= instead of > eats the sibling that
+  // follows it, and nothing else in this file would notice.
+  EXPECT_EQ((std::vector<std::string>{"FolderHeaderView", "TabRowView",
+                                      "FolderHeaderView", "FolderHeaderView",
+                                      "TabRowView"}),
+            ChildClasses());
+}
+
+TEST_F(SidebarViewsTest, ACollapsedNestedFolderStillLeavesItsParentDrawn) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  MakeList(SidebarSection::kPinned);
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Two"});
+  model_.SetFolderParent(inner, outer);
+  model_.SetFolderCollapsed(inner, true);
+  Refresh();
+
+  // Collapsing the inner folder hides only its own row.
+  EXPECT_EQ((std::vector<std::string>{"FolderHeaderView", "TabRowView",
+                                      "FolderHeaderView"}),
+            ChildClasses());
   EXPECT_EQ(1u, list_->row_count());
 }
 

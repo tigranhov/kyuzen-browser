@@ -177,7 +177,13 @@ std::optional<int> TabListView::EntryPositionInSection(EntryId id) const {
 bool TabListView::IsOverHeaderAt(int y) const {
   // A walk over the built headers, with no allocation: asked again on every
   // drag-move event, the same as DropRowIndex.
-  for (const FolderHeaderView* header : headers_) {
+  for (const std::unique_ptr<FolderHeaderView>& header : headers_) {
+    // A header hidden inside a collapsed folder is not in the child list and
+    // keeps whatever bounds it last had, so it must not answer for a band it
+    // no longer occupies.
+    if (header->parent() != this) {
+      continue;
+    }
     if (y >= header->y() && y < header->bounds().bottom()) {
       return true;
     }
