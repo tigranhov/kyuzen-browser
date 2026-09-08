@@ -250,6 +250,49 @@ TEST(ModelSerializerTest, AParentThatIsNotInTheFileLandsAtTheTopLevel) {
   EXPECT_FALSE(restored->parent_id.has_value());
 }
 
+TEST(ModelSerializerTest, AParentInAnotherSpaceLandsAtTheTopLevel) {
+  const std::string space_a =
+      base::Uuid::GenerateRandomV4().AsLowercaseString();
+  const std::string space_b =
+      base::Uuid::GenerateRandomV4().AsLowercaseString();
+  const std::string parent = base::Uuid::GenerateRandomV4().AsLowercaseString();
+  const std::string child = base::Uuid::GenerateRandomV4().AsLowercaseString();
+
+  base::DictValue dict;
+  dict.Set("version", kModelSchemaVersion);
+  base::ListValue spaces;
+  for (const std::string& id : {space_a, space_b}) {
+    base::DictValue value;
+    value.Set("id", id);
+    spaces.Append(std::move(value));
+  }
+  dict.Set("spaces", std::move(spaces));
+
+  base::ListValue folders;
+  base::DictValue parent_value;
+  parent_value.Set("id", parent);
+  parent_value.Set("space_id", space_b);
+  folders.Append(std::move(parent_value));
+  base::DictValue child_value;
+  child_value.Set("id", child);
+  child_value.Set("space_id", space_a);
+  // A parent that is in the file, and findable, but in the other space. A
+  // folder tree does not straddle spaces, and this is the only damage the
+  // first repair pass alone can catch -- the cycle pass would walk this link
+  // happily, because there is nothing circular or too deep about it.
+  child_value.Set("parent_id", parent);
+  folders.Append(std::move(child_value));
+  dict.Set("folders", std::move(folders));
+
+  ArciumModel model;
+  ASSERT_TRUE(DeserializeModel(dict, &model));
+  const Folder* restored = model.GetFolder(FolderId::FromString(child));
+  ASSERT_TRUE(restored);
+  EXPECT_FALSE(restored->parent_id.has_value());
+  // The parent is untouched in its own space; only the link was wrong.
+  EXPECT_TRUE(model.GetFolder(FolderId::FromString(parent)));
+}
+
 TEST(ModelSerializerTest, ACycleBetweenFoldersIsBrokenNotFatal) {
   const std::string space = base::Uuid::GenerateRandomV4().AsLowercaseString();
   const std::string a = base::Uuid::GenerateRandomV4().AsLowercaseString();

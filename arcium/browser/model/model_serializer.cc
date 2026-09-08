@@ -235,9 +235,19 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
         break;
       }
       ++depth;
-      // Every surviving parent id is in the map: the pass above cleared the
-      // ones that were not.
-      parent = folders[folder_index[*parent]].parent_id;
+      const auto found = folder_index.find(*parent);
+      if (found == folder_index.end()) {
+        // Unreachable while the pass above runs, because it clears exactly
+        // these. find() rather than operator[] all the same: operator[] on a
+        // missing key inserts a default-constructed 0, so dropping that pass
+        // would not fail here -- it would silently read folders[0] and give
+        // this folder whichever parent happened to sit there. A mutation
+        // probe caught precisely that masking.
+        folder.parent_id.reset();
+        depth = 0;
+        break;
+      }
+      parent = folders[found->second].parent_id;
     }
     if (depth > kMaxFolderDepth - 1) {
       folder.parent_id.reset();
