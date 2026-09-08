@@ -36,4 +36,19 @@ void SuppressTestAppActivation() {
                            reinterpret_cast<IMP>(&IgnoreActivationPolicy));
 }
 
+namespace {
+
+// Before main, because the promotion is not confined to the two fixtures that
+// call SuppressTestAppActivation by name: seven more derive from
+// BrowserWithTestWindowTest, which stands up the same Views helper. Whichever
+// fixture the launcher runs first would otherwise get one promotion in before
+// any call site is reached, which is one stolen focus per process.
+//
+// The explicit calls remain, and are what guarantee this object is linked in.
+__attribute__((constructor)) void SuppressBeforeMain() {
+  SuppressTestAppActivation();
+}
+
+}  // namespace
+
 }  // namespace arcium::test
