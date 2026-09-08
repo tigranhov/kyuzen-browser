@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 
+#include "arcium/test/test_app_activation.h"
 #include "arcium/ui/playground/fake_sidebar_model.h"
 #include "arcium/ui/sidebar/archive_list_view.h"
 #include "arcium/ui/sidebar/favorites_grid_view.h"
@@ -118,6 +119,10 @@ class SidebarViewsTest : public views::ViewsTestBase {
  public:
   void SetUp() override {
     views::ViewsTestBase::SetUp();
+    // Undo the foreground promotion ViewsTestHelperMac just made: a suite that
+    // activates windows as a regular application drags the desktop onto its
+    // Space, and none of these tests read real activation.
+    arcium::test::SuppressTestAppActivation();
     widget_ = CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
     contents_ = widget_->SetContentsView(std::make_unique<views::View>());
     contents_->SetLayoutManager(std::make_unique<views::FillLayout>());

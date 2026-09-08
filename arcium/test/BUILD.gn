@@ -17,7 +17,19 @@ test("arcium_unittests") {
     "sidebar_views_unittest.cc",
     "tab_binding_unittest.cc",
     "tab_search_service_unittest.cc",
+    "test_app_activation.h",
   ]
+
+  # The activation-policy override is the one thing here that has to speak to
+  # AppKit: only macOS promotes an unbundled test binary to a foreground
+  # application, and only NSApp can undo it. Everywhere else the no-op .cc
+  # keeps the fixtures' call sites platform-free.
+  if (is_mac) {
+    sources += [ "test_app_activation_mac.mm" ]
+    frameworks = [ "AppKit.framework" ]
+  } else {
+    sources += [ "test_app_activation.cc" ]
+  }
   deps = [
     "//arcium/browser",
     "//arcium/browser/model",
