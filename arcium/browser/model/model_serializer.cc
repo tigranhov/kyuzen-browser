@@ -4,8 +4,10 @@
 
 #include "arcium/browser/model/model_serializer.h"
 
+#include <map>
 #include <set>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "arcium/browser/model/arcium_model.h"
@@ -78,6 +80,11 @@ base::DictValue SerializeModel(const ArciumModel& model) {
     base::DictValue value;
     value.Set("id", folder.id.value());
     value.Set("space_id", folder.space_id.value());
+    // Only when there is one: an absent key is what the top level means, and
+    // it is also what every version 1 file says about every folder it has.
+    if (folder.parent_id) {
+      value.Set("parent_id", folder.parent_id->value());
+    }
     value.Set("name", base::UTF16ToUTF8(folder.name));
     value.Set("collapsed", folder.collapsed);
     value.Set("position", folder.position);
@@ -181,8 +188,59 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
       folder.name = name ? base::UTF8ToUTF16(*name) : std::u16string();
       folder.collapsed = value->FindBool("collapsed").value_or(false);
       folder.position = value->FindInt("position").value_or(0);
+      // Parsed now, checked below: a folder's parent may appear later in the
+      // file, so the link cannot be validated until every folder is known.
+      if (const std::string* parent_id = value->FindString("parent_id")) {
+        const FolderId parsed = FolderId::FromString(*parent_id);
+        if (parsed.is_valid()) {
+          folder.parent_id = parsed;
+        }
+      }
       folder_ids.insert(folder.id);
       folders.push_back(std::move(folder));
+    }
+  }
+
+  // Three things can be wrong with the parent links in a file: a parent that
+  // is not here, a parent in another space, and a chain that is either a
+  // cycle or deeper than the sidebar can draw. All are repaired by detaching
+  // the folder to the top level, which is the one repair that cannot itself
+  // invent a new problem -- a root has no chain to be wrong about. None of
+  // them refuses the file: the folders and entries in it are still the
+  // user's, and a tree drawn flat is recoverable while a tree thrown away is
+  // not.
+  std::map<FolderId, size_t> folder_index;
+  for (size_t i = 0; i < folders.size(); ++i) {
+    folder_index[folders[i].id] = i;
+  }
+  for (Folder& folder : folders) {
+    if (!folder.parent_id) {
+      continue;
+    }
+    const auto it = folder_index.find(*folder.parent_id);
+    if (it == folder_index.end() ||
+        folders[it->second].space_id != folder.space_id) {
+      folder.parent_id.reset();
+    }
+  }
+  for (Folder& folder : folders) {
+    std::set<FolderId> seen = {folder.id};
+    int depth = 0;
+    std::optional<FolderId> parent = folder.parent_id;
+    while (parent.has_value()) {
+      if (!seen.insert(*parent).second) {
+        // Walked back onto something already on this chain.
+        folder.parent_id.reset();
+        depth = 0;
+        break;
+      }
+      ++depth;
+      // Every surviving parent id is in the map: the pass above cleared the
+      // ones that were not.
+      parent = folders[folder_index[*parent]].parent_id;
+    }
+    if (depth > kMaxFolderDepth - 1) {
+      folder.parent_id.reset();
     }
   }
 

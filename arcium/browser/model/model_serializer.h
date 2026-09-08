@@ -13,7 +13,12 @@ class ArciumModel;
 
 // Bumped whenever a field changes meaning. A file claiming a newer version is
 // refused rather than half-read, so a downgrade cannot silently drop data.
-inline constexpr int kModelSchemaVersion = 1;
+//
+// 2: folders gained `parent_id`. The bump is not for reading -- an absent
+//    parent is exactly what a version 1 folder meant -- but for writing:
+//    without it a Stage 2 build would open a nested file, draw every folder
+//    flat, and flatten the tree for good on its next save.
+inline constexpr int kModelSchemaVersion = 2;
 
 base::DictValue SerializeModel(const ArciumModel& model);
 
