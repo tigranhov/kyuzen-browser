@@ -33,6 +33,10 @@ enum RowCommand {
   kCloseTab,
   kDeleteFolder,
   kMoveToTopLevel,
+  // The submenu's own item. It needs an id of its own so it can be disabled
+  // when nothing inside it can be chosen; at id 0 it fell through to the
+  // default and always read as enabled.
+  kMoveToFolderParent,
   // Every folder in the "Move to folder" submenu, in folders() order.
   kMoveToFolderFirst = 100,
 };
@@ -108,7 +112,8 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
             folder.name);
         move_targets_.push_back(folder.id);
       }
-      menu_->AddSubMenu(0, u"Move to folder", move_submenu_.get());
+      menu_->AddSubMenu(kMoveToFolderParent, u"Move to folder",
+                        move_submenu_.get());
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
       menu_->AddItem(kUnpin, u"Unpin");
       menu_->AddItem(kCloseTab, u"Close tab");
@@ -149,7 +154,8 @@ void RowContextMenu::BuildForFolder(const SidebarFolder& folder,
         target.name);
     move_targets_.push_back(target.id);
   }
-  menu_->AddSubMenu(0, u"Move to folder", move_submenu_.get());
+  menu_->AddSubMenu(kMoveToFolderParent, u"Move to folder",
+                    move_submenu_.get());
   menu_->AddSeparator(ui::NORMAL_SEPARATOR);
   // The reassurance is in the label because ui::MenuModel has no tooltip to
   // put it in, and "Delete folder" alone reads as deleting the tabs.
@@ -195,6 +201,20 @@ bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
     case kMoveToTopLevel:
       return is_folder_ ? folder_.parent_id.has_value()
                         : row_.folder_id.has_value();
+    case kMoveToFolderParent: {
+      // A submenu is only as enabled as its contents. Opening one whose every
+      // item is greyed out tells the user there is somewhere to go and then
+      // offers nowhere.
+      if (IsCommandIdEnabled(kMoveToTopLevel)) {
+        return true;
+      }
+      for (size_t i = 0; i < move_targets_.size(); ++i) {
+        if (IsCommandIdEnabled(kMoveToFolderFirst + static_cast<int>(i))) {
+          return true;
+        }
+      }
+      return false;
+    }
     default:
       return true;
   }

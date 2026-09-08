@@ -900,9 +900,11 @@ TEST_F(SidebarViewsTest, TheMenuForAPinnedRowThatHasNavigatedAway) {
   ScopedMenuCapture capture;
   RightClickOn(views::AsViewClass<TabRowView>(list_->children()[0]));
   ASSERT_TRUE(capture.menu());
-  EXPECT_EQ((std::vector<std::u16string>{u"Rename", u"Return to pinned URL",
-                                         u"New folder", u"Move to folder",
-                                         u"Unpin", u"Close tab"}),
+  // "Move to folder" is dead here: this row is not in a folder and there are
+  // no folders to move it into, so every item in the submenu is greyed out.
+  EXPECT_EQ((std::vector<std::u16string>{
+                u"Rename", u"Return to pinned URL", u"New folder",
+                u"Move to folder [disabled]", u"Unpin", u"Close tab"}),
             MenuLabels(capture.menu()->menu()));
 }
 
@@ -915,10 +917,10 @@ TEST_F(SidebarViewsTest, APinnedRowOnItsPinnedUrlIsNotOfferedTheReturn) {
   ScopedMenuCapture capture;
   RightClickOn(views::AsViewClass<TabRowView>(list_->children()[0]));
   ASSERT_TRUE(capture.menu());
-  EXPECT_EQ(
-      (std::vector<std::u16string>{u"Rename", u"New folder", u"Move to folder",
-                                   u"Unpin", u"Close tab"}),
-      MenuLabels(capture.menu()->menu()));
+  EXPECT_EQ((std::vector<std::u16string>{u"Rename", u"New folder",
+                                         u"Move to folder [disabled]", u"Unpin",
+                                         u"Close tab"}),
+            MenuLabels(capture.menu()->menu()));
 }
 
 // A favourite is a tile in the grid, not a row in a list, and the tiles carry
@@ -1167,9 +1169,46 @@ TEST_F(SidebarViewsTest, TheMenuForAFolderHeaderSaysTheTabsStay) {
   ScopedMenuCapture capture;
   RightClickOn(views::AsViewClass<FolderHeaderView>(list_->children()[0]));
   ASSERT_TRUE(capture.menu());
-  EXPECT_EQ((std::vector<std::u16string>{u"Rename", u"Move to folder",
-                                         u"Delete folder (keeps its tabs)"}),
-            MenuLabels(capture.menu()->menu()));
+  // "Move to folder" is disabled here, and that is the point of the submenu
+  // having an id of its own: this folder is the only one and it is already at
+  // the top level, so every item inside it is greyed out.
+  EXPECT_EQ(
+      (std::vector<std::u16string>{u"Rename", u"Move to folder [disabled]",
+                                   u"Delete folder (keeps its tabs)"}),
+      MenuLabels(capture.menu()->menu()));
+}
+
+// A submenu is only as enabled as its contents. With a second folder to move
+// into, the same item is live -- which is what keeps the assertion above from
+// passing for the trivial reason that the item is always disabled.
+TEST_F(SidebarViewsTest, MoveToFolderIsDeadWhenThereIsNowhereToGo) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  MakeList(SidebarSection::kPinned);
+  model_.AddFolderWith(u"Work", {u"One"});
+  Refresh();
+
+  {
+    ScopedMenuCapture capture;
+    RightClickOn(views::AsViewClass<FolderHeaderView>(list_->children()[0]));
+    ASSERT_TRUE(capture.menu());
+    const std::vector<std::u16string> labels =
+        MenuLabels(capture.menu()->menu());
+    EXPECT_NE(labels.end(), std::find(labels.begin(), labels.end(),
+                                      u"Move to folder [disabled]"));
+  }
+
+  model_.AddFolderWith(u"Other", {u"Two"});
+  Refresh();
+  {
+    ScopedMenuCapture capture;
+    RightClickOn(views::AsViewClass<FolderHeaderView>(list_->children()[0]));
+    ASSERT_TRUE(capture.menu());
+    const std::vector<std::u16string> labels =
+        MenuLabels(capture.menu()->menu());
+    EXPECT_NE(labels.end(),
+              std::find(labels.begin(), labels.end(), u"Move to folder"));
+  }
 }
 
 TEST_F(SidebarViewsTest, ColdRowsCannotCloseATabTheyDoNotHave) {
@@ -1181,10 +1220,10 @@ TEST_F(SidebarViewsTest, ColdRowsCannotCloseATabTheyDoNotHave) {
   ScopedMenuCapture capture;
   RightClickOn(views::AsViewClass<TabRowView>(list_->children()[0]));
   ASSERT_TRUE(capture.menu());
-  EXPECT_EQ(
-      (std::vector<std::u16string>{u"Rename", u"New folder", u"Move to folder",
-                                   u"Unpin", u"Close tab [disabled]"}),
-      MenuLabels(capture.menu()->menu()));
+  EXPECT_EQ((std::vector<std::u16string>{u"Rename", u"New folder",
+                                         u"Move to folder [disabled]", u"Unpin",
+                                         u"Close tab [disabled]"}),
+            MenuLabels(capture.menu()->menu()));
 }
 
 // A field open on the row owns it: a right-click that put a menu over the
