@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "arcium/browser/model/tab_entry.h"
+#include "arcium/ui/sidebar/folder_tree.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "base/strings/utf_string_conversions.h"
@@ -378,35 +379,47 @@ void SidebarTabModel::MoveEntryToSection(EntryId id,
 std::vector<SidebarFolder> SidebarTabModel::folders() const {
   const SpaceId space = arcium_model_->default_space_id();
   // One pass over the entries counts every folder, so a header never scans
-  // and rows() is not walked once per folder.
+  // and rows() is not walked once per folder. Direct counts only: the walk
+  // rolls them up over each subtree.
   std::map<FolderId, int> counts;
   for (const TabEntry& entry : arcium_model_->entries()) {
     if (entry.space_id == space && entry.folder_id.has_value()) {
       ++counts[*entry.folder_id];
     }
   }
-  std::vector<SidebarFolder> result;
+  std::vector<FolderInput> input;
   for (const Folder& folder : arcium_model_->folders()) {
     if (folder.space_id != space) {
       continue;
     }
-    SidebarFolder out;
-    out.id = folder.id;
-    out.name = folder.name;
-    out.collapsed = folder.collapsed;
-    auto it = counts.find(folder.id);
-    out.entry_count = it == counts.end() ? 0 : it->second;
-    result.push_back(std::move(out));
+    FolderInput in;
+    in.id = folder.id;
+    in.parent_id = folder.parent_id;
+    in.position = folder.position;
+    in.name = folder.name;
+    in.collapsed = folder.collapsed;
+    const auto it = counts.find(folder.id);
+    in.direct_entry_count = it == counts.end() ? 0 : it->second;
+    input.push_back(std::move(in));
   }
-  // ArciumModel stores folders in insertion order and keeps `position`
-  // normalised; the sidebar wants that order, not the vector's.
-  std::sort(result.begin(), result.end(),
-            [this](const SidebarFolder& a, const SidebarFolder& b) {
-              const Folder* fa = arcium_model_->GetFolder(a.id);
-              const Folder* fb = arcium_model_->GetFolder(b.id);
-              return fa->position < fb->position;
-            });
-  return result;
+  // Ordering, depth and the roll-up all belong to the flattening: this
+  // function's job is to say which folders are in the space being drawn and
+  // how many entries sit directly in each. A folder whose parent is in
+  // another space is filtered out here and so becomes a root there, which is
+  // the same answer the deserializer gives a cross-space parent on disk.
+  return BuildSidebarFolders(std::move(input));
+}
+
+void SidebarTabModel::SetFolderParent(FolderId id,
+                                      std::optional<FolderId> parent_id) {
+  arcium_model_->SetFolderParent(id, parent_id);
+}
+
+bool SidebarTabModel::CanMoveFolderTo(FolderId id,
+                                      std::optional<FolderId> parent_id) const {
+  // Asked of the model rather than of folders(): the model is the authority
+  // on its own tree, and it is the thing that will refuse the move anyway.
+  return arcium_model_->CanMoveFolderTo(id, parent_id);
 }
 
 const TabEntry* SidebarTabModel::FolderableEntry(EntryId id) const {

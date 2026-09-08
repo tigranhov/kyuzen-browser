@@ -178,6 +178,19 @@ class SidebarModel {
   // std::nullopt returns the entry to the top level of the Pinned section.
   virtual void MoveEntryToFolder(EntryId id,
                                  std::optional<FolderId> folder_id) = 0;
+  // Re-parents a folder, or does nothing when the move is one the model will
+  // not make: into itself, into its own descendant, or deeper than
+  // kMaxFolderDepth once the moved folder's own subtree is counted. A no-op
+  // rather than a crash for the same reason every other folder command is
+  // one -- a drag decided what to do from a snapshot of a tree that another
+  // window can have changed since.
+  virtual void SetFolderParent(FolderId id,
+                               std::optional<FolderId> parent_id) = 0;
+  // The same question asked before the move, so a drop target can refuse
+  // rather than accept a gesture and silently discard it -- the mistake
+  // can_accept_entry exists to prevent for entries.
+  virtual bool CanMoveFolderTo(FolderId id,
+                               std::optional<FolderId> parent_id) const = 0;
   virtual void SetFolderName(FolderId id, const std::u16string& name) = 0;
   // Removes the folder. Its entries return to the top level; a folder groups
   // entries, it does not own them.

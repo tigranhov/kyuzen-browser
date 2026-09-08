@@ -7,8 +7,10 @@
 #include <algorithm>
 #include <iterator>
 #include <limits>
+#include <map>
 #include <utility>
 
+#include "arcium/ui/sidebar/folder_tree.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/task/sequenced_task_runner.h"
@@ -371,30 +373,51 @@ std::vector<SidebarRow>::iterator FakeSidebarModel::SlotIn(
 }
 
 std::vector<SidebarFolder> FakeSidebarModel::folders() const {
-  // Sorted by position, not by the vector's order, because that is what
-  // SidebarTabModel does and the views are entitled to rely on it.
-  std::vector<const FakeFolder*> ordered;
+  std::vector<FolderInput> input;
   for (const FakeFolder& folder : folders_) {
-    ordered.push_back(&folder);
-  }
-  std::sort(ordered.begin(), ordered.end(),
-            [](const FakeFolder* a, const FakeFolder* b) {
-              return a->position < b->position;
-            });
-  std::vector<SidebarFolder> result;
-  for (const FakeFolder* folder : ordered) {
-    SidebarFolder out;
-    out.id = folder->id;
-    out.name = folder->name;
-    out.collapsed = folder->collapsed;
+    FolderInput in;
+    in.id = folder.id;
+    in.parent_id = folder.parent_id;
+    in.position = folder.position;
+    in.name = folder.name;
+    in.collapsed = folder.collapsed;
     for (const SidebarRow& row : rows_) {
-      if (row.folder_id == folder->id) {
-        ++out.entry_count;
+      if (row.folder_id == folder.id) {
+        ++in.direct_entry_count;
       }
     }
-    result.push_back(std::move(out));
+    input.push_back(std::move(in));
   }
-  return result;
+  // The same flattening the browser model uses, so a view test cannot pass
+  // here against an order the real sidebar never produces.
+  return BuildSidebarFolders(std::move(input));
+}
+
+void FakeSidebarModel::SetFolderParent(FolderId id,
+                                       std::optional<FolderId> parent_id) {
+  if (!CanMoveFolderTo(id, parent_id)) {
+    return;
+  }
+  for (FakeFolder& folder : folders_) {
+    if (folder.id == id) {
+      folder.parent_id = parent_id;
+      // Last among its new siblings, then renumbered -- ArciumModel's rule.
+      folder.position = std::numeric_limits<int>::max();
+      NormaliseFolderPositions();
+      Notify();
+      return;
+    }
+  }
+}
+
+bool FakeSidebarModel::CanMoveFolderTo(
+    FolderId id,
+    std::optional<FolderId> parent_id) const {
+  // Answered from the drawn tree rather than by mirroring ArciumModel's own
+  // walk. A second implementation on purpose: this fake exists so a view test
+  // does not need a browser, and a bug the two share would be invisible to
+  // both.
+  return CanMoveFolderInTree(folders(), id, parent_id);
 }
 
 void FakeSidebarModel::SetFolderCollapsed(FolderId id, bool collapsed) {
@@ -423,8 +446,12 @@ FolderId FakeSidebarModel::CreateFolderWithEntry(EntryId id,
   FakeFolder folder;
   folder.id = FolderId::Generate();
   folder.name = name;
-  // The same rule ArciumModel::AddFolder uses: the next free position.
-  folder.position = static_cast<int>(folders_.size());
+  // The same rule ArciumModel::AddFolder uses: the next free position among
+  // the folders that share this one's parent.
+  folder.position = static_cast<int>(std::count_if(
+      folders_.begin(), folders_.end(), [&folder](const FakeFolder& existing) {
+        return existing.parent_id == folder.parent_id;
+      }));
   folders_.push_back(folder);
   row->folder_id = folder.id;
   Notify();
@@ -453,15 +480,30 @@ void FakeSidebarModel::SetFolderName(FolderId id, const std::u16string& name) {
 }
 
 void FakeSidebarModel::DeleteFolder(FolderId id) {
-  const size_t before = folders_.size();
-  std::erase_if(folders_, [id](const FakeFolder& f) { return f.id == id; });
-  if (folders_.size() == before) {
+  std::optional<FolderId> parent;
+  bool found = false;
+  for (const FakeFolder& folder : folders_) {
+    if (folder.id == id) {
+      parent = folder.parent_id;
+      found = true;
+      break;
+    }
+  }
+  if (!found) {
     return;
   }
-  // The entries come back to the top level; the folder was a grouping.
+  std::erase_if(folders_, [id](const FakeFolder& f) { return f.id == id; });
+  // Up one level, entries and subfolders alike -- ArciumModel::RemoveFolder's
+  // rule. For a top-level folder that is the top level, which is what this
+  // did before there was another level to move to.
+  for (FakeFolder& folder : folders_) {
+    if (folder.parent_id == id) {
+      folder.parent_id = parent;
+    }
+  }
   for (SidebarRow& row : rows_) {
     if (row.folder_id == id) {
-      row.folder_id.reset();
+      row.folder_id = parent;
     }
   }
   NormaliseFolderPositions();
@@ -578,19 +620,21 @@ void FakeSidebarModel::Notify() {
 }
 
 void FakeSidebarModel::NormaliseFolderPositions() {
-  // Mirrors ArciumModel::NormalisePositions: a single sequence, sorted by the
-  // position folders already have, renumbered to 0..n-1.
-  std::vector<FakeFolder*> ordered;
-  ordered.reserve(folders_.size());
+  // Numbered among siblings -- same parent -- the way
+  // ArciumModel::NormalisePositions does, so a nested folder's position is a
+  // place in its own list.
+  std::map<std::optional<FolderId>, std::vector<FakeFolder*>> by_parent;
   for (FakeFolder& folder : folders_) {
-    ordered.push_back(&folder);
+    by_parent[folder.parent_id].push_back(&folder);
   }
-  std::sort(ordered.begin(), ordered.end(),
-            [](const FakeFolder* a, const FakeFolder* b) {
-              return a->position < b->position;
-            });
-  for (size_t i = 0; i < ordered.size(); ++i) {
-    ordered[i]->position = static_cast<int>(i);
+  for (auto& [parent, siblings] : by_parent) {
+    std::stable_sort(siblings.begin(), siblings.end(),
+                     [](const FakeFolder* a, const FakeFolder* b) {
+                       return a->position < b->position;
+                     });
+    for (size_t i = 0; i < siblings.size(); ++i) {
+      siblings[i]->position = static_cast<int>(i);
+    }
   }
 }
 

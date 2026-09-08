@@ -281,5 +281,84 @@ TEST_F(SidebarFoldersTest, AFolderChangeNotifiesOnce) {
   model->RemoveObserver(&observer);
 }
 
+TEST_F(SidebarFoldersTest, AFolderCanBeNestedInsideAnother) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  const EntryId entry = model->rows()[0].entry_id;
+  const FolderId outer = model->CreateFolderWithEntry(entry, u"Outer");
+  const FolderId inner = arcium_model_.AddFolder(u"Inner");
+
+  model->SetFolderParent(inner, outer);
+
+  std::vector<SidebarFolder> folders = model->folders();
+  ASSERT_EQ(2u, folders.size());
+  // Pre-order: the parent first, then what is inside it.
+  EXPECT_EQ(outer, folders[0].id);
+  EXPECT_EQ(0, folders[0].depth);
+  EXPECT_FALSE(folders[0].parent_id.has_value());
+  EXPECT_EQ(inner, folders[1].id);
+  EXPECT_EQ(1, folders[1].depth);
+  EXPECT_EQ(outer, folders[1].parent_id);
+}
+
+TEST_F(SidebarFoldersTest, AFolderCountsTheEntriesBelowIt) {
+  AddTab(browser(), GURL("https://b.example/"));
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  model->PinTab(1);
+  const std::vector<SidebarRow> rows = model->rows();
+  const EntryId first = rows[0].entry_id;
+  const EntryId second = rows[1].entry_id;
+
+  const FolderId outer = model->CreateFolderWithEntry(first, u"Outer");
+  const FolderId inner = arcium_model_.AddFolder(u"Inner");
+  model->SetFolderParent(inner, outer);
+  model->MoveEntryToFolder(second, inner);
+
+  std::vector<SidebarFolder> folders = model->folders();
+  ASSERT_EQ(2u, folders.size());
+  // One of its own plus one below it: what a collapsed header has to say to
+  // be honest about what it is hiding.
+  EXPECT_EQ(2, folders[0].entry_count);
+  EXPECT_EQ(1, folders[1].entry_count);
+}
+
+TEST_F(SidebarFoldersTest, TheModelRefusesAFolderMoveThatWouldMakeACycle) {
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  const FolderId outer = arcium_model_.AddFolder(u"Outer");
+  const FolderId inner = arcium_model_.AddFolder(u"Inner");
+  model->SetFolderParent(inner, outer);
+
+  EXPECT_FALSE(model->CanMoveFolderTo(outer, inner));
+  model->SetFolderParent(outer, inner);
+
+  std::vector<SidebarFolder> folders = model->folders();
+  ASSERT_EQ(2u, folders.size());
+  EXPECT_EQ(outer, folders[0].id);
+  EXPECT_EQ(0, folders[0].depth);
+  EXPECT_EQ(inner, folders[1].id);
+  EXPECT_EQ(1, folders[1].depth);
+}
+
+TEST_F(SidebarFoldersTest, DeletingAFolderLeavesItsSubfolderOneLevelUp) {
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  const FolderId outer = arcium_model_.AddFolder(u"Outer");
+  const FolderId middle = arcium_model_.AddFolder(u"Middle");
+  const FolderId inner = arcium_model_.AddFolder(u"Inner");
+  model->SetFolderParent(middle, outer);
+  model->SetFolderParent(inner, middle);
+
+  model->DeleteFolder(middle);
+
+  std::vector<SidebarFolder> folders = model->folders();
+  ASSERT_EQ(2u, folders.size());
+  EXPECT_EQ(outer, folders[0].id);
+  EXPECT_EQ(inner, folders[1].id);
+  EXPECT_EQ(1, folders[1].depth);
+  EXPECT_EQ(outer, folders[1].parent_id);
+}
+
 }  // namespace
 }  // namespace arcium

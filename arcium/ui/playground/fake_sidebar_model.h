@@ -109,6 +109,9 @@ class FakeSidebarModel : public SidebarModel {
                                  const std::u16string& name) override;
   void MoveEntryToFolder(EntryId id,
                          std::optional<FolderId> folder_id) override;
+  void SetFolderParent(FolderId id, std::optional<FolderId> parent_id) override;
+  bool CanMoveFolderTo(FolderId id,
+                       std::optional<FolderId> parent_id) const override;
   void SetFolderName(FolderId id, const std::u16string& name) override;
   void DeleteFolder(FolderId id) override;
   void SetArchiveTimeout(ArchiveTimeout timeout) override;
@@ -120,12 +123,13 @@ class FakeSidebarModel : public SidebarModel {
   void RemoveObserver(Observer* observer) override;
 
  private:
-  // Name, collapsed state and position; the count is derived from the rows on
-  // demand, which is what folders() hands the views precomputed. `position`
-  // is here because ArciumModel has it and folders() sorts by it: a fake
-  // without it would let a folder-ordering regression pass.
+  // Name, parent, collapsed state and position; the count is derived from the
+  // rows on demand, which is what folders() hands the views precomputed.
+  // `position` is here because ArciumModel has it and the flattening orders
+  // by it: a fake without it would let a folder-ordering regression pass.
   struct FakeFolder {
     FolderId id;
+    std::optional<FolderId> parent_id;
     std::u16string name;
     bool collapsed = false;
     int position = 0;

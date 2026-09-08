@@ -99,6 +99,9 @@ class SidebarTabModel : public SidebarModel,
                                  const std::u16string& name) override;
   void MoveEntryToFolder(EntryId id,
                          std::optional<FolderId> folder_id) override;
+  void SetFolderParent(FolderId id, std::optional<FolderId> parent_id) override;
+  bool CanMoveFolderTo(FolderId id,
+                       std::optional<FolderId> parent_id) const override;
   void SetFolderName(FolderId id, const std::u16string& name) override;
   void DeleteFolder(FolderId id) override;
   void SetArchiveTimeout(ArchiveTimeout timeout) override;
