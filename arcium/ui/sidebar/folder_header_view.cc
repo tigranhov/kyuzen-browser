@@ -68,6 +68,9 @@ FolderHeaderView::FolderHeaderView(Delegate delegate)
 
   count_ = AddChildView(std::make_unique<views::Label>());
   count_->SetSubpixelRenderingEnabled(false);
+  // As in TabRowView: the header's hover background must survive the cursor
+  // crossing its own label, which is a descendant.
+  SetNotifyEnterExitOnChild(true);
 }
 
 FolderHeaderView::~FolderHeaderView() = default;

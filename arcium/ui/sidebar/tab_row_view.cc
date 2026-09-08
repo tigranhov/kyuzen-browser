@@ -110,6 +110,13 @@ TabRowView::TabRowView(Delegate delegate)
       kCloseIcon, kIndicatorSize));
   close_->SetVisible(false);
   close_->SetID(kCloseButtonId);
+  // The hover buttons appear under the cursor that summoned them. Views'
+  // default counts a view as entered only while the mouse is over it and NOT
+  // over a descendant, so without this the button hides the instant it
+  // appears, uncovering the row, which shows it again -- a flicker for as
+  // long as the pointer rests there, and the row's hover background blinks
+  // with it.
+  SetNotifyEnterExitOnChild(true);
   close_->SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   close_->GetViewAccessibility().SetName(u"Close tab");
 }

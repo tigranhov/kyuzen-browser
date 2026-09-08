@@ -1370,6 +1370,41 @@ TEST_F(SidebarViewsTest, AnUnmovedPinnedRowKeepsItsCloseButton) {
   EXPECT_TRUE(row->GetViewByID(TabRowView::kCloseButtonId)->GetVisible());
 }
 
+// The close button appears under the cursor that summoned it, so the row must
+// still count as hovered once the pointer is over that button. Views' default
+// is the opposite -- a view is "entered" only while the mouse is over it and
+// NOT over a descendant -- which makes the button hide itself the instant it
+// appears, then reappear, forever. SectionDividerView already works around
+// this by hand with IsMouseHovered(); rows use the flag upstream provides.
+TEST_F(SidebarViewsTest, MovingOntoTheCloseButtonKeepsTheRowHovered) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  MakeList(SidebarSection::kPinned);
+  Refresh();
+
+  TabRowView* row = views::AsViewClass<TabRowView>(list_->children()[0]);
+  ASSERT_TRUE(row);
+
+  // Real routing, not the Hover() helper: that helper calls OnMouseEntered
+  // directly, so the event processor never holds the row as its target and
+  // never sends it the exit this test is about.
+  views::test::RunScheduledLayout(widget_.get());
+  generator_->MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
+  views::test::RunScheduledLayout(widget_.get());
+
+  views::View* close = row->GetViewByID(TabRowView::kCloseButtonId);
+  ASSERT_TRUE(close);
+  ASSERT_TRUE(close->GetVisible()) << "hovering the row must reveal it";
+  const gfx::Point on_button = close->GetBoundsInScreen().CenterPoint();
+  ASSERT_NE(on_button, row->GetBoundsInScreen().CenterPoint())
+      << "the button must sit somewhere the row's centre is not";
+
+  generator_->MoveMouseTo(on_button);
+  views::test::RunScheduledLayout(widget_.get());
+
+  EXPECT_TRUE(close->GetVisible())
+      << "the button hid itself when the cursor reached it";
+}
+
 TEST_F(SidebarViewsTest, ClickingRevertIssuesTheCommand) {
   model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
   MakeList(SidebarSection::kPinned);
