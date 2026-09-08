@@ -1132,6 +1132,55 @@ TEST_F(SidebarDragTest, AFolderHeaderHighlightsWhileADragIsOverIt) {
   EXPECT_FALSE(header->is_drop_target_for_testing());
 }
 
+// A header inside a collapsed folder is taken out of the child list and keeps
+// the bounds it last had. Without a check that it is still ours, it would go on
+// refusing drops in a band it no longer occupies -- a dead zone in the list
+// where nothing can be dropped and nothing explains why.
+//
+// The dragged thing is a favourite on purpose. A header only ever refuses an
+// entry this list cannot file, and a pinned row of this same list is always
+// filable, so dragging one could never tell the guard from its absence.
+TEST_F(SidebarDragTest, AHiddenHeaderDoesNotRefuseDropsWhereItUsedToBe) {
+  model_.AddTab(u"Deep", "https://deep.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Mid", "https://mid.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Fav", "https://fav.example/", SidebarSection::kFavorites,
+                false);
+  MakePinned();
+  MakeGrid();
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"Mid"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Deep"});
+  model_.SetFolderParent(inner, outer);
+  Refresh();
+  views::test::RunScheduledLayout(widget_.get());
+
+  // Pre-order, so the outer header is the first and the inner the second.
+  std::vector<FolderHeaderView*> headers;
+  for (views::View* child : pinned_->children()) {
+    if (FolderHeaderView* header =
+            views::AsViewClass<FolderHeaderView>(child)) {
+      headers.push_back(header);
+    }
+  }
+  ASSERT_EQ(2u, headers.size());
+  const int band_y = headers[1]->y() + headers[1]->height() / 2;
+
+  model_.SetFolderCollapsed(outer, true);
+  Refresh();
+  views::test::RunScheduledLayout(widget_.get());
+
+  ASSERT_FALSE(grid_->children().empty());
+  std::unique_ptr<ui::OSExchangeData> data =
+      DragDataFrom(grid_, grid_->children()[0]);
+  ui::DropTargetEvent event(*data, gfx::PointF(10, band_y),
+                            gfx::PointF(10, band_y),
+                            ui::DragDropTypes::DRAG_MOVE);
+  pinned_->OnDragEntered(event);
+  EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, pinned_->OnDragUpdated(event));
+  EXPECT_TRUE(pinned_->drop_index_for_testing().has_value());
+  pinned_->OnDragExited();
+}
+
 // ---------------------------------------------------------------------------
 // Double-click renaming, and the press it shares with the drag
 // ---------------------------------------------------------------------------
