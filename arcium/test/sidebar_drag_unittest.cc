@@ -20,6 +20,8 @@
 #include "arcium/ui/sidebar/tab_list_view.h"
 #include "arcium/ui/sidebar/tab_row_view.h"
 #include "base/memory/raw_ptr.h"
+#include "base/pickle.h"
+#include "base/uuid.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
@@ -156,6 +158,12 @@ class SidebarDragTest : public views::ViewsTestBase {
     auto data = std::make_unique<ui::OSExchangeData>();
     controller->WriteDragDataForView(source, gfx::Point(), data.get());
     return data;
+  }
+
+  // A header, as both the drag controller and the source view it is.
+  std::unique_ptr<ui::OSExchangeData> DragDataFromHeader(
+      FolderHeaderView* header) {
+    return DragDataFrom(header, header);
   }
 
   // One drop at `at`, in `target`'s own coordinates: enter, one update, then
@@ -1179,6 +1187,147 @@ TEST_F(SidebarDragTest, AHiddenHeaderDoesNotRefuseDropsWhereItUsedToBe) {
   EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, pinned_->OnDragUpdated(event));
   EXPECT_TRUE(pinned_->drop_index_for_testing().has_value());
   pinned_->OnDragExited();
+}
+
+// ---------------------------------------------------------------------------
+// Dragging a folder into a folder
+// ---------------------------------------------------------------------------
+
+TEST_F(SidebarDragTest, AFolderHeaderCarriesItsFolderInThePayload) {
+  model_.AddTab(u"Inside", "https://inside.example/", SidebarSection::kPinned,
+                false);
+  MakePinned();
+  const FolderId folder = model_.AddFolderWith(u"Work", {u"Inside"});
+  Refresh();
+
+  FolderHeaderView* header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  ASSERT_TRUE(header);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFromHeader(header);
+
+  std::optional<RowDragData> payload = RowDragData::Read(*data);
+  ASSERT_TRUE(payload.has_value());
+  EXPECT_TRUE(payload->is_folder());
+  EXPECT_FALSE(payload->is_entry());
+  EXPECT_FALSE(payload->is_tab());
+  EXPECT_EQ(folder, payload->folder_id);
+}
+
+TEST_F(SidebarDragTest, APayloadNamingBothAnEntryAndAFolderIsRefused) {
+  base::Pickle pickle;
+  pickle.WriteString(base::Uuid::GenerateRandomV4().AsLowercaseString());
+  pickle.WriteString(base::Uuid::GenerateRandomV4().AsLowercaseString());
+  pickle.WriteInt(-1);
+  ui::OSExchangeData data;
+  data.SetPickledData(RowDragData::Format(), pickle);
+
+  // No source here writes a payload naming two things, so one that does is
+  // corrupt. Reading it as whichever field happens to be checked first would
+  // let a corrupt payload choose its own meaning.
+  EXPECT_FALSE(RowDragData::Read(data).has_value());
+}
+
+TEST_F(SidebarDragTest, AFolderDroppedOnAFolderHeaderGoesInside) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  MakePinned();
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Two"});
+  Refresh();
+
+  FolderHeaderView* outer_header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  FolderHeaderView* inner_header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[2]);
+  ASSERT_TRUE(outer_header);
+  ASSERT_TRUE(inner_header);
+  ASSERT_EQ(inner, inner_header->folder().id);
+
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFromHeader(inner_header);
+  DropOn(outer_header, *data, gfx::Point(10, 10));
+
+  std::vector<SidebarFolder> folders = model_.folders();
+  ASSERT_EQ(2u, folders.size());
+  EXPECT_EQ(outer, folders[0].id);
+  EXPECT_EQ(inner, folders[1].id);
+  EXPECT_EQ(1, folders[1].depth);
+  EXPECT_EQ(outer, folders[1].parent_id);
+}
+
+TEST_F(SidebarDragTest, AFolderHeaderRefusesItsOwnDescendant) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  MakePinned();
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Two"});
+  model_.SetFolderParent(inner, outer);
+  Refresh();
+
+  FolderHeaderView* outer_header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  FolderHeaderView* inner_header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[2]);
+  ASSERT_TRUE(outer_header);
+  ASSERT_TRUE(inner_header);
+  ASSERT_EQ(inner, inner_header->folder().id);
+
+  // A2.5.2: dragging a folder onto its own child is refused, and the model is
+  // unchanged.
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFromHeader(outer_header);
+  EXPECT_FALSE(inner_header->CanDrop(*data));
+  ui::DropTargetEvent event(*data, gfx::PointF(10, 10), gfx::PointF(10, 10),
+                            ui::DragDropTypes::DRAG_MOVE);
+  EXPECT_FALSE(inner_header->GetDropCallback(event));
+  // And no highlight: a header the drop cannot land in must not look like one
+  // it can.
+  EXPECT_FALSE(inner_header->is_drop_target_for_testing());
+
+  std::vector<SidebarFolder> folders = model_.folders();
+  ASSERT_EQ(2u, folders.size());
+  EXPECT_EQ(outer, folders[0].id);
+  EXPECT_EQ(0, folders[0].depth);
+  EXPECT_EQ(inner, folders[1].id);
+  EXPECT_EQ(1, folders[1].depth);
+}
+
+TEST_F(SidebarDragTest, AFolderHeaderRefusesItself) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  MakePinned();
+  model_.AddFolderWith(u"Outer", {u"One"});
+  Refresh();
+
+  FolderHeaderView* header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  ASSERT_TRUE(header);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFromHeader(header);
+  EXPECT_FALSE(header->CanDrop(*data));
+}
+
+TEST_F(SidebarDragTest, AFolderRefusedByAHeaderDoesNotLandInTheListBehindIt) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  MakePinned();
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Two"});
+  model_.SetFolderParent(inner, outer);
+  Refresh();
+
+  FolderHeaderView* outer_header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  FolderHeaderView* inner_header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[2]);
+  ASSERT_TRUE(outer_header);
+  ASSERT_TRUE(inner_header);
+  ASSERT_EQ(inner, inner_header->folder().id);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFromHeader(outer_header);
+
+  // DropHelper walks a refused header's drop up to the owning list. The list
+  // must not quietly take a folder the header just said no to -- the refusal
+  // has to mean the same thing one pixel lower.
+  ui::DropTargetEvent event(*data, gfx::PointF(10, inner_header->y() + 2),
+                            gfx::PointF(10, inner_header->y() + 2),
+                            ui::DragDropTypes::DRAG_MOVE);
+  EXPECT_FALSE(pinned_->GetDropCallback(event));
 }
 
 // ---------------------------------------------------------------------------

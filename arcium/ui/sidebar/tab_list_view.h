@@ -137,6 +137,12 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // MoveEntryToFolder. The header asks its owner because the owner is the
   // one that knows which section it draws and which entries it holds.
   bool CanFolderAcceptEntry(EntryId id) const;
+  // Whether one of this list's folders could hold the folder `id`. The list
+  // asks the model rather than reading its own rows: a cycle and the depth
+  // cap are properties of the whole tree, and the model is its authority.
+  bool CanFolderAcceptFolder(FolderId id, FolderId parent) const;
+  // A folder header dropped on one of this list's folder headers.
+  void OnDropFolderOnFolder(FolderId id, const SidebarFolder& folder);
   // One of this list's rows started a drag.
   void OnRowDragStarted();
 

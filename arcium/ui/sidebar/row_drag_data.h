@@ -27,8 +27,12 @@ namespace arcium {
 struct RowDragData {
   // Set when the dragged row was backed by a persistent entry.
   EntryId entry_id;
-  // The dragged row's index in the tab strip. -1 for a cold entry, which has
-  // no tab.
+  // Set when what was dragged was a folder header. Never set together with
+  // `entry_id`: a payload names exactly one thing, and Read() refuses one
+  // that names two.
+  FolderId folder_id;
+  // The dragged row's index in the tab strip. -1 for a cold entry and for a
+  // folder, neither of which has a tab.
   int tab_index = -1;
 
   // The custom clipboard format the payload rides in, registered once for the
@@ -45,7 +49,10 @@ struct RowDragData {
   // entry and is commanded by index. Exactly one of these is true for a
   // payload that Read() returned.
   bool is_entry() const { return entry_id.is_valid(); }
-  bool is_tab() const { return !entry_id.is_valid() && tab_index >= 0; }
+  bool is_folder() const { return folder_id.is_valid(); }
+  bool is_tab() const {
+    return !entry_id.is_valid() && !folder_id.is_valid() && tab_index >= 0;
+  }
 };
 
 }  // namespace arcium

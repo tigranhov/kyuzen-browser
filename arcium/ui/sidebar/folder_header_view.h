@@ -8,6 +8,7 @@
 #include <set>
 #include <string>
 
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
@@ -16,6 +17,7 @@
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/button.h"
+#include "ui/views/drag_controller.h"
 
 namespace ui {
 class ClipboardFormatType;
@@ -36,7 +38,8 @@ class RenameField;
 // SidebarFolder it is given, including the count, so opening the sidebar
 // never walks the rows once per folder.
 class FolderHeaderView : public views::Button,
-                         public views::ContextMenuController {
+                         public views::ContextMenuController,
+                         public views::DragController {
   METADATA_HEADER(FolderHeaderView, views::Button)
 
  public:
@@ -65,6 +68,17 @@ class FolderHeaderView : public views::Button,
     // dropped since the drag began, which nothing written into the payload at
     // drag-start could.
     base::RepeatingCallback<bool(EntryId id)> can_accept_entry;
+    // Whether `id` may be moved inside `parent`. The header cannot answer
+    // this: a cycle and a depth cap are properties of the whole tree, and
+    // only the owning list holds the model that knows it.
+    base::RepeatingCallback<bool(FolderId id, FolderId parent)>
+        can_accept_folder;
+    // A folder header dropped on this one: it becomes this folder's child.
+    base::RepeatingCallback<void(FolderId id, const SidebarFolder& folder)>
+        drop_folder;
+    // Once per drag, at the one moment a source knows one is starting -- the
+    // signal an empty section needs to reserve a band to be dropped on.
+    base::RepeatingClosure drag_started;
   };
 
   explicit FolderHeaderView(Delegate delegate);
@@ -110,6 +124,17 @@ class FolderHeaderView : public views::Button,
   views::View::DropCallback GetDropCallback(
       const ui::DropTargetEvent& event) override;
 
+  // views::DragController, drag source half. A folder is dragged by its
+  // header, which is the only thing on screen that represents it.
+  void WriteDragDataForView(views::View* sender,
+                            const gfx::Point& press_pt,
+                            ui::OSExchangeData* data) override;
+  int GetDragOperationsForView(views::View* sender,
+                               const gfx::Point& p) override;
+  bool CanStartDragForView(views::View* sender,
+                           const gfx::Point& press_pt,
+                           const gfx::Point& p) override;
+
   bool is_drop_target_for_testing() const { return drop_target_; }
 
  private:
@@ -124,7 +149,7 @@ class FolderHeaderView : public views::Button,
   void OnRenameFinished(FolderId id, bool commit, const std::u16string& name);
   void Toggle();
   void SetDropTarget(bool drop_target);
-  void PerformDrop(EntryId id,
+  void PerformDrop(RowDragData payload,
                    const ui::DropTargetEvent& event,
                    ui::mojom::DragOperation& output_drag_op,
                    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);

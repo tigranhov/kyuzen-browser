@@ -192,8 +192,16 @@ bool TabListView::IsOverHeaderAt(int y) const {
 }
 
 bool TabListView::DropRefusedByHeader(int y, const RowDragData& payload) const {
-  return payload.is_entry() && IsOverHeaderAt(y) &&
-         !CanFolderAcceptEntry(payload.entry_id);
+  if (!IsOverHeaderAt(y)) {
+    return false;
+  }
+  if (payload.is_folder()) {
+    // A header that said no to a folder must go on meaning no one pixel
+    // lower. Without this the list behind it takes the drop and the gesture
+    // lands somewhere the user was told it could not.
+    return true;
+  }
+  return payload.is_entry() && !CanFolderAcceptEntry(payload.entry_id);
 }
 
 void TabListView::SetDropIndex(std::optional<size_t> index) {
@@ -218,8 +226,14 @@ bool TabListView::AreDropTypesRequired() {
 bool TabListView::CanDrop(const ui::OSExchangeData& data) {
   // Favourites are the grid's, not a list's; the other two sections take any
   // row, and which command that becomes is PerformDrop's business.
-  return section_ != SidebarSection::kFavorites &&
-         RowDragData::Read(data).has_value();
+  //
+  // A folder is not a row. Task 9 gives the list's own background a meaning
+  // for one -- back to the top level -- and until then a folder dropped
+  // anywhere but on a header does nothing, rather than being read as the
+  // entry drop it is not.
+  std::optional<RowDragData> payload = RowDragData::Read(data);
+  return section_ != SidebarSection::kFavorites && payload.has_value() &&
+         !payload->is_folder();
 }
 
 void TabListView::OnDragEntered(const ui::DropTargetEvent& event) {

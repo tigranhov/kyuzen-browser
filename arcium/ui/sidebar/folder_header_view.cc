@@ -10,6 +10,7 @@
 
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
+#include "arcium/ui/sidebar/row_drag_image.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/vector_icons.h"
@@ -44,6 +45,7 @@ FolderHeaderView::FolderHeaderView(Delegate delegate)
       delegate_(std::move(delegate)) {
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   set_context_menu_controller(this);
+  set_drag_controller(this);
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
@@ -239,16 +241,64 @@ bool FolderHeaderView::AreDropTypesRequired() {
   return true;
 }
 
+void FolderHeaderView::WriteDragDataForView(views::View* sender,
+                                            const gfx::Point& press_pt,
+                                            ui::OSExchangeData* data) {
+  RowDragData payload;
+  payload.folder_id = folder_.id;
+  payload.Write(data);
+  // The image helper draws a title and, with no icon to rasterize, the
+  // default favicon. A folder has neither an icon nor a URL, so it gets
+  // exactly that with its own name on it -- rather than a second helper that
+  // would draw the same thing.
+  SidebarRow as_row;
+  as_row.title = folder_.name;
+  SetRowDragImage(as_row, sender, press_pt, data);
+  // Once per drag, at the one moment a source knows one is starting.
+  if (delegate_.drag_started) {
+    delegate_.drag_started.Run();
+  }
+}
+
+int FolderHeaderView::GetDragOperationsForView(views::View* sender,
+                                               const gfx::Point& p) {
+  // While a rename is open the field owns the header, and a header drawing no
+  // folder is not something anything can be told to move.
+  if (is_renaming() || !folder_.id.is_valid()) {
+    return ui::DragDropTypes::DRAG_NONE;
+  }
+  // Never DRAG_COPY: a folder is one thing in one place, and two headers for
+  // one folder is a state the model cannot hold.
+  return ui::DragDropTypes::DRAG_MOVE;
+}
+
+bool FolderHeaderView::CanStartDragForView(views::View* sender,
+                                           const gfx::Point& press_pt,
+                                           const gfx::Point& p) {
+  if (is_renaming()) {
+    return false;
+  }
+  // Views' own threshold, so a header starts dragging exactly when every
+  // other draggable view does.
+  return views::View::ExceededDragThreshold(press_pt - p);
+}
+
 bool FolderHeaderView::CanAccept(const ui::OSExchangeData& data) const {
-  // Entries only, and only entries a folder may hold. A Today tab has no
-  // entry to put in a folder; a favourite is a tile in the grid with nowhere
-  // to be indented to. Refusing either here is what lets DropHelper walk up
-  // to the Pinned list — for a tab that is how it becomes an entry, and for a
-  // favourite it is at worst the same landing a drop a few pixels above or
-  // below the header already gives.
   std::optional<RowDragData> payload = RowDragData::Read(data);
-  return payload.has_value() && payload->is_entry() &&
-         delegate_.can_accept_entry &&
+  if (!payload) {
+    return false;
+  }
+  if (payload->is_folder()) {
+    // Into itself, into its own descendant, or past the depth cap: all three
+    // are properties of the tree, so the owning list answers them.
+    return delegate_.can_accept_folder &&
+           delegate_.can_accept_folder.Run(payload->folder_id, folder_.id);
+  }
+  // Entries only otherwise, and only entries a folder may hold. A Today tab
+  // has no entry to put in a folder; a favourite is a tile in the grid with
+  // nowhere to be indented to. Refusing either here is what lets DropHelper
+  // walk up to the Pinned list -- for a tab that is how it becomes an entry.
+  return payload->is_entry() && delegate_.can_accept_entry &&
          delegate_.can_accept_entry.Run(payload->entry_id);
 }
 
@@ -274,25 +324,34 @@ views::View::DropCallback FolderHeaderView::GetDropCallback(
     const ui::DropTargetEvent& event) {
   SetDropTarget(false);
   std::optional<RowDragData> payload = RowDragData::Read(event.data());
-  if (!payload || !CanAccept(event.data()) || !delegate_.drop_entry) {
+  if (!payload || !CanAccept(event.data())) {
+    return base::NullCallback();
+  }
+  if (payload->is_folder() ? !delegate_.drop_folder : !delegate_.drop_entry) {
     return base::NullCallback();
   }
   return base::BindOnce(&FolderHeaderView::PerformDrop,
-                        weak_factory_.GetWeakPtr(), payload->entry_id);
+                        weak_factory_.GetWeakPtr(), *payload);
 }
 
 void FolderHeaderView::PerformDrop(
-    EntryId id,
+    RowDragData payload,
     const ui::DropTargetEvent& event,
     ui::mojom::DragOperation& output_drag_op,
     std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
   output_drag_op = ui::mojom::DragOperation::kMove;
-  // A copy of the folder, and of the callback: the command rebuilds the list
+  // Copies of the folder and of the callback: the command rebuilds the list
   // and can destroy this view before Run() returns.
+  const SidebarFolder folder = folder_;
+  if (payload.is_folder()) {
+    base::RepeatingCallback<void(FolderId, const SidebarFolder&)> drop =
+        delegate_.drop_folder;
+    drop.Run(payload.folder_id, folder);
+    return;
+  }
   base::RepeatingCallback<void(EntryId, const SidebarFolder&)> drop =
       delegate_.drop_entry;
-  const SidebarFolder folder = folder_;
-  drop.Run(id, folder);
+  drop.Run(payload.entry_id, folder);
 }
 
 gfx::Size FolderHeaderView::CalculatePreferredSize(

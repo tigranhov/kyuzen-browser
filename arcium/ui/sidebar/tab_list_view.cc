@@ -85,6 +85,12 @@ std::unique_ptr<FolderHeaderView> TabListView::MakeHeader() {
       base::BindRepeating(&TabListView::OnDropOnFolder, base::Unretained(this));
   delegate.can_accept_entry = base::BindRepeating(
       &TabListView::CanFolderAcceptEntry, base::Unretained(this));
+  delegate.can_accept_folder = base::BindRepeating(
+      &TabListView::CanFolderAcceptFolder, base::Unretained(this));
+  delegate.drop_folder = base::BindRepeating(&TabListView::OnDropFolderOnFolder,
+                                             base::Unretained(this));
+  delegate.drag_started = base::BindRepeating(&TabListView::OnRowDragStarted,
+                                              base::Unretained(this));
   // Not added to the child list here: SetRows adds the headers it draws, in
   // the plan's order, and leaves a hidden one out.
   return std::make_unique<FolderHeaderView>(std::move(delegate));
@@ -322,6 +328,16 @@ bool TabListView::CanFolderAcceptEntry(EntryId id) const {
     }
   }
   return false;
+}
+
+bool TabListView::CanFolderAcceptFolder(FolderId id, FolderId parent) const {
+  return section_ == SidebarSection::kPinned &&
+         model_->CanMoveFolderTo(id, parent);
+}
+
+void TabListView::OnDropFolderOnFolder(FolderId id,
+                                       const SidebarFolder& folder) {
+  model_->SetFolderParent(id, folder.id);
 }
 
 BEGIN_METADATA(TabListView)
