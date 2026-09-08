@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "arcium/browser/model/model_serializer.h"
+#include "base/containers/span.h"
 
 namespace arcium {
 
@@ -42,8 +43,12 @@ std::optional<base::DictValue> MigrateModelDict(base::DictValue dict) {
   if (!version || *version < 1 || *version > kModelSchemaVersion) {
     return std::nullopt;
   }
+  // Through a span rather than subscripting the array directly: a raw
+  // subscript with a computed index is what -Wunsafe-buffer-usage exists to
+  // catch, and span's own operator[] checks the bound it was built from.
+  const base::span<const MigrationStep> steps(kSteps);
   for (int from = *version; from < kModelSchemaVersion; ++from) {
-    if (!kSteps[from - 1](dict)) {
+    if (!steps[from - 1](dict)) {
       return std::nullopt;
     }
     // Stamped by the pipeline rather than by each step, so a step cannot
