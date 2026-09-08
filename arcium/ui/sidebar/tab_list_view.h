@@ -117,7 +117,7 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // tab. Only the first can be cold, and a cold row has no tab index.
   void OnActivateRow(const SidebarRow& row);
   void OnCloseRow(const SidebarRow& row);
-  void OnRenameRow(EntryId id, const std::u16string& title);
+  void OnRenameRow(const SidebarRow& row, const std::u16string& title);
   void OnRevertRow(const SidebarRow& row);
   void OnShowRowMenu(TabRowView* source,
                      const SidebarRow& row,

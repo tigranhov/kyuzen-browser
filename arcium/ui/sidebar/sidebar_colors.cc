@@ -29,8 +29,8 @@ void AddArciumColorMixer(ui::ColorProvider* provider,
   mixer[kColorArciumSidebarBackgroundTop] = {
       ui::AlphaBlend(kAccent, surface, dark ? 0x2E : 0x1A)};
   mixer[kColorArciumRowText] = {text};
-  mixer[kColorArciumRowTextActive] = {
-      dark ? SK_ColorWHITE : SkColorSetRGB(0x11, 0x11, 0x16)};
+  mixer[kColorArciumRowTextActive] = {dark ? SK_ColorWHITE
+                                           : SkColorSetRGB(0x11, 0x11, 0x16)};
   mixer[kColorArciumRowTextSecondary] = {ui::SetAlpha(text, 0x99)};
   mixer[kColorArciumRowActiveBackground] = {
       ui::SetAlpha(ink, dark ? 0x1F : 0x14)};

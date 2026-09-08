@@ -176,16 +176,17 @@ void TabRowView::UpdateTrailingButtons() {
 }
 
 void TabRowView::BeginRename() {
-  // A Today tab has no entry, so there is nothing to carry the name past the
-  // tab's life; renaming it would be a lie.
-  if (!row_.entry_id.is_valid() || is_renaming()) {
+  // A cold entry has no tab and a Today tab has no entry, but both can be
+  // named; a row that is neither draws nothing this could rename.
+  const bool nameable = row_.entry_id.is_valid() || row_.tab_index >= 0;
+  if (!nameable || is_renaming()) {
     return;
   }
   renaming_entry_id_ = row_.entry_id;
+  renaming_row_ = row_;
   auto field = std::make_unique<RenameField>(
-      row_.title,
-      base::BindOnce(&TabRowView::OnRenameFinished, weak_factory_.GetWeakPtr(),
-                     renaming_entry_id_));
+      row_.title, base::BindOnce(&TabRowView::OnRenameFinished,
+                                 weak_factory_.GetWeakPtr(), renaming_row_));
   field->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::LayoutOrientation::kHorizontal,
@@ -213,7 +214,7 @@ void TabRowView::AbandonRename() {
   InvalidateLayout();
 }
 
-void TabRowView::OnRenameFinished(EntryId id,
+void TabRowView::OnRenameFinished(const SidebarRow& row,
                                   bool commit,
                                   const std::u16string& title) {
   if (rename_field_) {
@@ -222,17 +223,22 @@ void TabRowView::OnRenameFinished(EntryId id,
   }
   UpdateTrailingButtons();
   InvalidateLayout();
-  // `id` is the entry the edit was started on, not whatever this pooled view
+  // `row` is the row the edit was started on, not whatever this pooled view
   // draws now: the model can move — from another window on the same profile —
-  // between the Enter and this posted task, and the write must land on the
-  // entry the user was typing into. A model that no longer has it makes the
-  // command a no-op, which is the right answer.
-  if (!commit || title.empty() || !id.is_valid() || !delegate_.rename) {
+  // between the Enter and this posted task, and the write must land on what
+  // the user was typing into. A model that no longer has it makes the command
+  // a no-op, which is the right answer.
+  //
+  // An empty title is a command here rather than nothing: on a Today tab it
+  // clears the custom name and the row follows the page again. On an entry it
+  // is still refused, because a permanent title has no page to fall back to.
+  const bool clearing = title.empty();
+  if (!commit || !delegate_.rename || (clearing && row.entry_id.is_valid())) {
     return;
   }
-  base::RepeatingCallback<void(EntryId, const std::u16string&)> rename =
-      delegate_.rename;
-  rename.Run(id, title);
+  base::RepeatingCallback<void(const SidebarRow&, const std::u16string&)>
+      rename = delegate_.rename;
+  rename.Run(row, title);
 }
 
 void TabRowView::Revert() {

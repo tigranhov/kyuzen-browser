@@ -274,6 +274,32 @@ void SidebarTabModel::SetEntryTitle(EntryId id, const std::u16string& title) {
   arcium_model_->SetCustomTitle(id, title);
 }
 
+void SidebarTabModel::SetTabTitle(int tab_index,
+                                  const GURL& expected_url,
+                                  const std::u16string& title) {
+  if (!tab_strip_model_ || tab_index < 0 ||
+      tab_index >= tab_strip_model_->count()) {
+    return;
+  }
+  // Resolved here and not held: the index is true now, the handle stays true.
+  tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(tab_index);
+  if (!tab) {
+    return;
+  }
+  // The slot may hold a different page than the one the edit opened on; see
+  // the interface comment. Compared against the same URL RowForTab draws.
+  if (tabs::TabData::FromTabInterface(tab).visible_url != expected_url) {
+    return;
+  }
+  if (title.empty()) {
+    // Clearing, so the row goes back to following the page's own title.
+    today_titles_.erase(tab->GetHandle());
+  } else {
+    today_titles_[tab->GetHandle()] = title;
+  }
+  NotifyChanged();
+}
+
 void SidebarTabModel::ReturnToPinnedUrl(EntryId id) {
   const TabEntry* entry = arcium_model_->GetEntry(id);
   tabs::TabInterface* tab = LiveTabForEntry(id);

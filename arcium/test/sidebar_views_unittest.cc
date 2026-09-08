@@ -362,16 +362,16 @@ TEST_F(SidebarViewsTest, TheTodaySectionHasNoFolders) {
   EXPECT_EQ(0u, list_->folder_count());
 }
 
-// A Today tab has no entry, so there is nothing to carry a name past the
-// tab's life and no rename is offered.
-TEST_F(SidebarViewsTest, ARowWithNoEntryCannotBeRenamed) {
-  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, true);
-  MakeList(SidebarSection::kToday);
-  Refresh();
+// A Today tab now carries a name of its own, so the refusal is narrower than
+// it was: what cannot be renamed is a row naming neither an entry nor a tab,
+// which has nothing at either end to hold the name.
+TEST_F(SidebarViewsTest, ARowNamingNeitherAnEntryNorATabCannotBeRenamed) {
+  auto row = std::make_unique<TabRowView>(TabRowView::Delegate{});
+  ASSERT_FALSE(row->row().entry_id.is_valid());
+  ASSERT_LT(row->row().tab_index, 0);
 
-  TabRowView* row = views::AsViewClass<TabRowView>(list_->children()[0]);
-  ASSERT_TRUE(row);
   row->BeginRename();
+
   EXPECT_FALSE(row->is_renaming());
 }
 
@@ -747,8 +747,10 @@ TEST_F(SidebarViewsTest, TheMenuForATodayRow) {
   ScopedMenuCapture capture;
   RightClickOn(views::AsViewClass<TabRowView>(list_->children()[0]));
   ASSERT_TRUE(capture.menu());
-  EXPECT_EQ((std::vector<std::u16string>{u"Pin", u"Add to Favorites",
-                                         u"Rename [disabled]", u"Close"}),
+  // Rename is live now: a Today tab's name lives in the model's side table
+  // and dies with the tab, so the item has somewhere to write.
+  EXPECT_EQ((std::vector<std::u16string>{u"Pin", u"Add to Favorites", u"Rename",
+                                         u"Close"}),
             MenuLabels(capture.menu()->menu()));
 }
 
@@ -1756,6 +1758,38 @@ TEST_F(SidebarViewsTest, PinnedAndTodayShareOneScrollViewport) {
                                          SidebarSection::kToday}),
             scrolling)
       << "both lists must live inside the one scroll viewport";
+}
+
+// A Today tab can be named now that SetTabTitle gives the name somewhere to
+// live. It used to be refused for having no entry.
+TEST_F(SidebarViewsTest, ATodayRowCanBeRenamed) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, false);
+  MakeList(SidebarSection::kToday);
+  Refresh();
+
+  TabRowView* row = views::AsViewClass<TabRowView>(list_->children()[0]);
+  ASSERT_TRUE(row);
+  ASSERT_FALSE(row->row().entry_id.is_valid()) << "must be a Today row";
+
+  row->BeginRename();
+
+  EXPECT_TRUE(row->is_renaming());
+}
+
+// The double-click gesture reaches Today rows for the same reason, which is
+// what makes it the way to rename without going through the menu.
+TEST_F(SidebarViewsTest, DoubleClickingATodayRowOpensTheRenameField) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, false);
+  MakeList(SidebarSection::kToday);
+  Refresh();
+
+  TabRowView* row = views::AsViewClass<TabRowView>(list_->children()[0]);
+  ASSERT_TRUE(row);
+  views::test::RunScheduledLayout(widget_.get());
+  generator_->MoveMouseTo(row->GetBoundsInScreen().CenterPoint());
+  generator_->DoubleClickLeftButton();
+
+  EXPECT_TRUE(row->is_renaming());
 }
 
 // A two-finger scroll arrives as a ui::ScrollEvent, and ScrollView::

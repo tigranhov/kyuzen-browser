@@ -5,6 +5,7 @@
 #ifndef ARCIUM_UI_BROWSER_SIDEBAR_TAB_MODEL_H_
 #define ARCIUM_UI_BROWSER_SIDEBAR_TAB_MODEL_H_
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -80,6 +81,14 @@ class SidebarTabModel : public SidebarModel,
   void ActivateEntry(EntryId id) override;
   void CloseEntryTab(EntryId id) override;
   void SetEntryTitle(EntryId id, const std::u16string& title) override;
+  // How many Today tabs currently carry a custom name. Test-only: a handle
+  // is never recycled, so an entry left behind by a closed tab changes no
+  // behaviour and a test cannot otherwise see the leak.
+  size_t today_title_count_for_testing() const { return today_titles_.size(); }
+
+  void SetTabTitle(int tab_index,
+                   const GURL& expected_url,
+                   const std::u16string& title) override;
   void ReturnToPinnedUrl(EntryId id) override;
   void MoveEntryToSection(EntryId id,
                           SidebarSection section,
@@ -170,6 +179,15 @@ class SidebarTabModel : public SidebarModel,
   // The entry awaiting the tab ActivateEntry() just asked for. Valid only
   // across that synchronous call.
   EntryId pending_bind_;
+  // Custom names for Today tabs, which have no entry to hold one. Never
+  // written to disk: the name dies with the tab. Keyed by handle rather than
+  // strip index, because an index is only true at the instant it is read.
+  //
+  // An entry is erased on any removal from this strip, including a move to
+  // another window -- unlike the binding, which survives that move. This
+  // model draws one window, so a tab that has left it would leave a name
+  // behind that nothing can reach or clear.
+  std::map<tabs::TabHandle, std::u16string> today_titles_;
   base::WeakPtrFactory<SidebarTabModel> weak_factory_{this};
 };
 

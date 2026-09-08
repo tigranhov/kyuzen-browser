@@ -46,11 +46,14 @@ class TabRowView : public views::Button,
     // owner has to dispatch on entry_id instead.
     base::RepeatingCallback<void(const SidebarRow& row)> activate;
     base::RepeatingCallback<void(const SidebarRow& row)> close;
-    // A finished inline rename, against the entry the edit was started on
-    // rather than whatever this row draws when it ends: the view is pooled by
-    // position, so the two are not the same thing. Never called for a row
-    // with no entry.
-    base::RepeatingCallback<void(EntryId id, const std::u16string& title)>
+    // A finished inline rename, against the row the edit was started on
+    // rather than whatever this view draws when it ends: the view is pooled
+    // by position, so the two are not the same thing. The whole row travels
+    // because a Today tab has no entry to name it by, and its strip index
+    // alone would be a lie by the time this runs -- the owner dispatches on
+    // entry_id, and falls back to the index checked against the row's URL.
+    base::RepeatingCallback<void(const SidebarRow& row,
+                                 const std::u16string& title)>
         rename;
     base::RepeatingCallback<void(const SidebarRow& row)> return_to_pinned_url;
     // `source` is this view, so the menu's Rename item can start the edit on
@@ -117,7 +120,9 @@ class TabRowView : public views::Button,
   // Takes the field away without an outcome, for when this view stops being
   // the view for the entry the edit was started on.
   void AbandonRename();
-  void OnRenameFinished(EntryId id, bool commit, const std::u16string& title);
+  void OnRenameFinished(const SidebarRow& row,
+                        bool commit,
+                        const std::u16string& title);
   // Runs the "return to pinned URL" command off copies, because it rebuilds
   // the list and can destroy this view before the call returns.
   void Revert();
@@ -148,6 +153,8 @@ class TabRowView : public views::Button,
   // different entry whenever the model moves — including from another window
   // on the same profile — and an open field must not follow it.
   EntryId renaming_entry_id_;
+  // The row as it was when the edit opened, which is what the commit names.
+  SidebarRow renaming_row_;
   base::WeakPtrFactory<TabRowView> weak_factory_{this};
 };
 

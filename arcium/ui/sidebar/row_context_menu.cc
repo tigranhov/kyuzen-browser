@@ -89,7 +89,6 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
     case SidebarSection::kToday:
       menu_->AddItem(kPin, u"Pin");
       menu_->AddItem(kAddToFavorites, u"Add to Favorites");
-      // Present but disabled: a Today tab has no entry to carry a name.
       menu_->AddItem(kRename, u"Rename");
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
       menu_->AddItem(kCloseTab, u"Close");
@@ -162,10 +161,11 @@ bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
   }
   switch (command_id) {
     case kRename:
-      // A Today tab has no entry, so nothing would hold the name; and a row
-      // whose view has nowhere to put a field — a favourite tile — offers no
-      // rename closure, so there is nothing for the item to do.
-      return (is_folder_ || row_.entry_id.is_valid()) &&
+      // A cold entry has no tab and a Today tab has no entry; both can still
+      // be named. A row that is neither -- and a row whose view has nowhere
+      // to put a field, such as a favourite tile, which offers no rename
+      // closure -- has nothing for the item to do.
+      return (is_folder_ || row_.entry_id.is_valid() || row_.tab_index >= 0) &&
              !begin_rename_.is_null();
     case kCloseTab:
       // A cold entry has no tab to close.

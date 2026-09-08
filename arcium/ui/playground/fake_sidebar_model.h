@@ -96,6 +96,9 @@ class FakeSidebarModel : public SidebarModel {
   void ActivateEntry(EntryId id) override;
   void CloseEntryTab(EntryId id) override;
   void SetEntryTitle(EntryId id, const std::u16string& title) override;
+  void SetTabTitle(int tab_index,
+                   const GURL& expected_url,
+                   const std::u16string& title) override;
   void ReturnToPinnedUrl(EntryId id) override;
   void MoveEntryToSection(EntryId id,
                           SidebarSection section,

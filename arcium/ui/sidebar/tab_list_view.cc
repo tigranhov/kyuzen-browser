@@ -221,9 +221,17 @@ void TabListView::OnCloseRow(const SidebarRow& row) {
   }
 }
 
-void TabListView::OnRenameRow(EntryId id, const std::u16string& title) {
-  if (id.is_valid()) {
-    model_->SetEntryTitle(id, title);
+void TabListView::OnRenameRow(const SidebarRow& row,
+                              const std::u16string& title) {
+  if (row.entry_id.is_valid()) {
+    model_->SetEntryTitle(row.entry_id, title);
+  } else if (row.tab_index >= 0) {
+    // The index is checked against the URL the row held when the edit opened,
+    // because a strip can shift between the Enter and the posted commit --
+    // the archive service closes idle Today tabs without the user touching
+    // anything. A mismatch means the slot now holds a different page, and the
+    // rename is dropped rather than landing on it.
+    model_->SetTabTitle(row.tab_index, row.url, title);
   }
 }
 

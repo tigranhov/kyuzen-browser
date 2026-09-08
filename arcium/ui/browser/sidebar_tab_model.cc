@@ -87,7 +87,10 @@ SidebarRow SidebarTabModel::RowForTab(int index,
   SidebarRow row;
   row.tab_index = index;
   row.section = SidebarSection::kToday;
-  row.title = data.title;
+  // A custom name, when the user has given this tab one, in place of the
+  // page's own title -- the same precedence a pinned entry's custom title has.
+  const auto named = today_titles_.find(tab->GetHandle());
+  row.title = named != today_titles_.end() ? named->second : data.title;
   row.favicon = data.favicon;
   row.is_active = index == tab_strip_model_->active_index();
   row.is_loading = data.network_state != tabs::TabNetworkState::kNone &&
@@ -290,6 +293,12 @@ void SidebarTabModel::OnTabStripModelChanged(
         if (removed.tab && removed.remove_reason !=
                                TabRemovedReason::kInsertedIntoOtherTabStrip) {
           binding_->UnbindTab(removed.tab->GetHandle());
+        }
+        // Unconditional, unlike the binding above: a custom Today name is
+        // held by this window's model alone, so a tab that moves to another
+        // window must drop it here rather than leave it unreachable.
+        if (removed.tab) {
+          today_titles_.erase(removed.tab->GetHandle());
         }
       }
     }

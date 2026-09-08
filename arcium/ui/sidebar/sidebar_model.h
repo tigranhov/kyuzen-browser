@@ -108,6 +108,19 @@ class SidebarModel {
   // Closes the entry's tab but keeps the entry, which turns cold.
   virtual void CloseEntryTab(EntryId id) = 0;
   virtual void SetEntryTitle(EntryId id, const std::u16string& title) = 0;
+  // Renames a row with no entry -- a Today tab. The name is not persisted:
+  // a Today tab is transient and nothing carries a name past its life, so
+  // this dies with the tab rather than outliving what it named. An empty
+  // `title` clears it and the row follows the page again.
+  //
+  // Takes the strip index because that is what a row holds, and resolves it
+  // to the tab's handle before returning: an index is only true at the
+  // instant it is read. `expected_url` is the URL the row showed when the
+  // edit opened; a tab that no longer matches it is a different page in the
+  // same slot, and the rename is dropped rather than landing on it.
+  virtual void SetTabTitle(int tab_index,
+                           const GURL& expected_url,
+                           const std::u16string& title) = 0;
   // Navigates the entry's bound tab back to the entry's URL.
   virtual void ReturnToPinnedUrl(EntryId id) = 0;
 

@@ -290,6 +290,20 @@ void FakeSidebarModel::SetEntryTitle(EntryId id, const std::u16string& title) {
   }
 }
 
+void FakeSidebarModel::SetTabTitle(int tab_index,
+                                   const GURL& expected_url,
+                                   const std::u16string& title) {
+  for (SidebarRow& row : rows_) {
+    if (row.tab_index == tab_index && row.url == expected_url) {
+      // The fake has no page title to fall back to, so an empty name is
+      // stored as given; the real model restores the tab's own title.
+      row.title = title;
+      Notify();
+      return;
+    }
+  }
+}
+
 void FakeSidebarModel::ReturnToPinnedUrl(EntryId id) {
   if (SidebarRow* row = FindByEntry(id)) {
     row->can_return_to_pinned_url = false;

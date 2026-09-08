@@ -14,10 +14,10 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback.h"
 #include "base/location.h"
-#include "base/task/task_traits.h"
-#include "base/task/thread_pool.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/task/task_traits.h"
+#include "base/task/thread_pool.h"
 #include "cc/paint/display_item_list.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -83,9 +83,9 @@ void WriteViewSnapshot(views::View* view,
   gfx::Rect crop = view->ConvertRectToWidget(view->GetLocalBounds());
   crop = gfx::ScaleToEnclosingRect(crop, scale);
   SkBitmap bitmap;
-  if (!full.extractSubset(&bitmap, SkIRect::MakeXYWH(crop.x(), crop.y(),
-                                                    crop.width(),
-                                                    crop.height()))) {
+  if (!full.extractSubset(
+          &bitmap,
+          SkIRect::MakeXYWH(crop.x(), crop.y(), crop.width(), crop.height()))) {
     LOG(ERROR) << "snapshot: crop " << crop.ToString() << " outside "
                << size.ToString();
     std::move(done).Run(false);

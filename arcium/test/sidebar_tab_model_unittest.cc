@@ -108,6 +108,86 @@ TEST_F(SidebarTabModelTest, RowsFollowTabOrderAndSections) {
   EXPECT_FALSE(rows[0].entry_id.is_valid());
 }
 
+// R2.4 extended: a Today tab can be named, and the name is not persisted --
+// it dies with the tab, because a Today tab is transient and nothing carries
+// a name past its life.
+TEST_F(SidebarTabModelTest, ATodayTabTakesACustomName) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  ASSERT_EQ(1u, model->rows().size());
+  ASSERT_FALSE(model->rows()[0].entry_id.is_valid()) << "must be a Today row";
+
+  model->SetTabTitle(0, GURL("https://a.example/"), u"Reading later");
+
+  EXPECT_EQ(u"Reading later", model->rows()[0].title);
+}
+
+// The name follows the tab, not the page: navigating away keeps it, which is
+// what makes it useful for a tab you are living in.
+TEST_F(SidebarTabModelTest, ACustomTodayNameSurvivesNavigation) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->SetTabTitle(0, GURL("https://a.example/"), u"Reading later");
+
+  NavigateAndCommitActiveTab(GURL("https://a.example/deeper"));
+
+  ASSERT_EQ(1u, model->rows().size());
+  EXPECT_EQ(u"Reading later", model->rows()[0].title);
+}
+
+// An empty name is a command, not a no-op: it clears the custom name and the
+// row goes back to following the page. Without it a Today rename could not be
+// undone -- the revert button belongs to pinned URLs.
+TEST_F(SidebarTabModelTest, AnEmptyNameClearsACustomTodayName) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  const std::u16string page_title = model->rows()[0].title;
+  model->SetTabTitle(0, GURL("https://a.example/"), u"Reading later");
+  ASSERT_EQ(u"Reading later", model->rows()[0].title);
+
+  model->SetTabTitle(0, GURL("https://a.example/"), u"");
+
+  // The page's own title exactly, not merely "not the custom one": storing
+  // the empty string instead of clearing would also satisfy that.
+  EXPECT_EQ(page_title, model->rows()[0].title);
+  EXPECT_EQ(0u, model->today_title_count_for_testing());
+}
+
+// The index is only true at the instant it is read. The archive service
+// closes idle Today tabs without the user touching anything, so the slot a
+// posted rename names may hold a different page by the time it runs.
+TEST_F(SidebarTabModelTest, ARenameIsDroppedWhenTheSlotHoldsAnotherPage) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  const std::u16string before = model->rows()[0].title;
+
+  model->SetTabTitle(0, GURL("https://somewhere-else.example/"), u"Wrong row");
+
+  EXPECT_EQ(before, model->rows()[0].title)
+      << "a rename must not land on the page that took the slot";
+}
+
+// The map is this window's alone, so a tab leaving the strip must drop its
+// name here -- otherwise the entry is unreachable and never cleared.
+TEST_F(SidebarTabModelTest, ClosingANamedTabDropsItsName) {
+  AddTab(browser(), GURL("https://a.example/"));
+  AddTab(browser(), GURL("https://b.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  // AddTab inserts at 0, so index 1 is a.example.
+  model->SetTabTitle(1, GURL("https://a.example/"), u"Named");
+  ASSERT_EQ(u"Named", model->rows()[1].title);
+
+  ASSERT_EQ(1u, model->today_title_count_for_testing());
+
+  strip()->CloseWebContentsAt(1, TabCloseTypes::CLOSE_NONE);
+
+  // The map, not the rows: the closed tab draws nothing either way, so a row
+  // assertion here passes whether or not the entry was dropped. A handle is
+  // never recycled, so the leak is invisible except by counting.
+  EXPECT_EQ(0u, model->today_title_count_for_testing())
+      << "the name outlived the tab it belonged to";
+}
+
 TEST_F(SidebarTabModelTest, CommandsDriveTheStrip) {
   AddTab(browser(), GURL("https://a.example/"));
   AddTab(browser(), GURL("https://b.example/"));

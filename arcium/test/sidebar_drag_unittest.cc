@@ -1154,8 +1154,9 @@ TEST_F(SidebarDragTest, DoubleClickingARowRenamesIt) {
   EXPECT_EQ(id, row->renaming_entry_id());
 }
 
-// A Today tab has nothing to carry a name past its tab's life.
-TEST_F(SidebarDragTest, DoubleClickingARowWithNoEntryDoesNotRenameIt) {
+// A Today tab is renameable now, and the gesture still activates the row on
+// the way: click 1 selects what click 2 renames.
+TEST_F(SidebarDragTest, DoubleClickingATodayRowRenamesIt) {
   model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, true);
   model_.AddTab(u"Two", "https://two.example/", SidebarSection::kToday, false);
   MakeToday();
@@ -1167,7 +1168,7 @@ TEST_F(SidebarDragTest, DoubleClickingARowWithNoEntryDoesNotRenameIt) {
   generator().MoveMouseTo(two->GetBoundsInScreen().CenterPoint());
   generator().DoubleClickLeftButton();
 
-  EXPECT_FALSE(two->is_renaming());
+  EXPECT_TRUE(two->is_renaming());
   // Both clicks still reached the row: without this the test would pass
   // identically if the gesture had swallowed them and left a dead row.
   std::optional<SidebarRow> row = RowNamed(u"Two");
