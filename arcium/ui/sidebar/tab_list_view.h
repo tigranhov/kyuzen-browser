@@ -44,6 +44,10 @@ class TabListView : public views::View, public RowDragSession::Observer {
 
  public:
   TabListView(SidebarModel* model, SidebarSection section);
+
+  // Which section this list draws. Lets a caller tell the Pinned list from
+  // the Today one without depending on their order among their siblings.
+  SidebarSection section() const { return section_; }
   TabListView(const TabListView&) = delete;
   TabListView& operator=(const TabListView&) = delete;
   ~TabListView() override;

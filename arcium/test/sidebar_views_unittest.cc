@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include <algorithm>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -1719,6 +1721,41 @@ TEST_F(SidebarViewsTest, DISABLED_ArchiveListBubbleRendersItsRows) {
   LOG(ERROR) << "archive bubble snapshot: " << path << " (" << bitmap.width()
              << "x" << bitmap.height() << " px)";
   LogViewHierarchy(client);
+}
+
+// Pinned and Today scroll as one. With Pinned outside the scroll viewport,
+// enough pins push Today off the bottom of the panel and it cannot be reached
+// at all; scrolling down must take the pins away and reveal Today, and
+// scrolling back up must bring them back.
+TEST_F(SidebarViewsTest, PinnedAndTodayShareOneScrollViewport) {
+  SidebarView* sidebar = MakeSidebar();
+
+  views::ScrollView* scroll = nullptr;
+  for (views::View* view : sidebar->children()) {
+    if (views::IsViewClass<views::ScrollView>(view)) {
+      scroll = static_cast<views::ScrollView*>(view);
+      break;
+    }
+  }
+  ASSERT_TRUE(scroll);
+  ASSERT_TRUE(scroll->contents());
+
+  std::vector<SidebarSection> scrolling;
+  std::function<void(views::View*)> collect = [&](views::View* view) {
+    if (auto* list = views::AsViewClass<TabListView>(view)) {
+      scrolling.push_back(list->section());
+    }
+    for (views::View* child : view->children()) {
+      collect(child);
+    }
+  };
+  collect(scroll->contents());
+
+  std::sort(scrolling.begin(), scrolling.end());
+  EXPECT_EQ((std::vector<SidebarSection>{SidebarSection::kPinned,
+                                         SidebarSection::kToday}),
+            scrolling)
+      << "both lists must live inside the one scroll viewport";
 }
 
 // A two-finger scroll arrives as a ui::ScrollEvent, and ScrollView::

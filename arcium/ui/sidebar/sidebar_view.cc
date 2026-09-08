@@ -52,18 +52,34 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   nav_row_ = AddChildView(std::make_unique<NavRowView>(std::move(nav)));
   url_pill_ = AddChildView(std::make_unique<UrlPillView>(delegate_.edit_url));
   favorites_ = AddChildView(std::make_unique<FavoritesGridView>(model_));
-  pinned_ = AddChildView(
+
+  // Pinned, the divider and Today scroll as one column. Pinned outside the
+  // viewport would keep its full height whatever else needed the room, so
+  // enough pins push Today off the bottom of the panel and it cannot be
+  // reached at all. Favourites, the nav row and the space bar stay put:
+  // those are the fixed frame the scrolling column sits in.
+  scroll_ = AddChildView(std::make_unique<views::ScrollView>(
+      views::ScrollView::ScrollWithLayers::kEnabled));
+  auto* column = scroll_->SetContents(std::make_unique<views::View>());
+  auto* column_layout =
+      column->SetLayoutManager(std::make_unique<views::FlexLayout>());
+  column_layout->SetOrientation(views::LayoutOrientation::kVertical)
+      .SetCrossAxisAlignment(views::LayoutAlignment::kStretch)
+      .SetDefault(views::kMarginsKey, gfx::Insets::VH(3, 0));
+
+  pinned_ = column->AddChildView(
       std::make_unique<TabListView>(model_, SidebarSection::kPinned));
   // No archive, no archive button. Off the record there is no archive file
   // and cannot be one, so the affordance is absent rather than disabled; see
   // SidebarModel::has_archive().
-  divider_ = AddChildView(std::make_unique<SectionDividerView>(
+  divider_ = column->AddChildView(std::make_unique<SectionDividerView>(
       base::BindRepeating(&SidebarModel::ClearToday, base::Unretained(model_)),
       model_->has_archive() ? base::BindRepeating(&SidebarView::ShowArchiveList,
                                                   base::Unretained(this))
                             : base::RepeatingClosure()));
-  // Today scrolls: with enough tabs the rows would otherwise be laid out past
-  // the bottom of the column at zero height, which hides them entirely.
+  today_ = column->AddChildView(
+      std::make_unique<TabListView>(model_, SidebarSection::kToday));
+
   // Layers, which is the macOS default: kUiCompositorScrollWithLayers is
   // enabled there, so the compositor owns a scroll input handler and
   // ScrollView::OnScrollEvent DCHECKs scroll_with_layers_enabled_. Without
@@ -72,23 +88,20 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   // rendering, because the layer is not opaque over the sidebar gradient,
   // and --snapshot cannot see these rows, because its offscreen paint skips
   // layer-backed views.
-  today_scroll_ = AddChildView(std::make_unique<views::ScrollView>(
-      views::ScrollView::ScrollWithLayers::kEnabled));
-  today_ = today_scroll_->SetContents(
-      std::make_unique<TabListView>(model_, SidebarSection::kToday));
+  //
   // Without a height clamp the viewport never sizes its contents (ScrollView
   // only does that for a bounded scroll view or a layer-backed one), so the
   // rows stay at zero. The upper bound is the whole column; FlexLayout gives
-  // the scroll view whatever height is left after the sections above it.
-  today_scroll_->ClipHeightTo(0, 100000);
-  today_scroll_->SetBackgroundColor(std::nullopt);
-  today_scroll_->SetDrawOverflowIndicator(false);
-  today_scroll_->SetHorizontalScrollBarMode(
+  // the scroll view whatever height is left after favourites and the nav row.
+  scroll_->ClipHeightTo(0, 100000);
+  scroll_->SetBackgroundColor(std::nullopt);
+  scroll_->SetDrawOverflowIndicator(false);
+  scroll_->SetHorizontalScrollBarMode(
       views::ScrollView::ScrollBarMode::kDisabled);
-  today_scroll_->SetVerticalScrollBarMode(
+  scroll_->SetVerticalScrollBarMode(
       views::ScrollView::ScrollBarMode::kHiddenButEnabled);
   // Absorbs the leftover height, so the space bar stays at the bottom.
-  today_scroll_->SetProperty(
+  scroll_->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::LayoutOrientation::kVertical,
                                views::MinimumFlexSizeRule::kScaleToZero,
@@ -134,9 +147,13 @@ bool SidebarView::IsPositionInWindowCaption(const gfx::Point& point) const {
     return nav_row_->IsPointOnBackground(p);
   }
   // Empty space below the last row and above the space bar drags the window.
-  const int last_row_bottom =
-      today_scroll_->y() + today_->GetPreferredSize().height();
-  return point.y() > last_row_bottom && point.y() < space_bar_->y();
+  // The column's bottom is where its content ends once the scroll offset is
+  // taken off; when the content overflows, that lands below the viewport and
+  // there is no empty space to drag by, which this comparison gives for free.
+  const int content_bottom = scroll_->y() +
+                             scroll_->contents()->GetPreferredSize().height() -
+                             scroll_->GetVisibleRect().y();
+  return point.y() > content_bottom && point.y() < space_bar_->y();
 }
 
 void SidebarView::OnSidebarModelChanged() {

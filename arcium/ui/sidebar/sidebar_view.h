@@ -97,7 +97,8 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   raw_ptr<FavoritesGridView> favorites_ = nullptr;
   raw_ptr<TabListView> pinned_ = nullptr;
   raw_ptr<SectionDividerView> divider_ = nullptr;
-  raw_ptr<views::ScrollView> today_scroll_ = nullptr;
+  // Holds Pinned, the divider and Today; they scroll as one column.
+  raw_ptr<views::ScrollView> scroll_ = nullptr;
   raw_ptr<TabListView> today_ = nullptr;
   raw_ptr<SpaceBarView> space_bar_ = nullptr;
   // Shared by the grid and both lists, and detached from all three in the

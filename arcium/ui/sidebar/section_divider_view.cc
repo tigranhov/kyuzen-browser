@@ -12,6 +12,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/separator.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
@@ -19,6 +20,26 @@
 #include "ui/views/view_class_properties.h"
 
 namespace arcium {
+namespace {
+
+// The divider scrolls with Pinned and Today, so its buttons paint into the
+// scroll view's layer, which is not opaque over the sidebar gradient. A Label
+// that still asks for subpixel antialiasing there DCHECKs in PaintText.
+// LabelButton keeps its label protected, so reaching it needs a subclass.
+class FlatLabelButton : public views::LabelButton {
+  METADATA_HEADER(FlatLabelButton, views::LabelButton)
+
+ public:
+  FlatLabelButton(PressedCallback callback, std::u16string_view text)
+      : views::LabelButton(std::move(callback), text) {
+    label()->SetSubpixelRenderingEnabled(false);
+  }
+};
+
+BEGIN_METADATA(FlatLabelButton)
+END_METADATA
+
+}  // namespace
 
 namespace {
 constexpr int kDividerHeight = 20;
@@ -43,14 +64,14 @@ SectionDividerView::SectionDividerView(base::RepeatingClosure on_clear,
   // "Archived" before "Clear", so Clear stays where it has always been: on
   // the trailing edge, where the pointer that just left a Today row lands.
   if (on_archive) {
-    archive_ = AddChildView(std::make_unique<views::LabelButton>(
-        std::move(on_archive), u"Archived"));
+    archive_ = AddChildView(
+        std::make_unique<FlatLabelButton>(std::move(on_archive), u"Archived"));
     archive_->SetEnabledTextColors(kColorArciumRowTextSecondary);
     archive_->SetVisible(false);
     archive_->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 8, 0, 0));
   }
   clear_ = AddChildView(
-      std::make_unique<views::LabelButton>(std::move(on_clear), u"Clear"));
+      std::make_unique<FlatLabelButton>(std::move(on_clear), u"Clear"));
   clear_->SetEnabledTextColors(kColorArciumRowTextSecondary);
   clear_->SetVisible(false);
   clear_->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 8, 0, 0));
