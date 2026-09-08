@@ -195,5 +195,43 @@ TEST_F(ModelStoreTest, AFileFromTheFutureLeavesAnEmptyModelAndIsMovedAside) {
   EXPECT_EQ(from_the_future, kept_contents);
 }
 
+// The move aside can itself fail, and then the file this store writes to
+// still holds the user's only copy of bytes nobody could read. Overwriting it
+// 2.5 seconds later is the exact outcome the move aside exists to prevent, so
+// the store stops writing instead. Losing this session's changes is
+// recoverable; losing the file is not.
+//
+// The failure is arranged by putting a directory where the sidecar wants to
+// go, so renaming onto it fails while the directory around it stays writable.
+// A read-only directory would fail the move too, but it would also fail every
+// save, and then the surviving bytes would prove nothing about suppression.
+TEST_F(ModelStoreTest, AFileThatCannotBeMovedAsideIsNotOverwrittenEither) {
+  const std::string from_the_future =
+      R"({"version":9999,"spaces":[],"folders":[],"entries":[]})";
+  ASSERT_TRUE(base::WriteFile(path(), from_the_future));
+  ASSERT_TRUE(base::CreateDirectory(
+      path().AddExtension(FILE_PATH_LITERAL("unreadable"))));
+
+  ArciumModel model;
+  {
+    ModelStore store(&model, path());
+    base::RunLoop loop;
+    store.Load(loop.QuitClosure());
+    loop.Run();
+
+    EXPECT_TRUE(store.saves_suppressed_for_testing());
+
+    model.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+    EXPECT_EQ(0, store.scheduled_save_count_for_testing());
+    task_environment_.FastForwardBy(ModelStore::kSaveDelay * 2);
+    EXPECT_EQ(0, store.initiated_save_count_for_testing());
+  }
+  // The destructor flushes any pending write. There must not be one.
+
+  std::string on_disk;
+  ASSERT_TRUE(base::ReadFileToString(path(), &on_disk));
+  EXPECT_EQ(from_the_future, on_disk);
+}
+
 }  // namespace
 }  // namespace arcium

@@ -15,6 +15,7 @@
 #include "base/functional/bind.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
+#include "base/logging.h"
 #include "base/task/thread_pool.h"
 
 namespace arcium {
@@ -26,8 +27,12 @@ namespace {
 // mutation schedules a save, and the save would otherwise land on top of the
 // only copy of whatever the file held. A single sidecar, overwritten each
 // time, because the useful one is always the most recent.
-void MoveUnreadableFileAside(const base::FilePath& path) {
-  base::Move(path, path.AddExtension(FILE_PATH_LITERAL("unreadable")));
+// Returns false when the bytes could not be preserved, which the caller has
+// to act on: base::Move fails on a read-only directory, a cross-device path
+// whose copy fallback runs out of room, or a sidecar that cannot be replaced,
+// and on failure it leaves the original exactly where it was.
+[[nodiscard]] bool MoveUnreadableFileAside(const base::FilePath& path) {
+  return base::Move(path, path.AddExtension(FILE_PATH_LITERAL("unreadable")));
 }
 
 // Runs on the background sequence, which is where the migration has to run:
@@ -45,12 +50,12 @@ ModelStore::LoadResult ReadFileOnBackgroundSequence(
   std::optional<base::DictValue> dict =
       base::JSONReader::ReadDict(contents, base::JSON_PARSE_RFC);
   if (!dict) {
-    MoveUnreadableFileAside(path);
+    result.bytes_preserved = MoveUnreadableFileAside(path);
     return result;
   }
   result.dict = MigrateModelDict(std::move(*dict));
   if (!result.dict) {
-    MoveUnreadableFileAside(path);
+    result.bytes_preserved = MoveUnreadableFileAside(path);
   }
   return result;
 }
@@ -98,6 +103,16 @@ void ModelStore::OnLoaded(base::OnceClosure done, LoadResult result) {
   // Suppress OnArciumModelChanged() for the duration of ReplaceAll()'s
   // notification: reading a file must not dirty the model and schedule a
   // rewrite of the bytes just read.
+  if (!result.bytes_preserved) {
+    // The file could be neither understood nor moved aside, so it is still
+    // sitting at the path this store writes to. Saving would overwrite the
+    // only copy of it -- the one outcome the move-aside exists to prevent --
+    // so this store stops writing for the rest of the session. A restart is
+    // recoverable; the overwritten file would not be.
+    LOG(ERROR) << "Arcium: could not read or preserve the model file at "
+               << writer_.path() << "; not saving over it this session.";
+    saves_suppressed_ = true;
+  }
   loading_ = true;
   if (result.dict) {
     // A false return means the file is unusable as a whole. The model is
@@ -109,7 +124,7 @@ void ModelStore::OnLoaded(base::OnceClosure done, LoadResult result) {
 }
 
 void ModelStore::OnArciumModelChanged() {
-  if (loading_) {
+  if (loading_ || saves_suppressed_) {
     return;
   }
   // One scheduled save per burst: the counter only moves when there was no

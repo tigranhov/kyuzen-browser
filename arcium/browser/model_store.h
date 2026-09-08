@@ -46,6 +46,7 @@ class ModelStore : public ArciumModel::Observer,
 
   int scheduled_save_count_for_testing() const { return scheduled_saves_; }
   int initiated_save_count_for_testing() const { return initiated_saves_; }
+  bool saves_suppressed_for_testing() const { return saves_suppressed_; }
 
   // ArciumModel::Observer:
   void OnArciumModelChanged() override;
@@ -59,6 +60,9 @@ class ModelStore : public ArciumModel::Observer,
   // can name the type; constructed only by ModelStore and its .cc helper.
   struct LoadResult {
     std::optional<base::DictValue> dict;
+    // False only when the file was unusable AND could not be moved aside, so
+    // its bytes are still at the store's own path. See OnLoaded.
+    bool bytes_preserved = true;
   };
 
  private:
@@ -79,6 +83,9 @@ class ModelStore : public ArciumModel::Observer,
   // a user mutation, or every successful load would schedule a save of the
   // bytes it just read.
   bool loading_ = false;
+  // Set when Load() found a file it could neither use nor preserve. Writing
+  // would destroy it, so this store writes nothing for the rest of its life.
+  bool saves_suppressed_ = false;
   base::WeakPtrFactory<ModelStore> weak_factory_{this};
 };
 
