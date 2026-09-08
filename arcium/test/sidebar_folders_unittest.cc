@@ -13,6 +13,7 @@
 #include "arcium/browser/model/space.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
+#include "arcium/ui/playground/fake_sidebar_model.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -358,6 +359,43 @@ TEST_F(SidebarFoldersTest, DeletingAFolderLeavesItsSubfolderOneLevelUp) {
   EXPECT_EQ(inner, folders[1].id);
   EXPECT_EQ(1, folders[1].depth);
   EXPECT_EQ(outer, folders[1].parent_id);
+}
+
+// The same rule again, on the playground's fake. The fake exists to mirror the
+// real model's rules -- that mirroring is the only reason a view test written
+// against it catches a real bug -- so a rule it copies and nobody checks is a
+// rule that can drift. This one is deliberately the twin of
+// DeletingAFolderLeavesItsSubfolderOneLevelUp above; if the two ever disagree,
+// one of them is wrong and this says which.
+TEST(FakeSidebarModelTest, DeletingAFolderLeavesItsSubfolderOneLevelUp) {
+  FakeSidebarModel model;
+  model.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model.AddTab(u"Three", "https://three.example/", SidebarSection::kPinned,
+               false);
+  const FolderId outer = model.AddFolderWith(u"Outer", {u"One"});
+  const FolderId middle = model.AddFolderWith(u"Middle", {u"Two"});
+  const FolderId inner = model.AddFolderWith(u"Inner", {u"Three"});
+  model.SetFolderParent(middle, outer);
+  model.SetFolderParent(inner, middle);
+
+  model.DeleteFolder(middle);
+
+  std::vector<SidebarFolder> folders = model.folders();
+  ASSERT_EQ(2u, folders.size());
+  EXPECT_EQ(outer, folders[0].id);
+  EXPECT_EQ(inner, folders[1].id);
+  // One level up, to the deleted folder's own parent -- not to the top level.
+  EXPECT_EQ(1, folders[1].depth);
+  EXPECT_EQ(outer, folders[1].parent_id);
+  // And the entry that was in the deleted folder came up with it.
+  int in_outer = 0;
+  for (const SidebarRow& row : model.rows()) {
+    if (row.folder_id == outer) {
+      ++in_outer;
+    }
+  }
+  EXPECT_EQ(2, in_outer);
 }
 
 }  // namespace

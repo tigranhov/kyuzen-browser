@@ -61,10 +61,14 @@ SidebarExample::SidebarExample()
   model_->SetAudible(8, true);
   // The four states Task 7 has to look right in: a warm row inside an
   // expanded folder next to a cold one, a collapsed folder that contributes
-  // only its header, and a top-level pinned row offering the way back to its
-  // pinned URL on hover.
-  model_->AddFolderWith(u"Work", {u"Discord", u"Chromium Gerrit"});
+  // only its header, a folder nested inside another so the indent can be
+  // judged against a real 250px sidebar rather than against a margin
+  // assertion, and a top-level pinned row offering the way back to its pinned
+  // URL on hover.
+  const FolderId work =
+      model_->AddFolderWith(u"Work", {u"Discord", u"Chromium Gerrit"});
   const FolderId reading = model_->AddFolderWith(u"Reading", {u"Notion"});
+  model_->SetFolderParent(reading, work);
   model_->SetFolderCollapsed(reading, true);
   model_->SetCanReturnToPinnedUrl(5, true);
   // Enough archived rows to see what the list has to draw: several ages, a
