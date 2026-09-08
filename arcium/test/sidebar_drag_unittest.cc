@@ -1330,6 +1330,36 @@ TEST_F(SidebarDragTest, AFolderRefusedByAHeaderDoesNotLandInTheListBehindIt) {
   EXPECT_FALSE(pinned_->GetDropCallback(event));
 }
 
+// A folder is a list's row and a favourite is a tile, so there is nowhere in
+// the grid for a folder to land. The grid has to say so at CanDrop: accepting
+// it would open a gap, track the pointer, and then do nothing on release --
+// the drop indicator promising a move that cannot happen.
+TEST_F(SidebarDragTest, TheGridRefusesAFolder) {
+  model_.AddTab(u"Inside", "https://inside.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Fav", "https://fav.example/", SidebarSection::kFavorites,
+                false);
+  MakePinned();
+  MakeGrid();
+  model_.AddFolderWith(u"Work", {u"Inside"});
+  Refresh();
+  views::test::RunScheduledLayout(widget_.get());
+
+  FolderHeaderView* header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  ASSERT_TRUE(header);
+  std::unique_ptr<ui::OSExchangeData> folder = DragDataFrom(header, header);
+  ASSERT_TRUE(RowDragData::Read(*folder).has_value());
+  EXPECT_FALSE(grid_->CanDrop(*folder));
+
+  // The tile it does take, so the refusal above is about folders and not
+  // about the grid refusing everything.
+  ASSERT_FALSE(grid_->children().empty());
+  std::unique_ptr<ui::OSExchangeData> tile =
+      DragDataFrom(grid_, grid_->children()[0]);
+  EXPECT_TRUE(grid_->CanDrop(*tile));
+}
+
 // ---------------------------------------------------------------------------
 // Double-click renaming, and the press it shares with the drag
 // ---------------------------------------------------------------------------

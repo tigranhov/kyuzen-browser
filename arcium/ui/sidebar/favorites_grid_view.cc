@@ -293,7 +293,13 @@ bool FavoritesGridView::AreDropTypesRequired() {
 }
 
 bool FavoritesGridView::CanDrop(const ui::OSExchangeData& data) {
-  return RowDragData::Read(data).has_value();
+  const std::optional<RowDragData> payload = RowDragData::Read(data);
+  // A folder is a list's row, and a favourite is a tile: there is nowhere in
+  // this grid for a folder to land. Refusing here rather than at the drop is
+  // what keeps the gap indicator honest -- accepting would open a gap, follow
+  // the pointer, and then quietly do nothing, which is an affordance that
+  // lies about what a release will do.
+  return payload.has_value() && !payload->is_folder();
 }
 
 void FavoritesGridView::OnDragEntered(const ui::DropTargetEvent& event) {
