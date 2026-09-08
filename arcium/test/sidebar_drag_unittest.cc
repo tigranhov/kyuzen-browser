@@ -1360,6 +1360,74 @@ TEST_F(SidebarDragTest, TheGridRefusesAFolder) {
   EXPECT_TRUE(grid_->CanDrop(*tile));
 }
 
+TEST_F(SidebarDragTest, AFolderDroppedOnTheListBackgroundReturnsToTheTopLevel) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  MakePinned();
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Two"});
+  model_.SetFolderParent(inner, outer);
+  Refresh();
+  ASSERT_EQ(1, model_.folders()[1].depth);
+
+  FolderHeaderView* inner_header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[2]);
+  ASSERT_TRUE(inner_header);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFromHeader(inner_header);
+  // Below every row, which is the list's own background rather than any
+  // header: the one place a folder can be dropped to mean "not inside
+  // anything".
+  DropOn(pinned_, *data, BelowEveryRow(pinned_));
+
+  std::vector<SidebarFolder> folders = model_.folders();
+  ASSERT_EQ(2u, folders.size());
+  for (const SidebarFolder& folder : folders) {
+    EXPECT_EQ(0, folder.depth);
+    EXPECT_FALSE(folder.parent_id.has_value());
+  }
+  EXPECT_EQ(outer, folders[0].id);
+  EXPECT_EQ(inner, folders[1].id);
+}
+
+TEST_F(SidebarDragTest, NoInsertionLineIsDrawnForAFolder) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  MakePinned();
+  model_.AddFolderWith(u"Outer", {u"One"});
+  Refresh();
+
+  FolderHeaderView* header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  ASSERT_TRUE(header);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFromHeader(header);
+  const gfx::Point at = BelowEveryRow(pinned_);
+  ui::DropTargetEvent event(*data, gfx::PointF(at), gfx::PointF(at),
+                            ui::DragDropTypes::DRAG_MOVE);
+  pinned_->OnDragEntered(event);
+  EXPECT_EQ(ui::DragDropTypes::DRAG_MOVE, pinned_->OnDragUpdated(event));
+
+  // A folder does not land in a slot -- it lands at the top level -- so a
+  // line promising a place among the rows would be a lie.
+  EXPECT_FALSE(pinned_->drop_index_for_testing().has_value());
+}
+
+TEST_F(SidebarDragTest, TheTodayListStillRefusesAFolder) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Loose", "https://loose.example/", SidebarSection::kToday,
+                false);
+  MakePinned();
+  MakeToday();
+  model_.AddFolderWith(u"Outer", {u"One"});
+  Refresh();
+
+  FolderHeaderView* header =
+      views::AsViewClass<FolderHeaderView>(pinned_->children()[0]);
+  ASSERT_TRUE(header);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFromHeader(header);
+  // Today holds tabs. A folder has none, and there is nothing sensible for a
+  // drop there to mean.
+  EXPECT_FALSE(today_->CanDrop(*data));
+}
+
 // ---------------------------------------------------------------------------
 // Double-click renaming, and the press it shares with the drag
 // ---------------------------------------------------------------------------

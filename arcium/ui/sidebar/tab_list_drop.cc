@@ -224,16 +224,18 @@ bool TabListView::AreDropTypesRequired() {
 }
 
 bool TabListView::CanDrop(const ui::OSExchangeData& data) {
+  std::optional<RowDragData> payload = RowDragData::Read(data);
+  if (!payload) {
+    return false;
+  }
+  if (payload->is_folder()) {
+    // Only the Pinned section has folders at all. Today holds tabs and a
+    // folder has none, so there is nothing a drop there could mean.
+    return section_ == SidebarSection::kPinned;
+  }
   // Favourites are the grid's, not a list's; the other two sections take any
   // row, and which command that becomes is PerformDrop's business.
-  //
-  // A folder is not a row. Task 9 gives the list's own background a meaning
-  // for one -- back to the top level -- and until then a folder dropped
-  // anywhere but on a header does nothing, rather than being read as the
-  // entry drop it is not.
-  std::optional<RowDragData> payload = RowDragData::Read(data);
-  return section_ != SidebarSection::kFavorites && payload.has_value() &&
-         !payload->is_folder();
+  return section_ != SidebarSection::kFavorites;
 }
 
 void TabListView::OnDragEntered(const ui::DropTargetEvent& event) {
@@ -257,6 +259,13 @@ int TabListView::OnDragUpdated(const ui::DropTargetEvent& event) {
     // would have told.
     SetDropIndex(std::nullopt);
     return ui::DragDropTypes::DRAG_NONE;
+  }
+  if (drag_payload_->is_folder()) {
+    // A folder dropped here goes to the top level, appended among the roots.
+    // It does not land in a slot, so an insertion line promising one would be
+    // the same lie a refused header's highlight would have told.
+    SetDropIndex(std::nullopt);
+    return ui::DragDropTypes::DRAG_MOVE;
   }
   SetDropIndex(DropRowIndex(y));
   return ui::DragDropTypes::DRAG_MOVE;
@@ -296,6 +305,13 @@ void TabListView::PerformDrop(
     ui::mojom::DragOperation& output_drag_op,
     std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
   output_drag_op = ui::mojom::DragOperation::kMove;
+  if (payload.is_folder()) {
+    // Out of whatever it was in, and no further: the anchor is meaningless
+    // for a folder, because this stage moves folders between levels and not
+    // between places in a level.
+    model_->SetFolderParent(payload.folder_id, std::nullopt);
+    return;
+  }
   if (section_ == SidebarSection::kPinned) {
     const int to = PositionForAnchor(anchor);
     if (payload.is_entry()) {

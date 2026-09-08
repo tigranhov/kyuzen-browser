@@ -133,6 +133,24 @@ void RowContextMenu::BuildForFolder(const SidebarFolder& folder,
   menu_ = std::make_unique<ui::SimpleMenuModel>(this);
   menu_->AddItem(kRename, u"Rename");
   menu_->AddSeparator(ui::NORMAL_SEPARATOR);
+  // The same submenu a pinned row gets, filtered by what the model will
+  // actually accept: a folder cannot go into itself or into its own
+  // descendant, and cannot go somewhere that would carry its subtree past the
+  // depth cap. Offering a target and then doing nothing is the mistake
+  // can_accept_entry exists to prevent on the drag path.
+  move_submenu_ = std::make_unique<ui::SimpleMenuModel>(this);
+  move_submenu_->AddItem(kMoveToTopLevel, u"Top level");
+  for (const SidebarFolder& target : model_->folders()) {
+    if (!model_->CanMoveFolderTo(folder.id, target.id)) {
+      continue;
+    }
+    move_submenu_->AddItem(
+        kMoveToFolderFirst + static_cast<int>(move_targets_.size()),
+        target.name);
+    move_targets_.push_back(target.id);
+  }
+  menu_->AddSubMenu(0, u"Move to folder", move_submenu_.get());
+  menu_->AddSeparator(ui::NORMAL_SEPARATOR);
   // The reassurance is in the label because ui::MenuModel has no tooltip to
   // put it in, and "Delete folder" alone reads as deleting the tabs.
   menu_->AddItem(kDeleteFolder, u"Delete folder (keeps its tabs)");
@@ -153,11 +171,15 @@ void RowContextMenu::Run(views::View* source, const gfx::Point& point) {
 
 bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
   if (command_id >= kMoveToFolderFirst) {
-    // The folder the row is already in is not somewhere to move it, the same
-    // way "Top level" is not when it is already there.
     const size_t index = static_cast<size_t>(command_id - kMoveToFolderFirst);
-    return index < move_targets_.size() &&
-           row_.folder_id != move_targets_[index];
+    if (index >= move_targets_.size()) {
+      return false;
+    }
+    // The place it already is, is not a place to move it -- the same rule for
+    // a folder as for a row. A folder's list was additionally filtered when
+    // it was built, to what the model will actually accept.
+    return is_folder_ ? folder_.parent_id != move_targets_[index]
+                      : row_.folder_id != move_targets_[index];
   }
   switch (command_id) {
     case kRename:
@@ -171,7 +193,8 @@ bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
       // A cold entry has no tab to close.
       return !row_.is_cold;
     case kMoveToTopLevel:
-      return row_.folder_id.has_value();
+      return is_folder_ ? folder_.parent_id.has_value()
+                        : row_.folder_id.has_value();
     default:
       return true;
   }
@@ -180,7 +203,12 @@ bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
 void RowContextMenu::ExecuteCommand(int command_id, int event_flags) {
   if (command_id >= kMoveToFolderFirst) {
     const size_t index = static_cast<size_t>(command_id - kMoveToFolderFirst);
-    if (index < move_targets_.size()) {
+    if (index >= move_targets_.size()) {
+      return;
+    }
+    if (is_folder_) {
+      model_->SetFolderParent(folder_.id, move_targets_[index]);
+    } else {
       model_->MoveEntryToFolder(row_.entry_id, move_targets_[index]);
     }
     return;
@@ -204,7 +232,11 @@ void RowContextMenu::ExecuteCommand(int command_id, int event_flags) {
       model_->CreateFolderWithEntry(row_.entry_id, kNewFolderName);
       return;
     case kMoveToTopLevel:
-      model_->MoveEntryToFolder(row_.entry_id, std::nullopt);
+      if (is_folder_) {
+        model_->SetFolderParent(folder_.id, std::nullopt);
+      } else {
+        model_->MoveEntryToFolder(row_.entry_id, std::nullopt);
+      }
       return;
     case kUnpin:
     case kRemoveFromFavorites:

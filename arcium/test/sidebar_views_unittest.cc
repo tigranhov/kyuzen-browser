@@ -46,6 +46,7 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/scroll_view.h"
@@ -318,6 +319,47 @@ class SidebarViewsTest : public views::ViewsTestBase {
       }
     }
     return true;
+  }
+
+  // The command id of the enabled item with this label, searching the top
+  // level and then each submenu. std::nullopt when there is none, or when the
+  // item is there but disabled -- a disabled item is not something the user
+  // can choose, so it is not something a test should be able to choose
+  // either, which is what makes MenuOffers mean what it says.
+  std::optional<int> FindMenuItem(RowContextMenu& menu,
+                                  const std::u16string& label) {
+    ui::MenuModel* model = menu.menu();
+    if (!model) {
+      return std::nullopt;
+    }
+    for (size_t i = 0; i < model->GetItemCount(); ++i) {
+      if (model->GetTypeAt(i) == ui::MenuModel::TYPE_SUBMENU) {
+        ui::MenuModel* submenu = model->GetSubmenuModelAt(i);
+        for (size_t j = 0; submenu && j < submenu->GetItemCount(); ++j) {
+          if (submenu->GetLabelAt(j) == label && submenu->IsEnabledAt(j)) {
+            return submenu->GetCommandIdAt(j);
+          }
+        }
+        continue;
+      }
+      if (model->GetLabelAt(i) == label && model->IsEnabledAt(i)) {
+        return model->GetCommandIdAt(i);
+      }
+    }
+    return std::nullopt;
+  }
+
+  // Whether the menu, submenus included, has an enabled item with this label.
+  bool MenuOffers(RowContextMenu& menu, const std::u16string& label) {
+    return FindMenuItem(menu, label).has_value();
+  }
+
+  // Runs the enabled item with this label. CHECKs when there is none, so a
+  // test cannot silently assert nothing by naming an item that is not there.
+  void ExecuteMenuItem(RowContextMenu& menu, const std::u16string& label) {
+    const std::optional<int> command = FindMenuItem(menu, label);
+    CHECK(command.has_value()) << "no enabled menu item named " << label;
+    menu.ExecuteCommand(*command, 0);
   }
 
   FakeSidebarModel model_;
@@ -1125,7 +1167,7 @@ TEST_F(SidebarViewsTest, TheMenuForAFolderHeaderSaysTheTabsStay) {
   ScopedMenuCapture capture;
   RightClickOn(views::AsViewClass<FolderHeaderView>(list_->children()[0]));
   ASSERT_TRUE(capture.menu());
-  EXPECT_EQ((std::vector<std::u16string>{u"Rename",
+  EXPECT_EQ((std::vector<std::u16string>{u"Rename", u"Move to folder",
                                          u"Delete folder (keeps its tabs)"}),
             MenuLabels(capture.menu()->menu()));
 }
@@ -1414,6 +1456,78 @@ TEST_F(SidebarViewsTest, RenameFromAHeadersMenuOpensTheField) {
   ASSERT_TRUE(capture.menu());
   EXPECT_TRUE(Choose(capture.menu()->menu(), u"Rename"));
   EXPECT_TRUE(header->is_renaming());
+}
+
+TEST_F(SidebarViewsTest, AFolderMenuOffersTheFoldersItCanMoveInto) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kPinned,
+                false);
+  MakeList(SidebarSection::kPinned);
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Two"});
+  const FolderId other = model_.AddFolderWith(u"Other", {u"Three"});
+  model_.SetFolderParent(inner, outer);
+  Refresh();
+
+  // The menu for "Inner", which is nested inside "Outer".
+  RowContextMenu inner_menu(&model_);
+  inner_menu.BuildForFolder(model_.folders()[1], base::DoNothing());
+  EXPECT_TRUE(MenuOffers(inner_menu, u"Other"));
+  EXPECT_TRUE(MenuOffers(inner_menu, u"Top level"));
+  // The folder it is already in is not somewhere to move it, and neither is
+  // itself.
+  EXPECT_FALSE(MenuOffers(inner_menu, u"Outer"));
+  EXPECT_FALSE(MenuOffers(inner_menu, u"Inner"));
+
+  // The menu for "Outer", which is a root and has a child.
+  RowContextMenu outer_menu(&model_);
+  outer_menu.BuildForFolder(model_.folders()[0], base::DoNothing());
+  EXPECT_TRUE(MenuOffers(outer_menu, u"Other"));
+  // Already at the top level, and "Inner" is its own descendant.
+  EXPECT_FALSE(MenuOffers(outer_menu, u"Top level"));
+  EXPECT_FALSE(MenuOffers(outer_menu, u"Inner"));
+}
+
+TEST_F(SidebarViewsTest, MovingAFolderFromItsMenuNestsIt) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  MakeList(SidebarSection::kPinned);
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Two"});
+  Refresh();
+
+  RowContextMenu menu(&model_);
+  // The menu for "Inner", which is folders()[1] while both are roots.
+  menu.BuildForFolder(model_.folders()[1], base::DoNothing());
+  ExecuteMenuItem(menu, u"Outer");
+
+  std::vector<SidebarFolder> folders = model_.folders();
+  ASSERT_EQ(2u, folders.size());
+  EXPECT_EQ(outer, folders[0].id);
+  EXPECT_EQ(inner, folders[1].id);
+  EXPECT_EQ(1, folders[1].depth);
+}
+
+TEST_F(SidebarViewsTest, MovingAFolderToTheTopLevelFromItsMenuUnnestsIt) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  MakeList(SidebarSection::kPinned);
+  const FolderId outer = model_.AddFolderWith(u"Outer", {u"One"});
+  const FolderId inner = model_.AddFolderWith(u"Inner", {u"Two"});
+  model_.SetFolderParent(inner, outer);
+  Refresh();
+
+  RowContextMenu menu(&model_);
+  menu.BuildForFolder(model_.folders()[1], base::DoNothing());
+  ExecuteMenuItem(menu, u"Top level");
+
+  std::vector<SidebarFolder> folders = model_.folders();
+  ASSERT_EQ(2u, folders.size());
+  EXPECT_EQ(0, folders[0].depth);
+  EXPECT_EQ(0, folders[1].depth);
+  EXPECT_EQ(outer, folders[0].id);
+  EXPECT_EQ(inner, folders[1].id);
 }
 
 // The accelerator is a plain virtual and needs no window: it applies the
