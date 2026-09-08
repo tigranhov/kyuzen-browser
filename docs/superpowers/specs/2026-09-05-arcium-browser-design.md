@@ -240,8 +240,53 @@ Acceptance:
 - R4.4 Peek: a Favorite or Pinned link opens in a floating pane over the current page, dismissible, promotable to a tab.
 - R4.5 Air Traffic Control: rules by domain pattern route URLs to a space and profile, applied to external links and new tabs.
 - R4.6 Site search shortcuts configurable.
+- R4.7 The URL surfaces carry no decoration Arcium did not put there. Chromium's
+  location bar and omnibox popup ship a row of affordances that Arc and Zen do not
+  have and that a 250px pill has no room for; each is removed, consolidated or made
+  a setting rather than left on:
+  - Hidden outright, recoverable only from Arcium's settings: the search-engine
+    icon and the alternate-engine ("search this with X") row in the popup, the
+    AI/assistant entry point, the tracking-protection shield, and the
+    picture-in-picture toggle.
+  - Consolidated into one page-actions button at the pill's trailing edge: reader
+    mode, bookmark/star, the page-action overflow chevron, and the go arrow. One
+    icon, one panel, and that panel is also where R4.8 puts the extensions list.
+  - The pill at rest shows the page's title or URL and a compact site-identity
+    icon, on a quiet fill with no border and no shadow. Hover darkens the fill and
+    does nothing else.
+  This is a policy about *what Chromium draws*, so it is hooks: patches at the
+  location-bar and omnibox seams delegating to `arcium/`, never logic in a patch,
+  and never a fork of `LocationBarView`.
+- R4.8 Extensions have two homes and a hover reveal, and neither is a toolbar
+  across the top of the page:
+  - **Pinned** extensions draw as icons in the sidebar's top row, beside the URL
+    pill. At rest they are laid out but fully transparent; they fade in over
+    ~150ms when the pointer enters that row, and fade back out when it leaves. They
+    are shown without a hover when one of them has its popup open, when the pill's
+    dropdown is open, or on a new tab.
+  - **Overflow.** Pinned icons that do not fit beside the pill move into a grid of
+    ~32px icons in a strip directly below it, above the Favourites grid. That strip
+    is *not* hover-gated: once it holds anything it is simply visible, and it is
+    absent when empty.
+  - **Everything else** lives in the panel R4.7's consolidated button opens, each
+    row carrying a pin/unpin toggle. Pinning moves an extension into the inline set;
+    unpinning returns it to the list. There is no drag-to-customise.
+  - Chromium's separate puzzle-piece button is removed. Reuse
+    `ExtensionsToolbarContainer` and the existing extension action machinery rather
+    than reimplementing them; what Arcium owns is placement, the reveal, and the
+    panel's composition.
+  A hover-revealed control must still be reachable without a pointer: the row is
+  focusable and keyboard focus reveals it on the same terms as hover.
 
-Acceptance: A4.1 open a link from Mail, it appears in Little Arc, routes to the right space via a rule. A4.2 command bar answers within one frame of typing in tracing.
+Both R4.7 and R4.8 are modelled on Zen, read from `zen-browser/desktop` (branch
+`dev`) rather than from a description of it — see `docs/research/zen-url-bar-and-extensions.md`
+for the sourced findings and, importantly, for what that reading could **not**
+establish. Two things are ours to decide rather than to copy, because the research
+is a source read and not a running build: the exact fade timing (~150ms is Zen's
+CSS, not a measured feel), and the overflow strip's placement, which has no Zen
+counterpart — Zen puts it above a horizontal tab strip and Arcium has none.
+
+Acceptance: A4.1 open a link from Mail, it appears in Little Arc, routes to the right space via a rule. A4.2 command bar answers within one frame of typing in tracing. A4.3 no search-engine icon, alternate-engine row or AI entry point appears in the pill or its dropdown on a default profile. A4.4 pin two extensions and unpin a third: the two fade in on hovering the top row and are clickable; the third is reachable only from the actions panel; all three survive a relaunch. A4.5 narrow the window until the pinned icons no longer fit — they appear in the overflow strip rather than being clipped, and that strip needs no hover.
 
 ### Stage 5. Layout
 
