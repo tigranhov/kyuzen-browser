@@ -145,7 +145,7 @@ busy; touching one Views file and rebuilding 17 s; rebase no-op 29 s; views_exam
 |---|---|
 | 0 Foundation | done, see docs/stage0-carryover.md and docs/perf/ |
 | 1 Visual MVP | done, see docs/stage1-findings.md and docs/perf/ |
-| 2 Arc tab model | in close-out — suite, perf and netaudit recorded (docs/stage2-findings.md, docs/perf/2026-09-07-stage2.md); the A2.1 and A2.2 human acceptance pass is outstanding and the stage is not done until it runs |
+| 2 Arc tab model | done, see docs/stage2-findings.md and docs/perf/2026-09-07-stage2.md — A2.1, A2.2 and the session-restore list executed by hand 2026-09-08; four defects found and fixed during the pass |
 | 2.5 Entry behaviour | not started — nested folders, model migration |
 | 2.6 Favourite home boundary | design pending, see spec section 5 |
 | 3 Spaces and profiles | not started |

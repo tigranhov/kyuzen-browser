@@ -18,9 +18,27 @@ Same shape as `docs/stage1-findings.md`.
 
 | 11 | Under load, `arcium_unittests` reported six failures on one run and passed on every other. Two of the six were `SidebarViewsTest.PressingTheButtonWhileTheListIsClosingOpensNothing` and `TabSearchServiceTest.SuppressedNewArchiveRowsDoNotHideOlderMatches`, both timing-sensitive around `Browser`'s 200 ms coalescing window | `arcium/test/` | Recorded, not chased. Eight full runs since (three in Task 13A, five in 13B at load average 96-111) and 30 back-to-back iterations of the two named tests were all green, so it is not reproducible on demand. If it recurs on a **quiet** machine it is a real flake in those tests and worth a fix; under load it is the machine. See "The flaky run" below |
 
-## Acceptance A2.1 — NOT YET EXECUTED
+## Acceptance A2.1 and A2.2 — EXECUTED 2026-09-08, PASSED
 
-Nothing in this table has been run. It is written in the shape Stage 1's
+Run by hand on the machine, against `aaca21e`. Every item passes. Four defects
+were found and fixed during the pass; each is listed below with its commit,
+and every one of them was invisible to a suite that was green throughout.
+
+**What the pass found, and why the tests missed it.**
+
+| # | Defect | Why no test caught it | Fix |
+|---|---|---|---|
+| A | Dragging any row aborted the browser: neither drag source set a drag image, and `DragDropClientMac::StartDragAndDrop` DCHECKs a zero-size one | `View::DoDrag` enters a nested platform loop no headless harness drives, so 29 drag tests covered every drop *semantic* and never performed a drag | `630e38e` |
+| B | The first two-finger scroll over the sidebar aborted the browser: both scroll views were built `ScrollWithLayers::kDisabled`, and on macOS the compositor always owns a scroll input handler, which `ScrollView::OnScrollEvent` DCHECKs against | The DCHECK needs a compositor with a scroll input handler, which the test environment has no reason to build. The test now asserts the state the DCHECK reads | `04c5836` |
+| C | The close button flickered under the cursor, and the row's hover background blinked with it: the button appeared under the pointer, which made the row "not hovered" by Views' default rule, which hid the button, which re-hovered the row | The fixture's `Hover()` helper calls `OnMouseEntered` directly, so the event processor never held the row as its target and never sent the exit. The first version of the new test passed against the bug | `cbd206c` |
+| D | Pinned sat outside the scroll viewport and kept its full height regardless, so enough pins pushed Today off the bottom of the panel entirely | No test asserted where the sections live relative to the viewport; every test that touched a list built the list directly | `aaca21e` |
+
+Defect C is the third time this stage a test agreed with broken code, after the
+two the final review found. The pattern is the same each time: a helper or a
+fixture substitutes for the real path, and the substitution is exactly where the
+bug lives. Worth remembering as the stage's most durable lesson.
+
+The original table follows, in the shape Stage 1's daily-driver checklist used. It is written in the shape Stage 1's
 daily-driver checklist used, ready to be filled in by the human pass, and Stage 2
 is not done until it is. A2.1 in the spec is one line — "Pin, favorite, rename,
 fold; quit and relaunch; everything is where it was" — and the rows below are
@@ -76,11 +94,19 @@ released ten cores and a USB SSD. That is the most likely explanation and it is
 not a defect in the code. Treat a repeat on a **quiet** machine as a real bug in
 those two tests; treat one under load as the machine, and say which it was.
 
-## Session restore acceptance list — NOT YET RUN
+## Session restore acceptance list — EXECUTED 2026-09-08, PASSED
 
-These need a human at the window and a `chrome` build, neither of which Task 12
-or its fix round did. Nothing below has been executed. Run them before Stage 2
-is called done. Scenarios 1-3 span two browser lifetimes; scenario 4 is one.
+Run by hand. All four scenarios behave as specified: entries come back warm
+where a session restored their tabs, cold where the Sessions directory was
+deleted, and Cmd+Shift+T produces exactly one row.
+
+A note on what this feature is, because the acceptance wording misled its own
+reader during the pass: **pins and favourites never depend on session restore.**
+They live in Arcium's JSON model store and come back whatever Chromium's session
+does — deleting the Sessions directory yields a cold entry, never a missing one.
+Session restore decides only whether a restored entry is warm (bound to a live
+tab, so clicking focuses it) or cold (clicking opens the URL). The only failure
+it prevents is a duplicate tab. Scenarios 1-3 span two browser lifetimes; scenario 4 is one.
 
 ```bash
 scripts/build dev chrome && scripts/run
