@@ -64,11 +64,16 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
                             : base::RepeatingClosure()));
   // Today scrolls: with enough tabs the rows would otherwise be laid out past
   // the bottom of the column at zero height, which hides them entirely.
-  // ScrollWithLayers is the macOS default, but a layer-backed viewport is not
-  // opaque over the sidebar gradient (views::Label DCHECKs) and hides the rows
-  // from the offscreen paint that --snapshot uses.
+  // Layers, which is the macOS default: kUiCompositorScrollWithLayers is
+  // enabled there, so the compositor owns a scroll input handler and
+  // ScrollView::OnScrollEvent DCHECKs scroll_with_layers_enabled_. Without
+  // them the first two-finger scroll over the sidebar aborts the browser.
+  // The cost is paid elsewhere: every Label inside disables subpixel
+  // rendering, because the layer is not opaque over the sidebar gradient,
+  // and --snapshot cannot see these rows, because its offscreen paint skips
+  // layer-backed views.
   today_scroll_ = AddChildView(std::make_unique<views::ScrollView>(
-      views::ScrollView::ScrollWithLayers::kDisabled));
+      views::ScrollView::ScrollWithLayers::kEnabled));
   today_ = today_scroll_->SetContents(
       std::make_unique<TabListView>(model_, SidebarSection::kToday));
   // Without a height clamp the viewport never sizes its contents (ScrollView

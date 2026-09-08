@@ -185,8 +185,10 @@ ArchiveListView::ArchiveListView(views::View* anchor, SidebarModel* model)
   // background, so that particular failure is not reachable here — but there
   // is no reason to pay for a compositor layer either, and the two scrolling
   // lists in this stage behaving identically is worth more than the layer.
+  // Layers, for the reason given in SidebarView: without them the first
+  // two-finger scroll over this list aborts the browser.
   scroll_ = contents->AddChildView(std::make_unique<views::ScrollView>(
-      views::ScrollView::ScrollWithLayers::kDisabled));
+      views::ScrollView::ScrollWithLayers::kEnabled));
   contents_ = scroll_->SetContents(std::make_unique<views::View>());
   contents_->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));

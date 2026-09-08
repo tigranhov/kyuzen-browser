@@ -45,6 +45,7 @@
 #include "ui/gfx/geometry/size.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/paint_info.h"
@@ -1683,6 +1684,29 @@ TEST_F(SidebarViewsTest, DISABLED_ArchiveListBubbleRendersItsRows) {
   LOG(ERROR) << "archive bubble snapshot: " << path << " (" << bitmap.width()
              << "x" << bitmap.height() << " px)";
   LogViewHierarchy(client);
+}
+
+// A two-finger scroll arrives as a ui::ScrollEvent, and ScrollView::
+// OnScrollEvent DCHECKs scroll_with_layers_enabled_ whenever the compositor
+// has a scroll input handler -- which on macOS it always does, because
+// kUiCompositorScrollWithLayers is enabled by default there. A scroll view
+// built with ScrollWithLayers::kDisabled therefore aborts the browser the
+// first time anyone scrolls the sidebar. The layer on the contents is the
+// observable half of that state.
+TEST_F(SidebarViewsTest, TheTodayListScrollsWithLayers) {
+  SidebarView* sidebar = MakeSidebar();
+
+  views::ScrollView* scroll = nullptr;
+  for (views::View* view : sidebar->children()) {
+    if (views::IsViewClass<views::ScrollView>(view)) {
+      scroll = static_cast<views::ScrollView*>(view);
+      break;
+    }
+  }
+  ASSERT_TRUE(scroll) << "the Today list is no longer in a ScrollView";
+  ASSERT_TRUE(scroll->contents());
+  EXPECT_TRUE(scroll->contents()->layer())
+      << "contents must be layer-backed, or scrolling the sidebar aborts";
 }
 
 }  // namespace
