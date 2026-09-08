@@ -363,5 +363,40 @@ TEST_F(ArciumModelTest, FromStringRejectsAnythingNotAWellFormedUuid) {
   EXPECT_EQ(generated, parsed);
 }
 
+TEST_F(ArciumModelTest, DeletingAFolderMovesItsChildrenUpOneLevel) {
+  const FolderId outer = model_.AddFolder(u"Outer");
+  const FolderId middle = model_.AddFolder(u"Middle", outer);
+  const FolderId inner = model_.AddFolder(u"Inner", middle);
+  const EntryId entry =
+      model_.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  model_.SetEntryFolder(entry, middle);
+
+  model_.RemoveFolder(middle);
+
+  EXPECT_FALSE(model_.GetFolder(middle));
+  // Up one level, to the removed folder's own parent -- not to the top.
+  ASSERT_TRUE(model_.GetFolder(inner));
+  EXPECT_EQ(outer, model_.GetFolder(inner)->parent_id);
+  ASSERT_TRUE(model_.GetEntry(entry));
+  EXPECT_EQ(outer, model_.GetEntry(entry)->folder_id);
+}
+
+TEST_F(ArciumModelTest, DeletingATopLevelFolderStillEmptiesToTheTopLevel) {
+  const FolderId folder = model_.AddFolder(u"Work");
+  const FolderId child = model_.AddFolder(u"Child", folder);
+  const EntryId entry =
+      model_.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  model_.SetEntryFolder(entry, folder);
+
+  model_.RemoveFolder(folder);
+
+  // The same rule, at the level where "one up" is the top: this is what
+  // Stage 2 already did, and it must not have changed.
+  ASSERT_TRUE(model_.GetEntry(entry));
+  EXPECT_FALSE(model_.GetEntry(entry)->folder_id.has_value());
+  ASSERT_TRUE(model_.GetFolder(child));
+  EXPECT_FALSE(model_.GetFolder(child)->parent_id.has_value());
+}
+
 }  // namespace
 }  // namespace arcium

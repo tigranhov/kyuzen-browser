@@ -210,15 +210,26 @@ FolderId ArciumModel::AddFolder(const std::u16string& name,
 }
 
 void ArciumModel::RemoveFolder(FolderId id) {
-  const size_t before = folders_.size();
-  std::erase_if(folders_, [id](const Folder& f) { return f.id == id; });
-  if (folders_.size() == before) {
+  const Folder* doomed = GetFolder(id);
+  if (!doomed) {
     return;
   }
-  // A folder groups entries, it does not own them.
+  // Read before the erase invalidates the pointer.
+  const std::optional<FolderId> parent = doomed->parent_id;
+  std::erase_if(folders_, [id](const Folder& f) { return f.id == id; });
+  // A folder groups, it does not own. Everything it held moves up one level:
+  // to the removed folder's own parent, which for a top-level folder is the
+  // top level -- exactly what this did before there was another level to move
+  // to. Subfolders as well as entries, or a subfolder would be left pointing
+  // at an id nothing has.
+  for (Folder& folder : folders_) {
+    if (folder.parent_id == id) {
+      folder.parent_id = parent;
+    }
+  }
   for (TabEntry& entry : entries_) {
     if (entry.folder_id == id) {
-      entry.folder_id.reset();
+      entry.folder_id = parent;
     }
   }
   NormalisePositions();
