@@ -83,11 +83,11 @@ class RebuildOnChange : public SidebarModel::Observer {
 class SidebarDragTest : public views::ViewsTestBase {
  public:
   void SetUp() override {
-    views::ViewsTestBase::SetUp();
-    // Undo the foreground promotion ViewsTestHelperMac just made: a suite that
-    // activates windows as a regular application drags the desktop onto its
-    // Space, and none of these tests read real activation.
+    // Before ViewsTestBase::SetUp(), which constructs the helper that would
+    // otherwise promote this binary to a foreground application and pull the
+    // desktop onto the suite's Space.
     arcium::test::SuppressTestAppActivation();
+    views::ViewsTestBase::SetUp();
     widget_ = CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
     contents_ = widget_->SetContentsView(std::make_unique<views::View>());
     // Vertical rather than fill: this fixture puts the grid and both lists in

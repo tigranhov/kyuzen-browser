@@ -9,25 +9,30 @@ namespace arcium::test {
 
 // Stops a Views test binary from stealing the developer's focus.
 //
-// `ViewsTestHelperMac` promotes the unbundled test binary to
+// `ViewsTestHelperMac`'s constructor promotes the unbundled test binary to
 // `NSApplicationActivationPolicyRegular`
-// (ui/views/test/views_test_helper_mac.mm), deliberately, because the default
-// `Prohibited` — in that file's own words — prohibits an application from
-// obtaining key status or activating windows without user interaction. A
-// regular application that shows and activates windows pulls the desktop to
-// whatever Space it is on, which makes a machine unusable for as long as the
-// suite runs.
+// (ui/views/test/views_test_helper_mac.mm), and that constructor runs once per
+// test. A foreground application that shows and activates windows pulls the
+// desktop onto its Space, so a suite does it hundreds of times and the machine
+// is unusable until the run ends.
 //
-// Arcium's fixtures do not need the promotion. Focus is already faked:
-// `ui_controls` is disabled in these tests, so `ScopedFakeNSWindowFocus`
-// swizzles key and main status, and `Widget::IsActive()` reads the swizzled
-// answer rather than the window server's. Dropping back to `Accessory` — an
-// application with no Dock tile and no menu bar, which does not activate on
-// showing a window — therefore changes what the desktop does, not what the
-// tests observe.
+// Undoing the promotion afterwards is worse than leaving it: demoting after
+// each test turns one policy transition per process into one per test, and
+// every transition is its own focus event and its own Dock registration.
+// So this suppresses the promotion instead, by replacing the implementation of
+// `-[NSApplication setActivationPolicy:]` with one that does nothing. The
+// binary stays at the unbundled default of `Prohibited`, which — in upstream's
+// own words — prohibits the application from obtaining key status or
+// activating windows without user interaction.
 //
-// Call once from a fixture's SetUp, after `ViewsTestBase::SetUp()` has run and
-// made the promotion. A no-op away from macOS.
+// Nothing in these tests reads real activation. `ui_controls` is disabled here,
+// so `ScopedFakeNSWindowFocus` swizzles key and main status and
+// `Widget::IsActive()` reads the swizzled answer rather than the window
+// server's.
+//
+// Call from a fixture's SetUp **before** `ViewsTestBase::SetUp()`, so the
+// suppression is in place before the helper is constructed. Idempotent, and a
+// no-op away from macOS.
 void SuppressTestAppActivation();
 
 }  // namespace arcium::test
