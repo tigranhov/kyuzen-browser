@@ -7,6 +7,7 @@ test("arcium_unittests") {
     "arcium_features_unittest.cc",
     "arcium_model_unittest.cc",
     "arcium_profile_state_unittest.cc",
+    "model_migration_unittest.cc",
     "model_serializer_unittest.cc",
     "model_store_unittest.cc",
     "reorder_index_unittest.cc",

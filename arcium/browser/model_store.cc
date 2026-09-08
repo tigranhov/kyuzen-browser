@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "arcium/browser/model/model_migration.h"
 #include "arcium/browser/model/model_serializer.h"
 #include "base/files/file.h"
 #include "base/files/file_util.h"
@@ -20,9 +21,20 @@ namespace arcium {
 
 namespace {
 
-// Runs on the background sequence. `dict` is nullopt for a missing,
-// unreadable or unparseable file; all three mean "start empty", never
-// "crash".
+// The file could not be understood. Moving it aside is what makes "degrades
+// to an empty model" true rather than a euphemism for deleting it: the next
+// mutation schedules a save, and the save would otherwise land on top of the
+// only copy of whatever the file held. A single sidecar, overwritten each
+// time, because the useful one is always the most recent.
+void MoveUnreadableFileAside(const base::FilePath& path) {
+  base::Move(path, path.AddExtension(FILE_PATH_LITERAL("unreadable")));
+}
+
+// Runs on the background sequence, which is where the migration has to run:
+// the promise is that no schema work ever happens on the UI thread, and
+// OnLoaded is the UI thread. `dict` is nullopt for a missing, unreadable,
+// unparseable or unmigratable file; all four mean "start empty", never
+// "crash", and the last two also mean "keep the bytes".
 ModelStore::LoadResult ReadFileOnBackgroundSequence(
     const base::FilePath& path) {
   ModelStore::LoadResult result;
@@ -30,7 +42,16 @@ ModelStore::LoadResult ReadFileOnBackgroundSequence(
   if (!base::ReadFileToString(path, &contents)) {
     return result;
   }
-  result.dict = base::JSONReader::ReadDict(contents, base::JSON_PARSE_RFC);
+  std::optional<base::DictValue> dict =
+      base::JSONReader::ReadDict(contents, base::JSON_PARSE_RFC);
+  if (!dict) {
+    MoveUnreadableFileAside(path);
+    return result;
+  }
+  result.dict = MigrateModelDict(std::move(*dict));
+  if (!result.dict) {
+    MoveUnreadableFileAside(path);
+  }
   return result;
 }
 
