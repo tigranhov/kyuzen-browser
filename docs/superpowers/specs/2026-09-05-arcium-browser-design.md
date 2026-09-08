@@ -269,8 +269,10 @@ Acceptance: A6.1 a CSS boost persists across relaunch; A6.2 Library opens in und
 - R7.2 Inactive spaces discard their tabs by policy; favorites and pinned exempt by default.
 - R7.3 Startup profile: no Arcium work before first paint beyond loading the live model.
 - R7.4 Perf script gates: by this stage the budgets are calibrated and a regression fails the stage.
+- R7.5 A row shows whether its page is in memory. Stage 2 gave entries a warm/cold axis, which is about whether a **tab object exists**: cold means no tab at all and a click opens the URL. Discarding is a different axis, about whether a tab's **renderer is still in memory**, and R7.1 and R7.2 create discarded tabs that today are indistinguishable from loaded ones in the sidebar. Chromium already discards under memory pressure, so this state occurs whether or not Arcium asks for it. Three states result — cold, warm and discarded, warm and loaded — and the sidebar must distinguish all three rather than two. Zen greys a discarded row; the treatment is Stage 6's to choose, but the state must reach the model here. Reading it must cost nothing while it is not displayed: no polling and no per-tab timer, only the lifecycle notifications Chromium already sends.
+- R7.6 Decide whether pinned entries and favourites may be discarded at all. R7.2 exempts them by default and that default is untested against real use: Arc keeps pinned tabs alive, Zen discards and greys them, and the two give noticeably different memory profiles for a browser whose pitch is being lighter than Chrome. Settle it with a measurement from A7.1 rather than by preference, and record the answer as a deviation if it contradicts R7.2's default.
 
-Acceptance: A7.1 50 tabs across 3 spaces, idle memory below vanilla Chrome with the same tabs after sleep kicks in.
+Acceptance: A7.1 50 tabs across 3 spaces, idle memory below vanilla Chrome with the same tabs after sleep kicks in. A7.2 a discarded row is visibly distinct from a loaded one and from a cold one, and clicking it restores the page with its scroll position; with the display off, no timer or poll runs on account of lifecycle state.
 
 ### Stage 8. Distribution
 
