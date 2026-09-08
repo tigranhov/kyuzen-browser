@@ -26,6 +26,8 @@ source_set("sidebar") {
     "favorites_grid_view.h",
     "folder_header_view.cc",
     "folder_header_view.h",
+    "folder_tree.cc",
+    "folder_tree.h",
     "nav_row_view.cc",
     "nav_row_view.h",
     "rename_field.cc",

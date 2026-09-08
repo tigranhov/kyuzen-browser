@@ -46,11 +46,23 @@ struct SidebarRow {
 
 // Everything a folder header needs to paint itself. Like SidebarRow, it is
 // prepared by the model: a header must never scan the rows to draw its count,
-// and it has no way to reach the folder's name or collapsed state otherwise.
+// and it has no way to reach the folder's name, depth or collapsed state
+// otherwise.
 struct SidebarFolder {
   FolderId id;
+  // Absent at the top level. Never disagrees with `depth`: a folder reported
+  // at depth 0 is reported with no parent, including one whose parent the
+  // model could not find.
+  std::optional<FolderId> parent_id;
+  // 0 at the top level. What the list indents by, and -- because folders()
+  // comes back in pre-order -- what lets a collapsed folder's subtree be
+  // found as the run of folders after it with a greater depth.
+  int depth = 0;
   std::u16string name;
   bool collapsed = false;
+  // Entries in this folder's whole subtree, not just directly inside it. A
+  // collapsed folder holding only subfolders would otherwise say "0" while
+  // hiding everything under it.
   int entry_count = 0;
 };
 
