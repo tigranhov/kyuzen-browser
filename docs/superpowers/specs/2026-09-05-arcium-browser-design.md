@@ -188,6 +188,38 @@ Acceptance:
 - A2.5.3 A Stage 2 model file opens in a Stage 2.5 build with every folder and
   entry intact.
 
+**Checked against Zen** (`docs/research/zen-folders.md`, read from Zen's source
+rather than described). Three of Stage 2.5's choices are not in this spec and
+were the plan author's; Zen settles two of them and has nothing to say about the
+third.
+
+- *The five-level nesting cap agrees.* Zen's `zen.folders.max-subfolders`
+  defaults to 5. It enforces the limit at the context menu and by retargeting a
+  too-deep drop onto the parent rather than refusing it — where Arcium refuses
+  outright. The number matches; the manner does not, and Zen's is the kinder
+  behaviour. **Open for Stage 6:** retarget rather than refuse.
+- *Removing a folder keeps its contents, and that is Zen's "unpack", not Zen's
+  "delete".* Zen has both: `delete()` closes every tab in the folder and its
+  subfolders, while unpacking un-nests them one level up and keeps them.
+  `ArciumModel::RemoveFolder` is the unpack, which is the right default here
+  because Arcium's folders hold persisted favourites and pinned entries rather
+  than live tabs — closing a tab is recoverable, discarding a saved entry is
+  not, and the model store would write the loss out 2.5 seconds later. **Arcium
+  has no equivalent of Zen's destructive delete.** That is a gap, not an
+  oversight; if it is ever added it needs undo, not a confirmation dialog.
+- *The subtree count is ours alone.* Zen displays no count on a folder at all —
+  it hides Firefox's stock tab-group overflow badge. So "direct children or whole
+  subtree" has no precedent either way, and Arcium's choice of the subtree total
+  stands on its own reasoning: a collapsed folder holding only subfolders would
+  otherwise read "0" while hiding everything beneath it.
+
+Two Zen behaviours bear on **Stage 2.6** rather than 2.5, and are recorded here
+because that stage's design is still open: in Zen, a tab entering a folder is
+force-pinned, and folder membership is mutually exclusive with Essential
+(Favourite) status — a tab loses it on entering a folder. Arcium currently lets
+an entry keep its kind inside a folder. Whether to follow Zen here is a Stage 2.6
+question, not a Stage 2.5 one.
+
 ### Stage 2.6. Favourite home boundary
 
 Goal: navigating a favourite's tab away from its home does not consume the
