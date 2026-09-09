@@ -225,6 +225,13 @@ question, not a Stage 2.5 one.
 Goal: navigating a favourite's tab away from its home does not consume the
 favourite — it opens a tab instead, the way Arc and Zen behave.
 
+**Designed 2026-09-09**, in
+`docs/superpowers/specs/2026-09-09-stage-2.6-home-boundary-design.md`, which
+answers the five questions below and supersedes the paragraph that follows.
+The research it rests on is `docs/research/zen-home-boundary.md`. The text
+from here to the end of this section is kept as the record of what was open
+before that session.
+
 **Design pending.** This stage has a goal and no requirements on purpose. The
 mechanism is straightforward — a navigation seam behind a patch, delegating to
 `arcium/` — but the mechanism is not the feature. The policy is: which
