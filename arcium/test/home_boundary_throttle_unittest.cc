@@ -11,6 +11,8 @@
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
+#include "arcium/common/arcium_features.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
@@ -22,6 +24,7 @@
 #include "content/public/test/mock_navigation_throttle_registry.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 #include "url/origin.h"
 
@@ -101,9 +104,10 @@ TEST_F(HomeBoundaryThrottleTest, AnUnboundTabGetsNoThrottle) {
   // A Today tab is bound to no entry, so the boundary is opt-in and a
   // diverted tab does not inherit one. The profile state is constructed
   // (as it would be by a sidebar a sibling window already opened) so this
-  // exercises EntryForTab's nullopt and GetEntry's null, not the earlier
-  // no-state guard that AnUnboundTabGetsNoThrottle would otherwise pass
-  // through vacuously.
+  // test exercises EntryForTab's nullopt, not the earlier no-state guard
+  // that it would otherwise pass through vacuously. It cannot reach
+  // GetEntry's null check: EntryForTab returning nullopt short-circuits
+  // MaybeCreateAndAdd before GetEntry is ever called.
   AddTab(browser(), GURL(kHomeUrl));
   ArciumProfileState::GetForBrowserContext(profile());
   auto handle = MakeHandle(kElsewhereUrl);
@@ -142,6 +146,21 @@ TEST_F(HomeBoundaryThrottleTest, AReloadGetsNoThrottle) {
   EXPECT_TRUE(registry.throttles().empty());
 }
 
+TEST_F(HomeBoundaryThrottleTest,
+       ADisabledFeatureGetsNoThrottleEvenForABoundTab) {
+  base::test::ScopedFeatureList scoped_feature_list;
+  scoped_feature_list.InitAndDisableFeature(features::kArciumHomeBoundary);
+  AddPinnedTab();
+  auto handle = MakeHandle(kElsewhereUrl);
+  content::MockNavigationThrottleRegistry registry(
+      handle.get(),
+      content::MockNavigationThrottleRegistry::RegistrationMode::kHold);
+
+  HomeBoundaryThrottle::MaybeCreateAndAdd(registry);
+
+  EXPECT_TRUE(registry.throttles().empty());
+}
+
 TEST_F(HomeBoundaryThrottleTest, ACrossHostLinkClickOpensATabAndIsCancelled) {
   AddPinnedTab();
   ASSERT_EQ(1, browser()->tab_strip_model()->count());
@@ -156,7 +175,13 @@ TEST_F(HomeBoundaryThrottleTest, ACrossHostLinkClickOpensATabAndIsCancelled) {
       registry.throttles()[0]->WillStartRequest();
 
   EXPECT_EQ(content::NavigationThrottle::CANCEL_AND_IGNORE, result.action());
-  EXPECT_EQ(2, browser()->tab_strip_model()->count());
+  ASSERT_EQ(2, browser()->tab_strip_model()->count());
+  // The new tab is the clicked URL, and the entry's own tab -- the one the
+  // feature exists to protect -- still shows what it showed before the
+  // click, exactly as A2.6.1 checks by hand.
+  EXPECT_EQ(GURL(kElsewhereUrl),
+            browser()->tab_strip_model()->GetWebContentsAt(1)->GetVisibleURL());
+  EXPECT_EQ(GURL(kHomeUrl), contents()->GetLastCommittedURL());
 }
 
 TEST_F(HomeBoundaryThrottleTest, ASameHostLinkClickProceeds) {
@@ -204,6 +229,29 @@ TEST_F(HomeBoundaryThrottleTest, AScriptedLinkClickWithoutAUserGestureStays) {
   AddPinnedTab();
   auto handle = MakeHandle(kElsewhereUrl, /*link_click=*/true,
                            /*has_user_gesture=*/false);
+  content::MockNavigationThrottleRegistry registry(
+      handle.get(),
+      content::MockNavigationThrottleRegistry::RegistrationMode::kHold);
+  HomeBoundaryThrottle::MaybeCreateAndAdd(registry);
+  ASSERT_EQ(1u, registry.throttles().size());
+
+  const content::NavigationThrottle::ThrottleCheckResult result =
+      registry.throttles()[0]->WillStartRequest();
+
+  EXPECT_EQ(content::NavigationThrottle::PROCEED, result.action());
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+}
+
+TEST_F(HomeBoundaryThrottleTest, ATraversalGetsNoDiversion) {
+  // A back/forward traversal replays a link click's transition type, so it
+  // still passes WasInitiatedByLinkClick() -- this combines
+  // PAGE_TRANSITION_LINK with PAGE_TRANSITION_FORWARD_BACK the way a real
+  // traversal of a link-click history entry does. The traversal guard in
+  // WillStartRequest is the one that has to catch it.
+  AddPinnedTab();
+  auto handle = MakeHandle(kElsewhereUrl);
+  handle->set_page_transition(ui::PageTransitionFromInt(
+      ui::PAGE_TRANSITION_LINK | ui::PAGE_TRANSITION_FORWARD_BACK));
   content::MockNavigationThrottleRegistry registry(
       handle.get(),
       content::MockNavigationThrottleRegistry::RegistrationMode::kHold);
