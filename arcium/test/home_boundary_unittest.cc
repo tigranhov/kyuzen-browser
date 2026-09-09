@@ -78,7 +78,7 @@ TEST(HomeBoundaryTest, HomeMovesWithYou) {
 }
 
 // --- Condition 6: the deliberate divergence from Zen. -----------------------
-// Deleting this clause and the two tests below restores Firefox's rule
+// Deleting this clause and the three tests below restores Firefox's rule
 // exactly. They are named so that is a mechanical deletion.
 
 TEST(HomeBoundaryTest, DivergenceALinkBackToTheStoredHomeHostStays) {
@@ -92,6 +92,15 @@ TEST(HomeBoundaryTest, DivergenceTheStoredHomeHostAlsoGetsTheWwwAllowance) {
   EXPECT_FALSE(LinkLeavesHome(GURL("https://accounts.google.com/signin"),
                               GURL("https://www.example.com/x"),
                               GURL("https://example.com/home")));
+}
+
+TEST(HomeBoundaryTest,
+     DivergenceATabWithNoCommittedUrlFallsBackToTheStoredHome) {
+  // With no current host, the current-page comparison cannot hold this
+  // click, so it is the stored-home clause alone doing the work -- which is
+  // why this test belongs with the other Divergence cases rather than with
+  // the no-committed-URL case below.
+  EXPECT_FALSE(LinkLeavesHome(GURL(), Home(), Home()));
 }
 
 // --- Guards. ----------------------------------------------------------------
@@ -124,10 +133,9 @@ TEST(HomeBoundaryTest, AnEmptyStoredHomeSimplyNeverMatches) {
   EXPECT_TRUE(LinkLeavesHome(Home(), News(), GURL()));
 }
 
-TEST(HomeBoundaryTest, ATabWithNoCommittedUrlFallsBackToTheStoredHome) {
-  // A fresh or failed-load tab has no current host, so only condition 6 can
-  // hold the click.
-  EXPECT_FALSE(LinkLeavesHome(GURL(), Home(), Home()));
+TEST(HomeBoundaryTest, ATabWithNoCommittedUrlLeavesForAnUnrelatedHost) {
+  // A fresh tab, or one whose load failed with nothing committed, has no
+  // current host, so the current-page comparison cannot hold the click.
   EXPECT_TRUE(LinkLeavesHome(GURL(), News(), Home()));
 }
 
