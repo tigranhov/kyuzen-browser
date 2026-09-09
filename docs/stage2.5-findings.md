@@ -152,33 +152,82 @@ code could not pass the brief's own test and changed the design rather than
 weaken the test. Another found a probe prediction wrong and reported it instead
 of editing code to match. Both were correct.
 
+## What the acceptance pass found
+
+**A2.5.3 passed on a real Stage 2 file.** The live model file happened to still
+be at version 1 — one folder, nine entries — so the launch that began the pass
+*was* the migration test. Every folder and entry came back, the folder sat at
+the top level, no `.unreadable` sidecar was written, and the file was rewritten
+at version 2 on the first mutation. That last detail is worth stating: the
+migration is a read-path transform, so the version on disk does not change
+until something writes. A pass that checks the file immediately after launch
+and sees `1` has not found a bug.
+
+**The cycle refusals are correctly invisible.** Dropping a folder onto its own
+child, and onto itself, both do nothing — no highlight, no movement. That is
+the specified behaviour rather than a missing one: `CanDrop` refuses before any
+indicator is drawn, so the drag never offers an affordance it would not honour.
+A refusal that animated, flashed or snapped back would be the defect, because
+it would tell the user the drop was considered.
+
+**One defect, and it was not a Stage 2.5 defect.** Every cold entry drew a
+globe after a relaunch, and kept it until the entry was clicked and a tab
+appeared behind it. `ColdFavicon()` returned a placeholder unconditionally, and
+nothing anywhere in `arcium/` ever called `FaviconService` — a grep for it
+returned exactly one hit, a comment in `archive_list_view.cc` explaining why
+that list does not do the lookup. Fixed in `48f19f0`.
+
+**Why no test caught it.** For once, not the substitution shape this document
+warns about. Every test that touches a cold row asserts on *rows*, and a row
+carries whatever `ColdFavicon()` returned; the assertion was true. Nothing was
+wrong with the code under test — the behaviour was simply never specified.
+Favicons appear in the spec once, in R1.3, for live tabs. The code comment
+claiming cold favicons were "Stage 6 work" was an assertion by the Stage 2
+author that the spec does not support, and it read for two stages as though
+the question had been settled. **A comment naming a future stage is a claim
+about the spec, and is worth checking against it.**
+
+**A note on the machine, not the code.** The suite ran green at 371/371 twice,
+then produced two failures and later a timeout that cascaded into eight tests
+not run — on code differing only by a comment. Load average was 152 on ten
+cores, from a speech-recognition service, Xcode's CoreDevice, WindowServer and
+another browser. Every failing test passed in isolation in under 1.5 s. This is
+the starvation pattern recorded above, from external load rather than from our
+own leaked probes. `--test-launcher-retry-limit=0` is what made it visible:
+with retries on, the timed-out test would have been re-run, passed, and printed
+SUCCESS, hiding both the timeout and the eight tests that never ran.
+
 ## Carried forward
 
 - **Perf was not measured.** `scripts/perf` refuses while an `out/dev` Arcium is
   running, and one belonging to unrelated in-flight work had been up for nearly
   seven hours awaiting a visual check. See `docs/perf/2026-09-09-stage2.5.md`
   for the four questions answered in writing and the command to take the number.
-- **The acceptance list (A2.5.1–A2.5.3) has not been executed by hand.** It
-  needs a real pointer doing real drags; no agent here can do it. The list is in
-  the plan's Task 10 and is reproduced below.
+- **The acceptance list is mostly executed.** On 2026-09-09, by hand: A2.5.3
+  passed on a real version 1 file; nesting by drag was confirmed; and A2.5.2's
+  cycle cases — a folder onto its own child, and a folder onto itself — were
+  both confirmed to do nothing at all. **Still unrun:** A2.5.2's depth-cap case
+  (a drop that would carry a subtree past five levels) and A2.5.1's
+  collapse-the-middle-then-quit-and-relaunch half.
 - **Two test files are past the size threshold**: `sidebar_views_unittest.cc` at
   2067 lines and `sidebar_drag_unittest.cc` at 1553. Production files are all
   under 510 — `sidebar_tab_model_entries.cc` is 506 and is the only one over
   500. The natural seam in the drag file is the ~250-line folder-drag block.
 - **Stage 2.6 inherits two Zen findings** recorded in the spec, above.
 
-## The acceptance pass, still to run by hand
+## The acceptance pass, what is still to run by hand
 
 - **A2.5.1** Build a folder three deep by dragging. Collapse the middle one and
   confirm the deepest disappears with it while the outer stays. Quit with Cmd+Q,
   relaunch, confirm the tree and the collapsed state survived.
-- **A2.5.2** Drag a folder onto its own child: refused, no highlight, tree
-  unchanged. Then onto itself, and then a level past the cap — refused the same
-  way, which is to say nothing happens.
-- **A2.5.3** Put a Stage 2 model file at
-  `"$HOME/Library/Application Support/Arcium-dev/Default/Arcium Model"` and
-  launch. Every folder and entry intact, every folder at the top level, and the
-  file rewritten at version 2.
+- **A2.5.2** — *cycle cases done 2026-09-09, passed.* Still to run: the
+  depth-cap case. Drag a folder that is itself two deep onto a folder at the
+  fourth level; the drop is refused on the height of the moved subtree, not on
+  the target's depth alone, which is the one place this deliberately diverges
+  from Zen.
+- **A2.5.3** — *done 2026-09-09, passed.* Kept here for the next rebase; a
+  copy of the version 1 file used is worth keeping, because a profile only
+  offers one.
 
 Also by hand, because no test here can: the drag image carries the folder's
 name; dropping a folder on empty space below the Pinned list returns it to the
