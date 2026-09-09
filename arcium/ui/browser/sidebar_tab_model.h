@@ -100,6 +100,7 @@ class SidebarTabModel : public SidebarModel,
   void SetFolderCollapsed(FolderId id, bool collapsed) override;
   FolderId CreateFolderWithEntry(EntryId id,
                                  const std::u16string& name) override;
+  bool CanCreateFolderWithEntry(EntryId id) const override;
   void MoveEntryToFolder(EntryId id,
                          std::optional<FolderId> folder_id) override;
   void SetFolderParent(FolderId id, std::optional<FolderId> parent_id) override;

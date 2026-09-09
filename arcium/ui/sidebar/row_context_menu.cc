@@ -198,6 +198,12 @@ bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
     case kCloseTab:
       // A cold entry has no tab to close.
       return !row_.is_cold;
+    case kNewFolder:
+      // A folder made from this row goes inside the folder the row is already
+      // in, so at the deepest level there is nowhere to put it. Offering the
+      // item and then making nothing is the affordance-that-lies mistake this
+      // stage has already fixed twice.
+      return model_->CanCreateFolderWithEntry(row_.entry_id);
     case kMoveToTopLevel:
       return is_folder_ ? folder_.parent_id.has_value()
                         : row_.folder_id.has_value();

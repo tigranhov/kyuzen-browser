@@ -12,21 +12,31 @@
 
 namespace arcium {
 
-// The deepest a folder tree goes, counted in levels: five means depths 0
-// through 4. The sidebar is 250px wide and indents 16px per level, so the
-// deepest row still starts 80px in with ~170px left for its title -- tight
-// but readable. The model refuses a move past this rather than leaving the
-// view to draw something it cannot.
+// The deepest a folder tree goes, counted in levels: four means depths 0
+// through 3. The sidebar is 250px wide and indents 16px per level, so the
+// deepest row starts 48px in with ~200px left for its title. The model
+// refuses a move past this rather than leaving the view to draw something it
+// cannot.
 //
-// Five and not three, which the acceptance list's "build a folder three deep"
-// might suggest: that is a scenario to exercise, not a limit. And a cap of
-// three makes CanMoveFolderTo's cycle check unreachable -- moving a folder
-// into its own descendant always costs at least two extra levels, so the cap
-// would refuse every cycle before the cycle rule was consulted. An invariant
-// no input can reach is an invariant no test can cover, and this project has
-// already shipped one guard that was wrong precisely because nothing exercised
-// it.
-inline constexpr int kMaxFolderDepth = 5;
+// **This is a product default, not a structural limit.** Nothing in the model
+// or the flattening needs a bound -- BuildSidebarFolders walks an explicit
+// stack, so depth costs no C++ stack -- and the spec's R2.5.1 asks for no cap
+// at all. What a deeper tree costs is horizontal room, since indentation eats
+// a fixed 250px that scrolling never gives back. Zen makes the same tradeoff
+// and exposes it as `zen.folders.max-subfolders`; making this a preference is
+// the agreed direction when someone actually wants a deeper tree. Until then
+// one constant is the whole knob, and every refusal already routes through it.
+//
+// **Four is the floor. Do not lower it further without reading this.** A cap
+// of three makes CanMoveFolderTo's cycle check unreachable: moving a folder
+// into its own descendant costs at least two extra levels, so at three the cap
+// refuses every cycle before the cycle rule is consulted, and the rule becomes
+// dead code that no test can cover. The arithmetic, for the minimal cycle -- a
+// folder with one child, dragged into that child -- is new_depth 2 plus a
+// subtree height of 1 against `<= kMaxFolderDepth - 1`: 3 <= 3 holds here and
+// 3 <= 2 does not. This project has already shipped one guard that was wrong
+// precisely because nothing exercised it.
+inline constexpr int kMaxFolderDepth = 4;
 
 // Holds pinned entries and other folders. Not built on Chromium tab groups: a
 // group holds live tabs, and a cold pinned entry has none.

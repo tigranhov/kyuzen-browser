@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "arcium/browser/model/folder.h"
 #include "arcium/test/test_app_activation.h"
 #include "arcium/ui/playground/fake_sidebar_model.h"
 #include "arcium/ui/sidebar/archive_list_view.h"
@@ -906,6 +907,47 @@ TEST_F(SidebarViewsTest, TheMenuForAPinnedRowThatHasNavigatedAway) {
                 u"Rename", u"Return to pinned URL", u"New folder",
                 u"Move to folder [disabled]", u"Unpin", u"Close tab"}),
             MenuLabels(capture.menu()->menu()));
+}
+
+// The menu rule and the model rule have to agree. A folder made from a row
+// goes inside the row's own folder, so at the deepest level there is nowhere
+// to put it and the item must say so rather than doing nothing when chosen.
+// Built to kMaxFolderDepth rather than to a literal, so lowering the cap
+// cannot leave this asserting about a depth that is no longer the deepest.
+TEST_F(SidebarViewsTest, NewFolderIsDeadForARowInAFolderAtTheDeepestLevel) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  const EntryId id = model_.rows()[0].entry_id;
+  ASSERT_TRUE(id.is_valid());
+  // Built by the behaviour under test: each call makes a folder inside the
+  // last, carrying the row down with it, until the row sits at the deepest
+  // legal level.
+  for (int level = 0; level < kMaxFolderDepth; ++level) {
+    ASSERT_TRUE(model_.CreateFolderWithEntry(id, u"Deeper").is_valid())
+        << "refused at level " << level;
+  }
+  ASSERT_FALSE(model_.CanCreateFolderWithEntry(id))
+      << "the chain is not deep enough for this test to be about anything";
+  MakeList(SidebarSection::kPinned);
+  Refresh();
+
+  // Four folder headers come before the row, so this cannot index blindly.
+  TabRowView* row = nullptr;
+  for (views::View* child : list_->children()) {
+    if (TabRowView* candidate = views::AsViewClass<TabRowView>(child)) {
+      row = candidate;
+      break;
+    }
+  }
+  ASSERT_TRUE(row);
+
+  ScopedMenuCapture capture;
+  RightClickOn(row);
+  ASSERT_TRUE(capture.menu());
+
+  EXPECT_EQ(
+      (std::vector<std::u16string>{u"Rename", u"New folder [disabled]",
+                                   u"Move to folder", u"Unpin", u"Close tab"}),
+      MenuLabels(capture.menu()->menu()));
 }
 
 // The return is offered only when there is somewhere to return from.

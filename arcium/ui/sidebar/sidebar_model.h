@@ -172,9 +172,16 @@ class SidebarModel {
   // entries inside it already counted.
   virtual std::vector<SidebarFolder> folders() const = 0;
   virtual void SetFolderCollapsed(FolderId id, bool collapsed) = 0;
-  // Makes a folder holding just `id`. Returns an invalid id if it could not.
+  // Makes a folder holding just `id`, inside whatever folder `id` is already
+  // in -- so a folder made from a nested row appears where that row was drawn,
+  // not at the top level. Returns an invalid id if it could not, which
+  // includes the case where the entry's folder is already at kMaxFolderDepth.
   virtual FolderId CreateFolderWithEntry(EntryId id,
                                          const std::u16string& name) = 0;
+  // The same question asked before the fact, so the menu item can be greyed
+  // out instead of offering a folder that would silently not appear. Zen greys
+  // its "New Subfolder" item on the same rule.
+  virtual bool CanCreateFolderWithEntry(EntryId id) const = 0;
   // std::nullopt returns the entry to the top level of the Pinned section.
   virtual void MoveEntryToFolder(EntryId id,
                                  std::optional<FolderId> folder_id) = 0;

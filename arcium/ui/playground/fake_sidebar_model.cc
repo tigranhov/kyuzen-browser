@@ -10,6 +10,7 @@
 #include <map>
 #include <utility>
 
+#include "arcium/browser/model/folder.h"
 #include "arcium/ui/sidebar/folder_tree.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -443,9 +444,16 @@ FolderId FakeSidebarModel::CreateFolderWithEntry(EntryId id,
   if (!row || row->section != SidebarSection::kPinned) {
     return FolderId();
   }
+  if (!CanCreateFolderWithEntry(id)) {
+    return FolderId();
+  }
   FakeFolder folder;
   folder.id = FolderId::Generate();
   folder.name = name;
+  // Inside the folder the entry is already in, so a folder made from a nested
+  // row appears where that row was drawn. Set before the position count
+  // below, which counts the siblings this folder will actually have.
+  folder.parent_id = row->folder_id;
   // The same rule ArciumModel::AddFolder uses: the next free position among
   // the folders that share this one's parent.
   folder.position = static_cast<int>(std::count_if(
@@ -456,6 +464,25 @@ FolderId FakeSidebarModel::CreateFolderWithEntry(EntryId id,
   row->folder_id = folder.id;
   Notify();
   return folder.id;
+}
+
+bool FakeSidebarModel::CanCreateFolderWithEntry(EntryId id) const {
+  const SidebarRow* row = FindByEntry(id);
+  if (!row || row->section != SidebarSection::kPinned) {
+    return false;
+  }
+  if (!row->folder_id.has_value()) {
+    return true;
+  }
+  // Through folders(), which is where this fake's depths are computed, rather
+  // than by walking parents here: a second implementation of depth is a
+  // second thing that can disagree with the real model.
+  for (const SidebarFolder& folder : folders()) {
+    if (folder.id == *row->folder_id) {
+      return folder.depth + 1 <= kMaxFolderDepth - 1;
+    }
+  }
+  return false;
 }
 
 void FakeSidebarModel::MoveEntryToFolder(EntryId id,
@@ -663,6 +690,10 @@ SidebarRow* FakeSidebarModel::FindByEntry(EntryId id) {
     }
   }
   return nullptr;
+}
+
+const SidebarRow* FakeSidebarModel::FindByEntry(EntryId id) const {
+  return const_cast<FakeSidebarModel*>(this)->FindByEntry(id);
 }
 
 SidebarRow* FakeSidebarModel::FindByTitle(const std::u16string& title) {

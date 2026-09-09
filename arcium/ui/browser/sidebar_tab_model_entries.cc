@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "arcium/browser/model/folder.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/ui/sidebar/folder_tree.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
@@ -447,12 +448,32 @@ void SidebarTabModel::SetFolderCollapsed(FolderId id, bool collapsed) {
 
 FolderId SidebarTabModel::CreateFolderWithEntry(EntryId id,
                                                 const std::u16string& name) {
-  if (!FolderableEntry(id)) {
+  const TabEntry* entry = FolderableEntry(id);
+  if (!entry || !CanCreateFolderWithEntry(id)) {
     return FolderId();
   }
-  const FolderId folder = arcium_model_->AddFolder(name);
+  // Inside the folder the entry is already in, so a folder made from a nested
+  // row appears at the level that row was drawn at. A top-level entry has no
+  // folder and so still makes a top-level one.
+  const FolderId folder = arcium_model_->AddFolder(name, entry->folder_id);
   arcium_model_->SetEntryFolder(id, folder);
   return folder;
+}
+
+bool SidebarTabModel::CanCreateFolderWithEntry(EntryId id) const {
+  const TabEntry* entry = FolderableEntry(id);
+  if (!entry) {
+    return false;
+  }
+  if (!entry->folder_id.has_value()) {
+    return true;
+  }
+  // The new folder sits one level below the entry's current folder, so it is
+  // the parent's depth plus one that has to fit. Asked of the model rather
+  // than recomputed here, for the same reason the drag path asks
+  // CanMoveFolderTo: one rule, one place.
+  const int depth = arcium_model_->FolderDepth(*entry->folder_id);
+  return depth >= 0 && depth + 1 <= kMaxFolderDepth - 1;
 }
 
 void SidebarTabModel::MoveEntryToFolder(EntryId id,

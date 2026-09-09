@@ -398,5 +398,101 @@ TEST(FakeSidebarModelTest, DeletingAFolderLeavesItsSubfolderOneLevelUp) {
   EXPECT_EQ(2, in_outer);
 }
 
+// "New folder" on a row inside a folder used to make a top-level folder and
+// pull the entry out to it, which moved the entry somewhere the user was not
+// looking. The new folder belongs where the row was drawn: inside the folder
+// the entry is already in. Zen's analogous item is "New Subfolder", which is
+// likewise relative to its context rather than absolute.
+TEST_F(SidebarFoldersTest, AFolderMadeFromAnEntryInsideAFolderIsMadeThere) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  const EntryId id = model->rows()[0].entry_id;
+  const FolderId outer = model->CreateFolderWithEntry(id, u"Work");
+  ASSERT_TRUE(outer.is_valid());
+  ASSERT_EQ(outer, model->rows()[0].folder_id);
+
+  const FolderId inner = model->CreateFolderWithEntry(id, u"Reading");
+
+  ASSERT_TRUE(inner.is_valid());
+  ASSERT_NE(outer, inner);
+  // The new folder sits inside the old one, and the entry went with it.
+  std::vector<SidebarFolder> folders = model->folders();
+  ASSERT_EQ(2u, folders.size());
+  const SidebarFolder* nested = nullptr;
+  for (const SidebarFolder& folder : folders) {
+    if (folder.id == inner) {
+      nested = &folder;
+    }
+  }
+  ASSERT_TRUE(nested);
+  EXPECT_EQ(outer, nested->parent_id);
+  EXPECT_EQ(1, nested->depth);
+  EXPECT_EQ(inner, model->rows()[0].folder_id);
+}
+
+// The other half of the same rule: an entry that is in no folder still makes
+// a top-level one. Without this the fix could have hard-coded a parent.
+TEST_F(SidebarFoldersTest, AFolderMadeFromATopLevelEntryStaysAtTheTopLevel) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  const EntryId id = model->rows()[0].entry_id;
+
+  const FolderId folder = model->CreateFolderWithEntry(id, u"Work");
+
+  ASSERT_TRUE(folder.is_valid());
+  ASSERT_EQ(1u, model->folders().size());
+  EXPECT_FALSE(model->folders()[0].parent_id.has_value());
+  EXPECT_EQ(0, model->folders()[0].depth);
+}
+
+// Nesting on create is a depth increase like any other, so it answers to the
+// same cap. Written against kMaxFolderDepth rather than a literal so the cap
+// can move without this test quietly becoming a test of nothing.
+TEST_F(SidebarFoldersTest, AFolderIsNotMadeWhenItWouldPassTheDepthCap) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  const EntryId id = model->rows()[0].entry_id;
+
+  // Build the chain by creating from the same entry over and over: each call
+  // makes a folder inside the last, which is the behaviour under test.
+  FolderId deepest;
+  while (static_cast<int>(model->folders().size()) < kMaxFolderDepth) {
+    const FolderId made = model->CreateFolderWithEntry(id, u"Deeper");
+    ASSERT_TRUE(made.is_valid()) << "ran out of depth before the cap";
+    deepest = made;
+  }
+  // The entry is now in a folder at the deepest legal level.
+  const std::vector<SidebarFolder> full = model->folders();
+  ASSERT_EQ(static_cast<size_t>(kMaxFolderDepth), full.size());
+  ASSERT_EQ(kMaxFolderDepth - 1, full.back().depth);
+  ASSERT_EQ(deepest, model->rows()[0].folder_id);
+
+  EXPECT_FALSE(model->CanCreateFolderWithEntry(id));
+  EXPECT_FALSE(model->CreateFolderWithEntry(id, u"One too many").is_valid());
+
+  // Nothing was made, and the entry did not move.
+  EXPECT_EQ(static_cast<size_t>(kMaxFolderDepth), model->folders().size());
+  EXPECT_EQ(deepest, model->rows()[0].folder_id);
+}
+
+// The affordance and the rule agree. A menu that offers a folder the model
+// will refuse is the mistake CanMoveFolderTo already exists to prevent.
+TEST_F(SidebarFoldersTest, RoomForAFolderIsOfferedUntilTheCapIsReached) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  model->PinTab(0);
+  const EntryId id = model->rows()[0].entry_id;
+
+  for (int made = 0; made < kMaxFolderDepth; ++made) {
+    EXPECT_TRUE(model->CanCreateFolderWithEntry(id))
+        << "refused at depth " << made;
+    ASSERT_TRUE(model->CreateFolderWithEntry(id, u"Deeper").is_valid());
+  }
+  EXPECT_FALSE(model->CanCreateFolderWithEntry(id));
+}
+
 }  // namespace
 }  // namespace arcium

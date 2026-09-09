@@ -105,6 +105,7 @@ class FakeSidebarModel : public SidebarModel {
                           int position) override;
   std::vector<SidebarFolder> folders() const override;
   void SetFolderCollapsed(FolderId id, bool collapsed) override;
+  bool CanCreateFolderWithEntry(EntryId id) const override;
   FolderId CreateFolderWithEntry(EntryId id,
                                  const std::u16string& name) override;
   void MoveEntryToFolder(EntryId id,
@@ -144,6 +145,7 @@ class FakeSidebarModel : public SidebarModel {
   void NormaliseFolderPositions();
   SidebarRow* FindByTabIndex(int tab_index);
   SidebarRow* FindByEntry(EntryId id);
+  const SidebarRow* FindByEntry(EntryId id) const;
   SidebarRow* FindByTitle(const std::u16string& title);
   bool HasFolder(FolderId id) const;
   // Turns the tab at `tab_index` into an entry in `section`, at `position`
