@@ -1,0 +1,38 @@
+Seam: chrome/browser/BUILD.gn, source_set("core") — the target
+      chrome_content_browser_client_navigation_throttles.cc actually builds
+      in, not //chrome/browser/ui.
+Why: GN wiring for patch 0150. The hook includes an //arcium/ui/browser
+     header and //chrome/browser:core has no Arcium dep of its own, so
+     `gn check` rejects the include even though ninja accepts it. `gn check`
+     on that target is what says whether this is still needed after a
+     rebase.
+
+     No cycle: `gn check --root=/Volumes/Texternal/chromium/src
+     /Volumes/Texternal/chromium/src/out/dev "//chrome/browser:core"` prints
+     `Header dependency check OK` with this dep added, and //arcium/ui/browser
+     depends on nothing that reaches back into //chrome/browser:core.
+
+     Patch 0010's dependency does not transit here. //chrome/browser/ui:ui
+     already depends on //arcium/ui/browser (patch 0010), but that dep is a
+     private `deps` entry, not a `public_dep`, so it stops at
+     //chrome/browser/ui:ui and never reaches //chrome/browser:core. Making
+     patch 0010's dependency public instead was tried and rejected: it lands
+     inside patch 0010's hunk context, which breaks 0010's already-applied
+     check and makes scripts/sync non-idempotent — the same reason patch
+     0125 gives for not touching chrome/browser/ui/BUILD.gn a second time.
+Delegates to: nothing. GN wiring carries no call.
+
+diff --git a/chrome/browser/BUILD.gn b/chrome/browser/BUILD.gn
+index e1d0017fc8..b56984bde3 100644
+--- a/chrome/browser/BUILD.gn
++++ b/chrome/browser/BUILD.gn
+@@ -924,6 +924,9 @@ source_set("core") {
+     ":startup_data",
+     ":unexpire_flags",
+     ":universal_web_contents_observers",
++    # Arcium: chrome_content_browser_client_navigation_throttles.cc includes
++    # home_boundary_throttle.h.
++    "//arcium/ui/browser",
+     "//base/allocator:buildflags",
+     "//build/config/linux/dbus:buildflags",
+     "//chrome/browser/accessibility",
