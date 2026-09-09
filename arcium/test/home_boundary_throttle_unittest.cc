@@ -53,11 +53,13 @@ class HomeBoundaryThrottleTest : public BrowserWithTestWindowTest {
   }
 
   // A handle for a navigation to `url` in tab 0, shaped like a link click
-  // unless `link_click` says otherwise. The redirect chain is set because
+  // unless `link_click` says otherwise, and carrying a user gesture unless
+  // `has_user_gesture` says otherwise. The redirect chain is set because
   // OpenURLParams::FromNavigationHandle pops its last entry.
   std::unique_ptr<content::MockNavigationHandle> MakeHandle(
       const char* url,
-      bool link_click = true) {
+      bool link_click = true,
+      bool has_user_gesture = true) {
     auto handle = std::make_unique<content::MockNavigationHandle>(contents());
     handle->set_url(GURL(url));
     handle->set_is_in_primary_main_frame(true);
@@ -76,8 +78,9 @@ class HomeBoundaryThrottleTest : public BrowserWithTestWindowTest {
     // and the divert's WebContents::OpenURL is silently eaten by the popup
     // blocker (WindowOpenDisposition::NEW_FOREGROUND_TAB is popup-blocking
     // eligible, and ShouldBlockPopup() rejects a gesture-less open outright).
-    ON_CALL(*handle, HasUserGesture()).WillByDefault(Return(true));
-    EXPECT_CALL(*handle, HasUserGesture()).WillRepeatedly(Return(true));
+    ON_CALL(*handle, HasUserGesture()).WillByDefault(Return(has_user_gesture));
+    EXPECT_CALL(*handle, HasUserGesture())
+        .WillRepeatedly(Return(has_user_gesture));
     return handle;
   }
 };
@@ -178,6 +181,29 @@ TEST_F(HomeBoundaryThrottleTest, ACrossHostNavigationThatIsNotALinkClickStays) {
   // this bit false, which is why sign-in survives the boundary.
   AddPinnedTab();
   auto handle = MakeHandle(kElsewhereUrl, /*link_click=*/false);
+  content::MockNavigationThrottleRegistry registry(
+      handle.get(),
+      content::MockNavigationThrottleRegistry::RegistrationMode::kHold);
+  HomeBoundaryThrottle::MaybeCreateAndAdd(registry);
+  ASSERT_EQ(1u, registry.throttles().size());
+
+  const content::NavigationThrottle::ThrottleCheckResult result =
+      registry.throttles()[0]->WillStartRequest();
+
+  EXPECT_EQ(content::NavigationThrottle::PROCEED, result.action());
+  EXPECT_EQ(1, browser()->tab_strip_model()->count());
+}
+
+TEST_F(HomeBoundaryThrottleTest, AScriptedLinkClickWithoutAUserGestureStays) {
+  // A programmatic anchorElement.click() is still a link click by Blink's
+  // classification -- the anchor sets a triggering event -- but it carries
+  // no user gesture. Diverting it would cancel the navigation and hand the
+  // open to the popup blocker, which drops a gesture-less
+  // NEW_FOREGROUND_TAB outright: the visible result would be a navigation
+  // that simply never happens, not one that stays in the tab.
+  AddPinnedTab();
+  auto handle = MakeHandle(kElsewhereUrl, /*link_click=*/true,
+                           /*has_user_gesture=*/false);
   content::MockNavigationThrottleRegistry registry(
       handle.get(),
       content::MockNavigationThrottleRegistry::RegistrationMode::kHold);

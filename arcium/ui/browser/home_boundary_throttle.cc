@@ -98,6 +98,19 @@ HomeBoundaryThrottle::WillStartRequest() {
   if (!handle->WasInitiatedByLinkClick()) {
     return content::NavigationThrottle::PROCEED;
   }
+  // A programmatic anchorElement.click() is still a link click by Blink's
+  // classification above, but it carries no user gesture. Diverting it would
+  // still cancel the navigation and hand the open to
+  // WebContents::OpenURL(..., NEW_FOREGROUND_TAB), which
+  // components/blocked_content/popup_blocker.cc's ShouldBlockPopup() rejects
+  // outright for a gesture-less open. The visible result would not be "stays
+  // in the tab": it would be a navigation that simply never happens, since
+  // this feature would have already cancelled the one that would otherwise
+  // have proceeded. Requiring a gesture here costs nothing for a real click,
+  // which always carries one.
+  if (!handle->HasUserGesture()) {
+    return content::NavigationThrottle::PROCEED;
+  }
   // A traversal is not a fresh click, even when it replays one.
   if ((handle->GetPageTransition() & ui::PAGE_TRANSITION_FORWARD_BACK) != 0) {
     return content::NavigationThrottle::PROCEED;
