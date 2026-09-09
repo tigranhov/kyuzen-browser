@@ -14,6 +14,12 @@ namespace arcium::features {
 // The sidebar-first window layout. When disabled the window is stock Chromium.
 BASE_DECLARE_FEATURE(kArciumSidebar);
 
+// The pinned / favourite home boundary: a cross-host link click in an entry's
+// tab opens a new tab instead of navigating the entry away from its home.
+// Enabled by default; --disable-features=ArciumHomeBoundary turns it off for
+// a side-by-side comparison against plain Chromium behaviour.
+BASE_DECLARE_FEATURE(kArciumHomeBoundary);
+
 // Command line switch that turns the sidebar off for one run, for debugging.
 inline constexpr char kNoSidebarSwitch[] = "arcium-no-sidebar";
 
@@ -66,6 +72,9 @@ class OffsetClock : public base::Clock {
 
 // True when the sidebar layout should be used for normal tabbed windows.
 bool IsSidebarEnabled();
+
+// True when a link click that leaves an entry's home should open a new tab.
+bool IsHomeBoundaryEnabled();
 
 // macOS immersive fullscreen moves top chrome into a separate overlay window.
 // Arcium hides the tab strip and toolbar, so that overlay would be zero-sized,
