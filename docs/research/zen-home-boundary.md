@@ -158,16 +158,72 @@ project's hook rule, and the decision — is this entry pinned or a favourite, i
 this a user link click with a default target, do the hosts differ modulo `www.`
 — is ordinary `arcium/` logic over `OpenURLParams`.
 
-Two mappings need care and are design questions, not findings:
+## 7. The Chromium mapping, probed 2026-09-09
 
-- **"A link click with a default target."** Firefox knows this because
-  `OnLinkClick` is a distinct code path. In Chromium the nearest signals are
-  `WindowOpenDisposition::CURRENT_TAB` together with a `ui::PageTransition` of
-  `PAGE_TRANSITION_LINK` and `has_user_gesture`. Whether that trio excludes
-  scripted `location.href` assignments as cleanly as Firefox's split does is
-  the thing to establish before writing the rule, because getting it wrong in
-  the permissive direction breaks sign-in, which is exactly the failure the
-  spec set out to avoid.
-- **"Nulling the opener."** Firefox's test asserts it. The Chromium equivalent
-  is opening without an opener rather than with `WindowOpenDisposition::
-  NEW_FOREGROUND_TAB` inheriting one.
+Two questions were open when §6 was written. Both are now answered from the
+Chromium tree at 152.0.7977.83, statically and without a build.
+
+**The seam is a `NavigationThrottle`, not `OpenURLFromTab`.** A plain
+same-frame link click never reaches `WebContentsDelegate::OpenURLFromTab`;
+that path is for navigations carrying a disposition. Chrome already ships this
+exact feature for tabbed web apps with a pinned home tab —
+`web_app::TabbedWebAppNavigationThrottle`
+(`chrome/browser/ui/web_applications/tabbed_web_app_navigation_throttle.cc`,
+registered from `chrome_content_browser_client_navigation_throttles.cc:487`) —
+and it is the template: filter in `MaybeCreateAndAdd`, decide in
+`WillStartRequest`, and to divert, build
+`OpenURLParams::FromNavigationHandle(...)`, set the disposition, clear
+`frame_tree_node_id`, call `WebContents::OpenURL`, and return
+`CANCEL_AND_IGNORE`. Its `WillRedirectRequest` carries a
+`TODO(crbug.com/400761084)` admitting redirects are unresolved there; ours are
+resolved by the rule below, since a redirect is not a link click.
+
+**"A link click" needs no inference. Chromium already computes it and exposes
+it.** `content::NavigationHandle::WasInitiatedByLinkClick()`
+(`content/public/browser/navigation_handle.h:616`) is public API, backed by
+`NavigationRequest::WasInitiatedByLinkClick`
+(`navigation_request.cc:10432`), which reads a bit the renderer set in
+`render_frame_impl.cc:6309` from Blink's navigation type.
+
+That bit is **exactly** Firefox's `OnLinkClick` distinction. Blink's
+`DetermineNavigationType` (`frame_loader.cc:614`) returns
+`kWebNavigationTypeLinkClicked` when `have_event` is true, and `have_event` is
+`request.GetTriggeringEventInfo() != kNotFromEvent`. A repo-wide search finds
+only four places that ever set a triggering event:
+
+- `html_anchor_element.cc:422` — an `<a href>` click
+- `svg_a_element.cc:211` — an SVG `<a>`
+- `mathml_anchor_element.cc:159` — a MathML `<a>`
+- `form_submission.cc:374,463` — form submits, which are classified
+  `kWebNavigationTypeFormSubmitted` first, because `is_form_submission` is
+  tested before `have_event`
+
+`Location::SetLocation` sets none. So `location.href = ...`,
+`location.assign()` and `location.replace()` are **not** link clicks **even
+inside a click handler**, and neither are `<meta>` refreshes, server
+redirects, typed URLs or session restores. The failure the spec feared — a
+"Continue with Google" button that assigns `location.href` being torn out of
+the tab — cannot happen, for the same structural reason it cannot happen in
+Firefox.
+
+The full mapping, then:
+
+| Firefox condition | Arcium / Chromium |
+|---|---|
+| reached only from `OnLinkClick` | `handle.WasInitiatedByLinkClick()` |
+| not `javascript:` | scheme check on the target URL |
+| link URI has a host | `url.has_host()` |
+| default target only | `target="_blank"` lands in a *new* `WebContents`, so the pinned tab sees no navigation at all |
+| tab is an app tab | our own model: the tab is bound to a pinned or favourite entry |
+| link host ≠ current document host | `handle.GetURL().host()` vs `web_contents->GetLastCommittedURL().host()` |
+| `www.` allowance | the same string comparison |
+| — | plus, as Chrome's throttle does: primary main frame only, skip reloads |
+
+**Nulling the opener** remains a detail to get right rather than a risk:
+Firefox's test asserts `content.opener === null`, so the diverted tab must be
+opened without an opener rather than inheriting one.
+
+**Not yet confirmed empirically.** The evidence above is static. Before the
+rule ships, one run against a real sign-in flow is worth the minutes it costs
+— the claim being tested is that no OAuth hop arrives with
+`WasInitiatedByLinkClick()` true.
