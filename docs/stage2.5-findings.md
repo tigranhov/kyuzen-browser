@@ -187,6 +187,36 @@ author that the spec does not support, and it read for two stages as though
 the question had been settled. **A comment naming a future stage is a claim
 about the spec, and is worth checking against it.**
 
+**A2.5.2 passed in both its shapes, including the one Zen gets wrong.** A drag
+that would exceed the cap is refused; so is a drag of an already-nested
+structure whose combined depth would exceed it. That second shape is the
+deliberate divergence recorded above — Zen tests `target.level + 1` alone and
+would have allowed it. Confirmed by hand rather than only by
+`CanMoveFolderInTree`'s unit test, which is the point: the divergence is a
+claim about what the user can do, and only a pointer can check it.
+
+**Two changes the owner asked for during the pass.**
+
+*The cap is four, not five.* Lowering it is a product call, not a correctness
+one, and `folder.h` now says so — along with the arithmetic showing four is the
+floor, because at three the cycle guard becomes unreachable dead code. An
+existing profile with a folder at depth 4 has it returned to the top level by
+the deserializer's repair on next load, contents kept. Worth knowing about that
+repair: like the migration, it is a *read-path* transform, so the file on disk
+keeps the old shape until something mutates and the debounce fires. A profile
+quit without a change is re-repaired on every load, harmlessly, forever.
+
+*"New folder" makes the folder where the row is.* It used to make a top-level
+folder and pull the entry out to it, so acting on a nested row moved that row
+somewhere the user was not looking. It now nests inside the row's own folder,
+and — since that is a depth increase like any other — the item greys out at the
+deepest level rather than offering an action the model would refuse. Zen greys
+its own "New Subfolder" on the same rule. **This is the third affordance in
+this stage that offered something it would not honour**, after the favourites
+grid and the "Move to folder" submenu. Three of one kind is a pattern, not a
+coincidence: any menu item or drop target whose command can refuse needs a
+matching predicate, and the model should own both.
+
 **A note on the machine, not the code.** The suite ran green at 371/371 twice,
 then produced two failures and later a timeout that cascaded into eight tests
 not run — on code differing only by a comment. Load average was 152 on ten
@@ -203,12 +233,10 @@ SUCCESS, hiding both the timeout and the eight tests that never ran.
   running, and one belonging to unrelated in-flight work had been up for nearly
   seven hours awaiting a visual check. See `docs/perf/2026-09-09-stage2.5.md`
   for the four questions answered in writing and the command to take the number.
-- **The acceptance list is mostly executed.** On 2026-09-09, by hand: A2.5.3
-  passed on a real version 1 file; nesting by drag was confirmed; and A2.5.2's
-  cycle cases — a folder onto its own child, and a folder onto itself — were
-  both confirmed to do nothing at all. **Still unrun:** A2.5.2's depth-cap case
-  (a drop that would carry a subtree past five levels) and A2.5.1's
-  collapse-the-middle-then-quit-and-relaunch half.
+- **A2.5.2 and A2.5.3 passed by hand on 2026-09-09**, along with nesting by
+  drag. **Still unrun:** A2.5.1's collapse-the-middle-then-quit-and-relaunch
+  half. Nothing on disk has ever carried `collapsed: true`, so that is the one
+  claim in this stage with no evidence behind it at all.
 - **Two test files are past the size threshold**: `sidebar_views_unittest.cc` at
   2067 lines and `sidebar_drag_unittest.cc` at 1553. Production files are all
   under 510 — `sidebar_tab_model_entries.cc` is 506 and is the only one over
@@ -217,14 +245,12 @@ SUCCESS, hiding both the timeout and the eight tests that never ran.
 
 ## The acceptance pass, what is still to run by hand
 
-- **A2.5.1** Build a folder three deep by dragging. Collapse the middle one and
-  confirm the deepest disappears with it while the outer stays. Quit with Cmd+Q,
-  relaunch, confirm the tree and the collapsed state survived.
-- **A2.5.2** — *cycle cases done 2026-09-09, passed.* Still to run: the
-  depth-cap case. Drag a folder that is itself two deep onto a folder at the
-  fourth level; the drop is refused on the height of the moved subtree, not on
-  the target's depth alone, which is the one place this deliberately diverges
-  from Zen.
+- **A2.5.1** — *nesting done; the collapse half is not.* Collapse the middle
+  folder of a three-deep chain and confirm the deepest disappears with it while
+  the outer stays. Quit with Cmd+Q, relaunch, confirm the tree **and the
+  collapsed state** survived. The collapsed half is the part no run has yet
+  covered.
+- **A2.5.2** — *done 2026-09-09, passed in both shapes.*
 - **A2.5.3** — *done 2026-09-09, passed.* Kept here for the next rebase; a
   copy of the version 1 file used is worth keeping, because a profile only
   offers one.
