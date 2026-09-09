@@ -6,6 +6,7 @@
 #define ARCIUM_UI_BROWSER_SIDEBAR_TAB_MODEL_H_
 
 #include <map>
+#include <memory>
 #include <optional>
 #include <string>
 #include <vector>
@@ -13,10 +14,12 @@
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/tab_binding.h"
+#include "arcium/ui/browser/cold_favicon_cache.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 
@@ -166,6 +169,12 @@ class SidebarTabModel : public SidebarModel,
   void DeliverArchivedRows(ArchivedRowsCallback callback,
                            ArchiveReadResult result);
 
+  // Asks the profile for the stored icon of every entry with no tab behind
+  // it. Called from the coalescing flush rather than from the const row
+  // build, so a repaint never starts a lookup, and only after the model has
+  // entries -- which is after ModelStore::Load, and so after first paint.
+  void RequestColdFavicons();
+
   // Schedules FlushNotification() unless one is already pending.
   void NotifyChanged();
   void FlushNotification();
@@ -191,6 +200,10 @@ class SidebarTabModel : public SidebarModel,
   // model draws one window, so a tab that has left it would leave a name
   // behind that nothing can reach or clear.
   std::map<tabs::TabHandle, std::u16string> today_titles_;
+  // Cancels outstanding favicon lookups when this model goes away. Declared
+  // before the cache so it outlives the callbacks the cache holds.
+  base::CancelableTaskTracker favicon_tracker_;
+  std::unique_ptr<ColdFaviconCache> cold_favicons_;
   base::WeakPtrFactory<SidebarTabModel> weak_factory_{this};
 };
 

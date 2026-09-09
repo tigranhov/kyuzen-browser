@@ -24,15 +24,61 @@
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
+#include "chrome/browser/favicon/favicon_service_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/tab_list/tab_removed_reason.h"
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+#include "components/favicon/core/favicon_service.h"
+#include "components/favicon_base/favicon_types.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "components/tabs/public/tab_alert.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/tabs/public/tab_network_state.h"
+#include "ui/gfx/image/image.h"
 
 namespace arcium {
+
+namespace {
+
+// Unwraps what FaviconService answers with into what the cache asked for.
+void ForwardImage(base::OnceCallback<void(const gfx::Image&)> reply,
+                  const favicon_base::FaviconImageResult& result) {
+  std::move(reply).Run(result.image);
+}
+
+void AskProfileForIcon(favicon::FaviconService* service,
+                       base::CancelableTaskTracker* tracker,
+                       const GURL& url,
+                       base::OnceCallback<void(const gfx::Image&)> reply) {
+  // The page-URL form, with no fallback to the host: these are URLs the user
+  // actually visited, so an exact match is the right answer and a host match
+  // would put one site's icon on another's page. Reads the profile's favicon
+  // database only -- it never fetches, so an icon that was never stored stays
+  // a globe rather than becoming a network request from a background window.
+  service->GetFaviconImageForPageURL(
+      url, base::BindOnce(&ForwardImage, std::move(reply)), tracker);
+}
+
+// Answers with nothing when the profile has no FaviconService, as in the unit
+// tests and the playground. A cold row then keeps the globe it always had.
+ColdFaviconCache::Lookup ProfileIconLookup(
+    favicon::FaviconService* service,
+    base::CancelableTaskTracker* tracker) {
+  if (!service) {
+    return base::BindRepeating(
+        [](const GURL&, base::OnceCallback<void(const gfx::Image&)> reply) {
+          std::move(reply).Run(gfx::Image());
+        });
+  }
+  // Unretained on both: the service is a KeyedService of the profile, which
+  // outlives every window on it, and the tracker is this object's own member.
+  return base::BindRepeating(&AskProfileForIcon, base::Unretained(service),
+                             base::Unretained(tracker));
+}
+
+}  // namespace
 
 SidebarTabModel::SidebarTabModel(TabStripModel* tab_strip_model,
                                  ArciumModel* arcium_model,
@@ -42,6 +88,15 @@ SidebarTabModel::SidebarTabModel(TabStripModel* tab_strip_model,
       binding_(binding) {
   tab_strip_model_->AddObserver(this);
   arcium_model_->AddObserver(this);
+  Profile* profile = tab_strip_model_->profile();
+  cold_favicons_ = std::make_unique<ColdFaviconCache>(
+      ProfileIconLookup(profile
+                            ? FaviconServiceFactory::GetForProfile(
+                                  profile, ServiceAccessType::EXPLICIT_ACCESS)
+                            : nullptr,
+                        &favicon_tracker_),
+      base::BindRepeating(&SidebarTabModel::NotifyChanged,
+                          base::Unretained(this)));
 }
 
 SidebarTabModel::~SidebarTabModel() {
@@ -345,8 +400,23 @@ void SidebarTabModel::NotifyChanged() {
                                 weak_factory_.GetWeakPtr()));
 }
 
+void SidebarTabModel::RequestColdFavicons() {
+  if (!tab_strip_model_) {
+    return;
+  }
+  const SpaceId space = arcium_model_->default_space_id();
+  for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
+    for (const TabEntry* entry : arcium_model_->EntriesForKind(space, kind)) {
+      if (!LiveTabForEntry(entry->id)) {
+        cold_favicons_->Request(entry->url);
+      }
+    }
+  }
+}
+
 void SidebarTabModel::FlushNotification() {
   notification_pending_ = false;
+  RequestColdFavicons();
   {
     // The write-back is part of this burst, not a new one.
     base::AutoReset<bool> suppress(&suppress_model_notifications_, true);

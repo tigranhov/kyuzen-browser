@@ -44,8 +44,13 @@ namespace arcium {
 
 namespace {
 
-// A cold entry has no tab and so no favicon; the globe stands in until the
-// entry is warmed. Favicons for cold entries are Stage 6 work.
+// The fallback for a cold entry whose icon the profile has never stored: a
+// chrome:// page, or a URL whose favicon was never fetched. An entry whose
+// icon *is* stored draws the real one -- see ColdFaviconCache, which asks.
+//
+// This comment used to say cold favicons were Stage 6 work. They were not:
+// the spec gives Stage 6 boosts, themes, media, the library, import and
+// shortcuts, and mentions favicons only in R1.3, for live tabs.
 ui::ImageModel ColdFavicon() {
   return ui::ImageModel::FromVectorIcon(
       vector_icons::kGlobeIcon, kColorArciumRowText, metrics::kFaviconSize);
@@ -148,7 +153,13 @@ SidebarRow SidebarTabModel::RowForEntry(const TabEntry& entry) const {
     if (row.title.empty()) {
       row.title = base::UTF8ToUTF16(entry.url.host());
     }
-    row.favicon = ColdFavicon();
+    // The icon the profile already stored for this URL, if it has one. The
+    // globe is the fallback, not the answer: before this lookup a relaunched
+    // window drew globes for entries whose icons were on disk all along.
+    row.favicon = cold_favicons_->IconFor(entry.url);
+    if (row.favicon.IsEmpty()) {
+      row.favicon = ColdFavicon();
+    }
     row.url = entry.url;
     return row;
   }

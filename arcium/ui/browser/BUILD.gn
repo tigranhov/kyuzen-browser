@@ -8,6 +8,8 @@ source_set("browser") {
     "archive_service.h",
     "browser_sidebar_controller.cc",
     "browser_sidebar_controller.h",
+    "cold_favicon_cache.cc",
+    "cold_favicon_cache.h",
     "color_ids_check.cc",
     "quick_entry_bubble.cc",
     "quick_entry_bubble.h",
@@ -30,6 +32,11 @@ source_set("browser") {
     "//arcium/browser",
     "//arcium/browser/model",
   ]
+
+  # FaviconServiceFactory is included the same way the chrome/browser/ui
+  # headers above are: through the circular-includes allowance, not through a
+  # dep. Depending on //chrome/browser/favicon drags in the profile and
+  # history graphs and is the dependency direction patch 0010 exists to avoid.
   deps = [
     "//arcium/common",
     "//arcium/ui/sidebar",
@@ -42,6 +49,9 @@ source_set("browser") {
     # is not part of that cycle.
     "//chrome/browser/sessions",
     "//chrome/browser/ui/color:color_headers",
+    "//components/favicon/core",
+    "//components/favicon_base",
+    "//components/keyed_service/core",
     "//components/omnibox/browser",
     "//components/tabs:public",
     "//components/vector_icons",
