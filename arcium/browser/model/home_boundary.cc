@@ -23,8 +23,11 @@ std::string_view HostIgnoringWww(const GURL& url) {
   return host;
 }
 
-// A URL with no host never matches anything, including another URL with no
-// host: "two tabs that are both about:blank" is not a home to stay on.
+// The has_host() guards below are defensive rather than load-bearing here:
+// LinkLeavesHome's caller already rejects a hostless target before either
+// SameHost call, and an empty host cannot equal a non-empty one regardless.
+// They guard against a hostless `current` or `home` reaching this function
+// some other way.
 bool SameHost(const GURL& a, const GURL& b) {
   return a.has_host() && b.has_host() &&
          HostIgnoringWww(a) == HostIgnoringWww(b);
@@ -51,8 +54,11 @@ bool LinkLeavesHome(const GURL& current, const GURL& target, const GURL& home) {
   // accounts.google.com, where a link back to mail would otherwise be torn
   // out of its own pinned tab.
   //
-  // Deleting this clause and the tests named Divergence* restores Firefox's
-  // rule exactly. See the design doc, section 2.1.
+  // Deleting this clause and the tests named Divergence* restores the plain
+  // current-page-host comparison -- verified test by test, since those are
+  // the only tests that fail without it. That is not quite Firefox's rule
+  // exactly; section 2.1 of the design doc points at the divergences that
+  // remain either way.
   if (SameHost(target, home)) {
     return false;
   }

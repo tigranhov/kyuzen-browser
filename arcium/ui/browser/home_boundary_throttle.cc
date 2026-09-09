@@ -107,14 +107,30 @@ HomeBoundaryThrottle::WillStartRequest() {
   // in the tab": it would be a navigation that simply never happens, since
   // this feature would have already cancelled the one that would otherwise
   // have proceeded. Requiring a gesture here costs nothing for a real click,
-  // which always carries one.
+  // which always carries one. Note the popup blocker is still consulted even
+  // with a gesture present -- the divert passes only because OpenURLParams'
+  // triggering_event_info defaults to kUnknown, which ShouldBlockPopup
+  // treats as trusted (it only special-cases kFromUntrustedEvent). If a
+  // future edit ever copies triggering_event_info from the handle instead of
+  // leaving it defaulted, an untrusted-event click would start being
+  // silently eaten here.
   if (!handle->HasUserGesture()) {
     return content::NavigationThrottle::PROCEED;
   }
-  // A traversal is not a fresh click, even when it replays one.
+  // Belt-and-braces, like the reload guard in MaybeCreateAndAdd: a
+  // browser-initiated traversal already arrives with
+  // was_initiated_by_link_click = false, and Blink classifies a
+  // renderer-initiated traversal kWebNavigationTypeBackForward, never
+  // kWebNavigationTypeLinkClicked, so WasInitiatedByLinkClick() above should
+  // already have excluded it. This is a second, cheap check on the same
+  // fact.
   if ((handle->GetPageTransition() & ui::PAGE_TRANSITION_FORWARD_BACK) != 0) {
     return content::NavigationThrottle::PROCEED;
   }
+  // Unlike MaybeCreateAndAdd's GetWebContents() check, no null check here:
+  // this throttle exists only because MaybeCreateAndAdd already got a
+  // non-null WebContents for this same handle, and a navigation's
+  // WebContents does not disappear mid-flight while its own throttle runs.
   content::WebContents* web_contents = handle->GetWebContents();
   if (!LinkLeavesHome(web_contents->GetLastCommittedURL(), handle->GetURL(),
                       home_)) {
@@ -123,9 +139,10 @@ HomeBoundaryThrottle::WillStartRequest() {
   content::OpenURLParams params =
       content::OpenURLParams::FromNavigationHandle(handle);
   params.disposition = WindowOpenDisposition::NEW_FOREGROUND_TAB;
-  // The new navigation is in a new tab, not in the frame that asked. Clearing
-  // this is also what leaves the new tab without an opener, so the page it
-  // loads cannot script the entry's tab.
+  // Clearing this puts the new navigation in a new tab rather than in the
+  // frame of the original navigation. It is not what leaves the new tab
+  // without a scripting opener -- OpenURLParams carries no scripting-opener
+  // field to begin with, so window.opener is null regardless.
   params.frame_tree_node_id = content::FrameTreeNodeId();
   web_contents->OpenURL(std::move(params),
                         /*navigation_handle_callback=*/{});
