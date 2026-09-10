@@ -191,8 +191,9 @@ EntryId SidebarTabModel::AddEntryForTab(int tab_index, EntryKind kind) {
   const tabs::TabData data = tabs::TabData::FromTabInterface(tab);
   // Deliberately not TabStripModel::SetTabPinned: a Chromium pinned tab is
   // always live, which is precisely what a cold entry must not be.
-  const EntryId id =
-      arcium_model_->AddEntry(kind, data.visible_url, data.title);
+  const EntryId id = arcium_model_->AddEntry(
+      // Task 5: the window's space.
+      arcium_model_->default_space_id(), kind, data.visible_url, data.title);
   binding_->Bind(id, tab->GetHandle());
   NotifyChanged();
   return id;
@@ -455,7 +456,9 @@ FolderId SidebarTabModel::CreateFolderWithEntry(EntryId id,
   // Inside the folder the entry is already in, so a folder made from a nested
   // row appears at the level that row was drawn at. A top-level entry has no
   // folder and so still makes a top-level one.
-  const FolderId folder = arcium_model_->AddFolder(name, entry->folder_id);
+  const FolderId folder = arcium_model_->AddFolder(
+      // Task 5: the window's space.
+      arcium_model_->default_space_id(), name, entry->folder_id);
   arcium_model_->SetEntryFolder(id, folder);
   return folder;
 }

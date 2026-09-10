@@ -65,8 +65,8 @@ TEST_F(ArciumProfileStateTest, IncognitoGetsNoStoreAndWritesNothing) {
   ASSERT_TRUE(state);
   EXPECT_FALSE(state->store());
 
-  state->model()->AddEntry(EntryKind::kPinned, GURL("https://secret.example/"),
-                           u"Secret");
+  state->model()->AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://secret.example/"), u"Secret");
   task_environment()->FastForwardBy(ModelStore::kSaveDelay * 2);
   task_environment()->RunUntilIdle();
 
@@ -116,8 +116,8 @@ TEST_F(ArciumProfileStateTest, ARegularProfileHasAStoreAndWrites) {
   ASSERT_TRUE(state);
   ASSERT_TRUE(state->store());
 
-  state->model()->AddEntry(EntryKind::kPinned, GURL("https://a.example/"),
-                           u"A");
+  state->model()->AddEntryForTesting(EntryKind::kPinned,
+                                     GURL("https://a.example/"), u"A");
   task_environment()->FastForwardBy(ModelStore::kSaveDelay * 2);
   task_environment()->RunUntilIdle();
 
@@ -135,8 +135,8 @@ TEST_F(ArciumProfileStateTest, IncognitoGetsItsOwnIndependentModel) {
   EXPECT_NE(regular->model(), incognito->model());
   EXPECT_NE(regular->binding(), incognito->binding());
 
-  incognito->model()->AddEntry(EntryKind::kPinned,
-                               GURL("https://secret.example/"), u"Secret");
+  incognito->model()->AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://secret.example/"), u"Secret");
   EXPECT_EQ(1u, incognito->model()->entries().size());
   EXPECT_TRUE(regular->model()->entries().empty());
 
@@ -159,8 +159,8 @@ TEST_F(ArciumProfileStateTest, ABindingWhoseEntryVanishesIsReleased) {
   const tabs::TabHandle handle =
       browser()->tab_strip_model()->GetTabAtIndex(0)->GetHandle();
 
-  const EntryId id = state->model()->AddEntry(EntryKind::kPinned,
-                                              GURL("https://a.example/"), u"A");
+  const EntryId id = state->model()->AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   state->binding()->Bind(id, handle);
   ASSERT_TRUE(state->binding()->IsBound(handle));
 
@@ -183,8 +183,8 @@ TEST_F(ArciumProfileStateTest, ALiveEntrysBindingSurvivesAReplaceAll) {
   const tabs::TabHandle handle =
       browser()->tab_strip_model()->GetTabAtIndex(0)->GetHandle();
 
-  const EntryId id = state->model()->AddEntry(EntryKind::kPinned,
-                                              GURL("https://a.example/"), u"A");
+  const EntryId id = state->model()->AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   state->binding()->Bind(id, handle);
 
   std::vector<Space> spaces = state->model()->spaces();

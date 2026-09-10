@@ -49,7 +49,8 @@ TEST_F(ModelStoreTest, LoadingAMissingFileLeavesAnEmptyUsableModel) {
 TEST_F(ModelStoreTest, AMutationIsWrittenAfterTheSaveDelay) {
   ArciumModel model;
   ModelStore store(&model, path());
-  model.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  model.AddEntryForTesting(EntryKind::kPinned, GURL("https://a.example/"),
+                           u"A");
 
   // Nothing on disk yet: the write is debounced, not synchronous.
   EXPECT_FALSE(base::PathExists(path()));
@@ -63,8 +64,9 @@ TEST_F(ModelStoreTest, ABurstOfMutationsWritesOnce) {
   ArciumModel model;
   ModelStore store(&model, path());
   for (int i = 0; i < 10; ++i) {
-    model.AddEntry(EntryKind::kPinned,
-                   GURL("https://a.example/" + base::NumberToString(i)), u"A");
+    model.AddEntryForTesting(
+        EntryKind::kPinned,
+        GURL("https://a.example/" + base::NumberToString(i)), u"A");
   }
   EXPECT_EQ(1, store.scheduled_save_count_for_testing());
 
@@ -77,8 +79,8 @@ TEST_F(ModelStoreTest, WhatWasSavedComesBack) {
   {
     ArciumModel model;
     ModelStore store(&model, path());
-    const EntryId id =
-        model.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+    const EntryId id = model.AddEntryForTesting(
+        EntryKind::kPinned, GURL("https://a.example/"), u"A");
     model.SetCustomTitle(id, u"Renamed");
     task_environment_.FastForwardBy(ModelStore::kSaveDelay);
     task_environment_.RunUntilIdle();
@@ -108,7 +110,8 @@ TEST_F(ModelStoreTest, LoadingDoesNotScheduleAWriteOfWhatWasJustRead) {
   {
     ArciumModel model;
     ModelStore store(&model, path());
-    model.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+    model.AddEntryForTesting(EntryKind::kPinned, GURL("https://a.example/"),
+                             u"A");
     task_environment_.FastForwardBy(ModelStore::kSaveDelay);
     task_environment_.RunUntilIdle();
   }
@@ -124,7 +127,8 @@ TEST_F(ModelStoreTest, LoadingDoesNotScheduleAWriteOfWhatWasJustRead) {
   EXPECT_EQ(0, store.scheduled_save_count_for_testing());
 
   // A genuine user mutation after the load must still schedule normally.
-  restored.AddEntry(EntryKind::kPinned, GURL("https://b.example/"), u"B");
+  restored.AddEntryForTesting(EntryKind::kPinned, GURL("https://b.example/"),
+                              u"B");
   EXPECT_EQ(1, store.scheduled_save_count_for_testing());
 
   // Flush before teardown so the pending write from the assertion above
@@ -221,7 +225,8 @@ TEST_F(ModelStoreTest, AFileThatCannotBeMovedAsideIsNotOverwrittenEither) {
 
     EXPECT_TRUE(store.saves_suppressed_for_testing());
 
-    model.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+    model.AddEntryForTesting(EntryKind::kPinned, GURL("https://a.example/"),
+                             u"A");
     EXPECT_EQ(0, store.scheduled_save_count_for_testing());
     task_environment_.FastForwardBy(ModelStore::kSaveDelay * 2);
     EXPECT_EQ(0, store.initiated_save_count_for_testing());
@@ -252,7 +257,8 @@ TEST_F(ModelStoreTest, GarbageThatCannotBeMovedAsideIsNotOverwrittenEither) {
 
     EXPECT_TRUE(store.saves_suppressed_for_testing());
 
-    model.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+    model.AddEntryForTesting(EntryKind::kPinned, GURL("https://a.example/"),
+                             u"A");
     EXPECT_EQ(0, store.scheduled_save_count_for_testing());
     task_environment_.FastForwardBy(ModelStore::kSaveDelay * 2);
     EXPECT_EQ(0, store.initiated_save_count_for_testing());

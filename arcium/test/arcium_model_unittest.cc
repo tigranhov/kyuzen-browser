@@ -33,10 +33,10 @@ TEST_F(ArciumModelTest, StartsWithOneDefaultSpace) {
 }
 
 TEST_F(ArciumModelTest, AddEntryReturnsAStableUniqueId) {
-  const EntryId a =
-      model_.AddEntry(EntryKind::kFavorite, GURL("https://a.example/"), u"A");
-  const EntryId b =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://b.example/"), u"B");
+  const EntryId a = model_.AddEntryForTesting(EntryKind::kFavorite,
+                                              GURL("https://a.example/"), u"A");
+  const EntryId b = model_.AddEntryForTesting(EntryKind::kPinned,
+                                              GURL("https://b.example/"), u"B");
   EXPECT_NE(a, b);
   ASSERT_TRUE(model_.GetEntry(a));
   EXPECT_EQ(EntryKind::kFavorite, model_.GetEntry(a)->kind);
@@ -46,10 +46,10 @@ TEST_F(ArciumModelTest, AddEntryReturnsAStableUniqueId) {
 }
 
 TEST_F(ArciumModelTest, EntriesForKindComeBackInPositionOrder) {
-  const EntryId first =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://1.example/"), u"1");
-  const EntryId second =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://2.example/"), u"2");
+  const EntryId first = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://1.example/"), u"1");
+  const EntryId second = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://2.example/"), u"2");
   std::vector<const TabEntry*> pinned =
       model_.EntriesForKind(model_.default_space_id(), EntryKind::kPinned);
   ASSERT_EQ(2u, pinned.size());
@@ -58,8 +58,8 @@ TEST_F(ArciumModelTest, EntriesForKindComeBackInPositionOrder) {
 }
 
 TEST_F(ArciumModelTest, SetEntryKindMovesBetweenSections) {
-  const EntryId id =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const EntryId id = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   model_.SetEntryKind(id, EntryKind::kFavorite);
   EXPECT_EQ(EntryKind::kFavorite, model_.GetEntry(id)->kind);
   EXPECT_TRUE(
@@ -71,8 +71,8 @@ TEST_F(ArciumModelTest, SetEntryKindMovesBetweenSections) {
 }
 
 TEST_F(ArciumModelTest, CustomTitleWinsOverLastTitle) {
-  const EntryId id = model_.AddEntry(EntryKind::kPinned,
-                                     GURL("https://a.example/"), u"Page title");
+  const EntryId id = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"Page title");
   EXPECT_EQ(u"Page title", model_.GetEntry(id)->DisplayTitle());
   model_.SetCustomTitle(id, u"My name");
   EXPECT_EQ(u"My name", model_.GetEntry(id)->DisplayTitle());
@@ -85,12 +85,12 @@ TEST_F(ArciumModelTest, CustomTitleWinsOverLastTitle) {
 }
 
 TEST_F(ArciumModelTest, ReorderEntryMovesItWithinItsKind) {
-  const EntryId a =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
-  const EntryId b =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://b.example/"), u"B");
-  const EntryId c =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://c.example/"), u"C");
+  const EntryId a = model_.AddEntryForTesting(EntryKind::kPinned,
+                                              GURL("https://a.example/"), u"A");
+  const EntryId b = model_.AddEntryForTesting(EntryKind::kPinned,
+                                              GURL("https://b.example/"), u"B");
+  const EntryId c = model_.AddEntryForTesting(EntryKind::kPinned,
+                                              GURL("https://c.example/"), u"C");
   model_.ReorderEntry(c, 0);
   std::vector<const TabEntry*> pinned =
       model_.EntriesForKind(model_.default_space_id(), EntryKind::kPinned);
@@ -101,16 +101,16 @@ TEST_F(ArciumModelTest, ReorderEntryMovesItWithinItsKind) {
 }
 
 TEST_F(ArciumModelTest, RemoveEntryDropsIt) {
-  const EntryId id =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const EntryId id = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   model_.RemoveEntry(id);
   EXPECT_FALSE(model_.GetEntry(id));
 }
 
 TEST_F(ArciumModelTest, FoldersHoldPinnedEntries) {
-  const FolderId folder = model_.AddFolder(u"Work");
-  const EntryId id =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const FolderId folder = model_.AddFolderForTesting(u"Work");
+  const EntryId id = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   model_.SetEntryFolder(id, folder);
   EXPECT_EQ(folder, model_.GetEntry(id)->folder_id);
 
@@ -123,9 +123,9 @@ TEST_F(ArciumModelTest, FoldersHoldPinnedEntries) {
 }
 
 TEST_F(ArciumModelTest, RemovingAFolderReturnsItsEntriesToTheTopLevel) {
-  const FolderId folder = model_.AddFolder(u"Work");
-  const EntryId id =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const FolderId folder = model_.AddFolderForTesting(u"Work");
+  const EntryId id = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   model_.SetEntryFolder(id, folder);
   model_.RemoveFolder(folder);
   ASSERT_TRUE(model_.GetEntry(id));
@@ -135,15 +135,16 @@ TEST_F(ArciumModelTest, RemovingAFolderReturnsItsEntriesToTheTopLevel) {
 TEST_F(ArciumModelTest, ObserverFiresOnEveryMutation) {
   CountingObserver observer;
   model_.AddObserver(&observer);
-  const EntryId id =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const EntryId id = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   EXPECT_EQ(1, observer.count);
   model_.SetCustomTitle(id, u"X");
   EXPECT_EQ(2, observer.count);
   model_.RemoveEntry(id);
   EXPECT_EQ(3, observer.count);
   model_.RemoveObserver(&observer);
-  model_.AddEntry(EntryKind::kPinned, GURL("https://b.example/"), u"B");
+  model_.AddEntryForTesting(EntryKind::kPinned, GURL("https://b.example/"),
+                            u"B");
   EXPECT_EQ(3, observer.count);
 }
 
@@ -157,11 +158,11 @@ TEST_F(ArciumModelTest, MutatingAnUnknownIdIsANoOpNotACrash) {
 }
 
 TEST_F(ArciumModelTest, FolderPositionsStayContiguousAcrossRemoveAndAdd) {
-  const FolderId a = model_.AddFolder(u"A");
-  const FolderId b = model_.AddFolder(u"B");
-  const FolderId c = model_.AddFolder(u"C");
+  const FolderId a = model_.AddFolderForTesting(u"A");
+  const FolderId b = model_.AddFolderForTesting(u"B");
+  const FolderId c = model_.AddFolderForTesting(u"C");
   model_.RemoveFolder(b);
-  const FolderId d = model_.AddFolder(u"D");
+  const FolderId d = model_.AddFolderForTesting(u"D");
 
   // Positions must be 0..n-1 with no duplicates, or Task 7's folder list
   // orders headers arbitrarily.
@@ -177,8 +178,8 @@ TEST_F(ArciumModelTest, FolderPositionsStayContiguousAcrossRemoveAndAdd) {
 }
 
 TEST_F(ArciumModelTest, AFolderCanBeMovedInsideAnotherFolder) {
-  const FolderId parent = model_.AddFolder(u"Work");
-  const FolderId child = model_.AddFolder(u"Clients");
+  const FolderId parent = model_.AddFolderForTesting(u"Work");
+  const FolderId child = model_.AddFolderForTesting(u"Clients");
   model_.SetFolderParent(child, parent);
 
   ASSERT_TRUE(model_.GetFolder(child));
@@ -188,15 +189,15 @@ TEST_F(ArciumModelTest, AFolderCanBeMovedInsideAnotherFolder) {
 }
 
 TEST_F(ArciumModelTest, AFolderCannotBeMovedIntoItself) {
-  const FolderId id = model_.AddFolder(u"Work");
+  const FolderId id = model_.AddFolderForTesting(u"Work");
   EXPECT_FALSE(model_.CanMoveFolderTo(id, id));
   model_.SetFolderParent(id, id);
   EXPECT_FALSE(model_.GetFolder(id)->parent_id.has_value());
 }
 
 TEST_F(ArciumModelTest, AFolderCannotBeMovedIntoItsOwnDescendant) {
-  const FolderId a = model_.AddFolder(u"A");
-  const FolderId b = model_.AddFolder(u"B");
+  const FolderId a = model_.AddFolderForTesting(u"A");
+  const FolderId b = model_.AddFolderForTesting(u"B");
   model_.SetFolderParent(b, a);
 
   // A second tree of exactly the same shape, so the depth arithmetic can be
@@ -204,8 +205,8 @@ TEST_F(ArciumModelTest, AFolderCannotBeMovedIntoItsOwnDescendant) {
   // depth `b` does, so moving `a` under either costs the same levels. Without
   // this the test passes with the cycle check deleted -- which is precisely
   // what a mutation probe caught it doing.
-  const FolderId host = model_.AddFolder(u"Host");
-  const FolderId elsewhere = model_.AddFolder(u"Elsewhere");
+  const FolderId host = model_.AddFolderForTesting(u"Host");
+  const FolderId elsewhere = model_.AddFolderForTesting(u"Elsewhere");
   model_.SetFolderParent(elsewhere, host);
   ASSERT_TRUE(model_.CanMoveFolderTo(a, elsewhere));
 
@@ -221,13 +222,13 @@ TEST_F(ArciumModelTest, TheFolderTreeStopsAtTheDepthCap) {
   // Written against kMaxFolderDepth rather than against a literal, so raising
   // or lowering the cap moves this test with it instead of leaving it
   // asserting a number nothing else believes.
-  std::vector<FolderId> chain = {model_.AddFolder(u"Root")};
+  std::vector<FolderId> chain = {model_.AddFolderForTesting(u"Root")};
   while (static_cast<int>(chain.size()) < kMaxFolderDepth) {
-    chain.push_back(model_.AddFolder(u"Deeper", chain.back()));
+    chain.push_back(model_.AddFolderForTesting(u"Deeper", chain.back()));
   }
   ASSERT_EQ(kMaxFolderDepth - 1, model_.FolderDepth(chain.back()));
 
-  const FolderId one_too_deep = model_.AddFolder(u"One too deep");
+  const FolderId one_too_deep = model_.AddFolderForTesting(u"One too deep");
   EXPECT_FALSE(model_.CanMoveFolderTo(one_too_deep, chain.back()));
   model_.SetFolderParent(one_too_deep, chain.back());
   EXPECT_FALSE(model_.GetFolder(one_too_deep)->parent_id.has_value());
@@ -240,14 +241,14 @@ TEST_F(ArciumModelTest, MovingASubtreeCountsItsOwnHeightAgainstTheCap) {
   // A host chain whose deepest folder sits exactly one level short of the cap,
   // so what fits inside it is decided entirely by what the moved folder brings
   // with it.
-  std::vector<FolderId> host = {model_.AddFolder(u"Host")};
+  std::vector<FolderId> host = {model_.AddFolderForTesting(u"Host")};
   while (static_cast<int>(host.size()) < kMaxFolderDepth - 1) {
-    host.push_back(model_.AddFolder(u"Host deeper", host.back()));
+    host.push_back(model_.AddFolderForTesting(u"Host deeper", host.back()));
   }
   ASSERT_EQ(kMaxFolderDepth - 2, model_.FolderDepth(host.back()));
 
-  const FolderId top = model_.AddFolder(u"Top");
-  const FolderId mid = model_.AddFolder(u"Mid", top);
+  const FolderId top = model_.AddFolderForTesting(u"Top");
+  const FolderId mid = model_.AddFolderForTesting(u"Mid", top);
 
   // `top` would land on the last legal level and carry `mid` one past it.
   EXPECT_FALSE(model_.CanMoveFolderTo(top, host.back()));
@@ -256,10 +257,10 @@ TEST_F(ArciumModelTest, MovingASubtreeCountsItsOwnHeightAgainstTheCap) {
 }
 
 TEST_F(ArciumModelTest, AddFolderNumbersANewFolderAmongItsSiblings) {
-  const FolderId parent = model_.AddFolder(u"Parent");
-  const FolderId first = model_.AddFolder(u"First", parent);
-  const FolderId second = model_.AddFolder(u"Second", parent);
-  const FolderId other_root = model_.AddFolder(u"Other root");
+  const FolderId parent = model_.AddFolderForTesting(u"Parent");
+  const FolderId first = model_.AddFolderForTesting(u"First", parent);
+  const FolderId second = model_.AddFolderForTesting(u"Second", parent);
+  const FolderId other_root = model_.AddFolderForTesting(u"Other root");
 
   EXPECT_EQ(0, model_.GetFolder(parent)->position);
   EXPECT_EQ(1, model_.GetFolder(other_root)->position);
@@ -269,11 +270,11 @@ TEST_F(ArciumModelTest, AddFolderNumbersANewFolderAmongItsSiblings) {
 }
 
 TEST_F(ArciumModelTest, RenumberingKeepsSiblingsWithinTheirOwnParent) {
-  const FolderId parent = model_.AddFolder(u"Parent");
-  const FolderId first = model_.AddFolder(u"First", parent);
-  const FolderId second = model_.AddFolder(u"Second", parent);
-  const FolderId third = model_.AddFolder(u"Third", parent);
-  const FolderId other_root = model_.AddFolder(u"Other root");
+  const FolderId parent = model_.AddFolderForTesting(u"Parent");
+  const FolderId first = model_.AddFolderForTesting(u"First", parent);
+  const FolderId second = model_.AddFolderForTesting(u"Second", parent);
+  const FolderId third = model_.AddFolderForTesting(u"Third", parent);
+  const FolderId other_root = model_.AddFolderForTesting(u"Other root");
 
   // AddFolder does its own counting and never calls NormalisePositions, so a
   // test that only adds folders does not reach the renumbering at all -- which
@@ -290,8 +291,8 @@ TEST_F(ArciumModelTest, RenumberingKeepsSiblingsWithinTheirOwnParent) {
 }
 
 TEST_F(ArciumModelTest, MovingAFolderToTheTopLevelIsAllowed) {
-  const FolderId parent = model_.AddFolder(u"Parent");
-  const FolderId child = model_.AddFolder(u"Child", parent);
+  const FolderId parent = model_.AddFolderForTesting(u"Parent");
+  const FolderId child = model_.AddFolderForTesting(u"Child", parent);
   ASSERT_EQ(parent, model_.GetFolder(child)->parent_id);
 
   model_.SetFolderParent(child, std::nullopt);
@@ -301,7 +302,8 @@ TEST_F(ArciumModelTest, MovingAFolderToTheTopLevelIsAllowed) {
 
 TEST_F(ArciumModelTest, ReplaceAllSwapsTheWholeModelAndNotifies) {
   CountingObserver observer;
-  model_.AddEntry(EntryKind::kPinned, GURL("https://old.example/"), u"Old");
+  model_.AddEntryForTesting(EntryKind::kPinned, GURL("https://old.example/"),
+                            u"Old");
   model_.AddObserver(&observer);
 
   Space space;
@@ -364,11 +366,11 @@ TEST_F(ArciumModelTest, FromStringRejectsAnythingNotAWellFormedUuid) {
 }
 
 TEST_F(ArciumModelTest, DeletingAFolderMovesItsChildrenUpOneLevel) {
-  const FolderId outer = model_.AddFolder(u"Outer");
-  const FolderId middle = model_.AddFolder(u"Middle", outer);
-  const FolderId inner = model_.AddFolder(u"Inner", middle);
-  const EntryId entry =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const FolderId outer = model_.AddFolderForTesting(u"Outer");
+  const FolderId middle = model_.AddFolderForTesting(u"Middle", outer);
+  const FolderId inner = model_.AddFolderForTesting(u"Inner", middle);
+  const EntryId entry = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   model_.SetEntryFolder(entry, middle);
 
   model_.RemoveFolder(middle);
@@ -382,10 +384,10 @@ TEST_F(ArciumModelTest, DeletingAFolderMovesItsChildrenUpOneLevel) {
 }
 
 TEST_F(ArciumModelTest, DeletingATopLevelFolderStillEmptiesToTheTopLevel) {
-  const FolderId folder = model_.AddFolder(u"Work");
-  const FolderId child = model_.AddFolder(u"Child", folder);
-  const EntryId entry =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const FolderId folder = model_.AddFolderForTesting(u"Work");
+  const FolderId child = model_.AddFolderForTesting(u"Child", folder);
+  const EntryId entry = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   model_.SetEntryFolder(entry, folder);
 
   model_.RemoveFolder(folder);
@@ -396,6 +398,99 @@ TEST_F(ArciumModelTest, DeletingATopLevelFolderStillEmptiesToTheTopLevel) {
   EXPECT_FALSE(model_.GetEntry(entry)->folder_id.has_value());
   ASSERT_TRUE(model_.GetFolder(child));
   EXPECT_FALSE(model_.GetFolder(child)->parent_id.has_value());
+}
+
+TEST_F(ArciumModelTest, ASpaceIsAddedAfterTheExistingOnes) {
+  ArciumModel model;
+  const SpaceId first = model.default_space_id();
+  const SpaceId second = model.AddSpace(u"Work");
+  ASSERT_EQ(2u, model.spaces().size());
+  EXPECT_EQ(first, model.default_space_id());
+  const Space* added = model.GetSpace(second);
+  ASSERT_TRUE(added);
+  EXPECT_EQ(u"Work", added->name);
+  EXPECT_EQ(1, added->position);
+  EXPECT_EQ(0, added->gradient);
+  EXPECT_TRUE(added->icon.empty());
+}
+
+TEST_F(ArciumModelTest, ASpacesNameIconGradientAndLastTabAreSettable) {
+  ArciumModel model;
+  const SpaceId id = model.AddSpace(u"Work");
+  const TabKey key = TabKey::Generate();
+  model.RenameSpace(id, u"Home");
+  model.SetSpaceIcon(id, u"🏠");
+  model.SetSpaceGradient(id, 3);
+  model.SetLastActiveTab(id, key);
+  const Space* space = model.GetSpace(id);
+  ASSERT_TRUE(space);
+  EXPECT_EQ(u"Home", space->name);
+  EXPECT_EQ(u"🏠", space->icon);
+  EXPECT_EQ(3, space->gradient);
+  EXPECT_EQ(key, space->last_active_tab);
+}
+
+TEST_F(ArciumModelTest, ReorderingASpaceRenumbersItsNeighbours) {
+  ArciumModel model;
+  const SpaceId first = model.default_space_id();
+  const SpaceId second = model.AddSpace(u"Second");
+  const SpaceId third = model.AddSpace(u"Third");
+  model.ReorderSpace(third, 0);
+  EXPECT_EQ(0, model.GetSpace(third)->position);
+  EXPECT_EQ(1, model.GetSpace(first)->position);
+  EXPECT_EQ(2, model.GetSpace(second)->position);
+  // spaces() is kept in position order, so default_space_id() follows.
+  EXPECT_EQ(third, model.default_space_id());
+}
+
+TEST_F(ArciumModelTest, RemovingASpaceTakesItsEntriesAndFolders) {
+  ArciumModel model;
+  const SpaceId keep = model.default_space_id();
+  const SpaceId doomed = model.AddSpace(u"Doomed");
+  const FolderId folder = model.AddFolder(doomed, u"Reading", std::nullopt);
+  model.AddEntry(doomed, EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const EntryId kept = model.AddEntry(keep, EntryKind::kPinned,
+                                      GURL("https://b.example/"), u"B");
+  model.RemoveSpace(doomed);
+  EXPECT_EQ(1u, model.spaces().size());
+  EXPECT_FALSE(model.GetFolder(folder));
+  ASSERT_EQ(1u, model.entries().size());
+  EXPECT_EQ(kept, model.entries().front().id);
+}
+
+TEST_F(ArciumModelTest, TheLastSpaceCannotBeRemoved) {
+  ArciumModel model;
+  model.RemoveSpace(model.default_space_id());
+  EXPECT_EQ(1u, model.spaces().size());
+}
+
+TEST_F(ArciumModelTest, AnEntryMovedToAnotherSpaceLandsAtItsTopLevel) {
+  ArciumModel model;
+  const SpaceId from = model.default_space_id();
+  const SpaceId to = model.AddSpace(u"Work");
+  const FolderId folder = model.AddFolder(from, u"Reading", std::nullopt);
+  model.AddEntry(to, EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const EntryId moved = model.AddEntry(from, EntryKind::kPinned,
+                                       GURL("https://b.example/"), u"B");
+  model.SetEntryFolder(moved, folder);
+  model.MoveEntryToSpace(moved, to);
+  const TabEntry* entry = model.GetEntry(moved);
+  ASSERT_TRUE(entry);
+  EXPECT_EQ(to, entry->space_id);
+  EXPECT_FALSE(entry->folder_id.has_value());
+  // Last among the target's pinned entries, which already had one.
+  EXPECT_EQ(1, entry->position);
+}
+
+TEST_F(ArciumModelTest, TheLastActiveSpaceIsRememberedAndFallsBackToTheFirst) {
+  ArciumModel model;
+  EXPECT_EQ(model.default_space_id(), model.last_active_space());
+  const SpaceId second = model.AddSpace(u"Work");
+  model.SetLastActiveSpace(second);
+  EXPECT_EQ(second, model.last_active_space());
+  // A space that has gone leaves the answer pointing at one that exists.
+  model.RemoveSpace(second);
+  EXPECT_EQ(model.default_space_id(), model.last_active_space());
 }
 
 }  // namespace

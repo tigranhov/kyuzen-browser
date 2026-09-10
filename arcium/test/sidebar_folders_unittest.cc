@@ -288,7 +288,7 @@ TEST_F(SidebarFoldersTest, AFolderCanBeNestedInsideAnother) {
   model->PinTab(0);
   const EntryId entry = model->rows()[0].entry_id;
   const FolderId outer = model->CreateFolderWithEntry(entry, u"Outer");
-  const FolderId inner = arcium_model_.AddFolder(u"Inner");
+  const FolderId inner = arcium_model_.AddFolderForTesting(u"Inner");
 
   model->SetFolderParent(inner, outer);
 
@@ -314,7 +314,7 @@ TEST_F(SidebarFoldersTest, AFolderCountsTheEntriesBelowIt) {
   const EntryId second = rows[1].entry_id;
 
   const FolderId outer = model->CreateFolderWithEntry(first, u"Outer");
-  const FolderId inner = arcium_model_.AddFolder(u"Inner");
+  const FolderId inner = arcium_model_.AddFolderForTesting(u"Inner");
   model->SetFolderParent(inner, outer);
   model->MoveEntryToFolder(second, inner);
 
@@ -328,8 +328,8 @@ TEST_F(SidebarFoldersTest, AFolderCountsTheEntriesBelowIt) {
 
 TEST_F(SidebarFoldersTest, TheModelRefusesAFolderMoveThatWouldMakeACycle) {
   std::unique_ptr<SidebarTabModel> model = MakeModel();
-  const FolderId outer = arcium_model_.AddFolder(u"Outer");
-  const FolderId inner = arcium_model_.AddFolder(u"Inner");
+  const FolderId outer = arcium_model_.AddFolderForTesting(u"Outer");
+  const FolderId inner = arcium_model_.AddFolderForTesting(u"Inner");
   model->SetFolderParent(inner, outer);
 
   EXPECT_FALSE(model->CanMoveFolderTo(outer, inner));
@@ -345,9 +345,9 @@ TEST_F(SidebarFoldersTest, TheModelRefusesAFolderMoveThatWouldMakeACycle) {
 
 TEST_F(SidebarFoldersTest, DeletingAFolderLeavesItsSubfolderOneLevelUp) {
   std::unique_ptr<SidebarTabModel> model = MakeModel();
-  const FolderId outer = arcium_model_.AddFolder(u"Outer");
-  const FolderId middle = arcium_model_.AddFolder(u"Middle");
-  const FolderId inner = arcium_model_.AddFolder(u"Inner");
+  const FolderId outer = arcium_model_.AddFolderForTesting(u"Outer");
+  const FolderId middle = arcium_model_.AddFolderForTesting(u"Middle");
+  const FolderId inner = arcium_model_.AddFolderForTesting(u"Inner");
   model->SetFolderParent(middle, outer);
   model->SetFolderParent(inner, middle);
 

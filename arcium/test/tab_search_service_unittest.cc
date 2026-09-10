@@ -125,7 +125,8 @@ class TabSearchServiceTest : public BrowserWithTestWindowTest {
 
 TEST_F(TabSearchServiceTest, MatchesTitleAndUrlAcrossAllThreeSources) {
   AddTabWithTitle(GURL("https://live.example/"), u"Live page");
-  model_.AddEntry(EntryKind::kPinned, GURL("https://entry.example/"), u"Entry");
+  model_.AddEntryForTesting(EntryKind::kPinned, GURL("https://entry.example/"),
+                            u"Entry");
   archive_.Add(MakeArchived("https://archived.example/", u"Archived"));
 
   EXPECT_EQ(1u, Search(u"live", 10).size());
@@ -136,8 +137,8 @@ TEST_F(TabSearchServiceTest, MatchesTitleAndUrlAcrossAllThreeSources) {
 
 TEST_F(TabSearchServiceTest, LiveTabsOutrankEntriesWhichOutrankTheArchive) {
   AddTabWithTitle(GURL("https://match.example/live"), u"match");
-  model_.AddEntry(EntryKind::kPinned, GURL("https://match.example/entry"),
-                  u"match");
+  model_.AddEntryForTesting(EntryKind::kPinned,
+                            GURL("https://match.example/entry"), u"match");
   archive_.Add(MakeArchived("https://match.example/archive", u"match"));
 
   std::vector<SearchResult> results = Search(u"match", 10);
@@ -217,7 +218,8 @@ TEST(TabSearchFoldingTest, FoldCaseAloneWouldNotMatchAnAccent) {
 
 TEST_F(TabSearchServiceTest, AnEmptyQueryReturnsNothing) {
   AddTabWithTitle(GURL("https://a.example/"), u"A");
-  model_.AddEntry(EntryKind::kPinned, GURL("https://b.example/"), u"B");
+  model_.AddEntryForTesting(EntryKind::kPinned, GURL("https://b.example/"),
+                            u"B");
   archive_.Add(MakeArchived("https://c.example/", u"C"));
 
   EXPECT_TRUE(Search(u"", 10).empty());
@@ -238,7 +240,8 @@ TEST_F(TabSearchServiceTest, TheLimitIsHonouredAcrossSources) {
 // else. If it ever reached the archive it would be sync I/O on the UI thread.
 TEST_F(TabSearchServiceTest, SearchLocalCoversLiveTabsAndEntriesOnly) {
   AddTabWithTitle(GURL("https://live.example/"), u"only");
-  model_.AddEntry(EntryKind::kPinned, GURL("https://entry.example/"), u"only");
+  model_.AddEntryForTesting(EntryKind::kPinned, GURL("https://entry.example/"),
+                            u"only");
   archive_.Add(MakeArchived("https://archived.example/", u"only"));
 
   std::vector<SearchResult> results = service_->SearchLocal(u"only", 10);
@@ -293,8 +296,8 @@ TEST_F(TabSearchServiceTest, AnArchivedRowForALiveUrlIsSuppressed) {
 // the matches instead would let both suppressed rows below through.
 TEST_F(TabSearchServiceTest, ANonMatchingTabOrEntrySuppressesItsArchivedRow) {
   AddTabWithTitle(GURL("https://tab.example/"), u"Nothing alike");
-  model_.AddEntry(EntryKind::kPinned, GURL("https://entry.example/"),
-                  u"Nor this");
+  model_.AddEntryForTesting(EntryKind::kPinned, GURL("https://entry.example/"),
+                            u"Nor this");
 
   archive_.Add(MakeArchived("https://tab.example/", u"Zebra as a tab"));
   archive_.Add(MakeArchived("https://entry.example/", u"Zebra as an entry"));

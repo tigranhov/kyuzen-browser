@@ -22,12 +22,13 @@ TEST(ModelSerializerTest, RoundTripPreservesEntriesFoldersAndSpaces) {
   ArciumModel original;
   original.SetArchiveTimeout(original.default_space_id(),
                              ArchiveTimeout::kSevenDays);
-  const FolderId folder = original.AddFolder(u"Work");
-  const EntryId pinned =
-      original.AddEntry(EntryKind::kPinned, GURL("https://pin.example/"), u"P");
+  const FolderId folder = original.AddFolderForTesting(u"Work");
+  const EntryId pinned = original.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://pin.example/"), u"P");
   original.SetEntryFolder(pinned, folder);
   original.SetCustomTitle(pinned, u"Renamed");
-  original.AddEntry(EntryKind::kFavorite, GURL("https://fav.example/"), u"F");
+  original.AddEntryForTesting(EntryKind::kFavorite,
+                              GURL("https://fav.example/"), u"F");
 
   ArciumModel restored;
   ASSERT_TRUE(DeserializeModel(SerializeModel(original), &restored));
@@ -56,12 +57,12 @@ TEST(ModelSerializerTest, RoundTripPreservesEntriesFoldersAndSpaces) {
 
 TEST(ModelSerializerTest, RoundTripPreservesPositionsAndCollapsedState) {
   ArciumModel original;
-  const FolderId folder = original.AddFolder(u"Work");
+  const FolderId folder = original.AddFolderForTesting(u"Work");
   original.SetFolderCollapsed(folder, true);
-  const EntryId first =
-      original.AddEntry(EntryKind::kPinned, GURL("https://one.example/"), u"1");
-  const EntryId second =
-      original.AddEntry(EntryKind::kPinned, GURL("https://two.example/"), u"2");
+  const EntryId first = original.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://one.example/"), u"1");
+  const EntryId second = original.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://two.example/"), u"2");
 
   ArciumModel restored;
   ASSERT_TRUE(DeserializeModel(SerializeModel(original), &restored));
@@ -80,8 +81,8 @@ TEST(ModelSerializerTest, RoundTripPreservesPositionsAndCollapsedState) {
 
 TEST(ModelSerializerTest, CreatedAtSurvivesToTheMicrosecond) {
   ArciumModel original;
-  const EntryId id =
-      original.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const EntryId id = original.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   // An odd microsecond count is what a double silently rounds away.
   const base::Time odd = base::Time::FromDeltaSinceWindowsEpoch(
       base::Microseconds(13442473600000001));
@@ -95,7 +96,8 @@ TEST(ModelSerializerTest, CreatedAtSurvivesToTheMicrosecond) {
 
 TEST(ModelSerializerTest, AFileWhoseSpacesAreAllMalformedStillLoadsItsEntries) {
   ArciumModel original;
-  original.AddEntry(EntryKind::kPinned, GURL("https://keep.example/"), u"Keep");
+  original.AddEntryForTesting(EntryKind::kPinned, GURL("https://keep.example/"),
+                              u"Keep");
   base::DictValue dict = SerializeModel(original);
   base::ListValue* spaces = dict.FindList("spaces");
   ASSERT_TRUE(spaces);
@@ -112,7 +114,8 @@ TEST(ModelSerializerTest, AFileWhoseSpacesAreAllMalformedStillLoadsItsEntries) {
 
 TEST(ModelSerializerTest, UnknownFieldsAreIgnoredNotFatal) {
   ArciumModel original;
-  original.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  original.AddEntryForTesting(EntryKind::kPinned, GURL("https://a.example/"),
+                              u"A");
   base::DictValue dict = SerializeModel(original);
   dict.Set("something_from_the_future", "hello");
   base::ListValue* entries = dict.FindList("entries");
@@ -143,7 +146,8 @@ TEST(ModelSerializerTest, AMissingVersionIsRefused) {
 
 TEST(ModelSerializerTest, EntriesWithBadIdsOrUrlsAreDroppedNotFatal) {
   ArciumModel original;
-  original.AddEntry(EntryKind::kPinned, GURL("https://good.example/"), u"good");
+  original.AddEntryForTesting(EntryKind::kPinned, GURL("https://good.example/"),
+                              u"good");
   base::DictValue dict = SerializeModel(original);
   base::ListValue* entries = dict.FindList("entries");
   ASSERT_TRUE(entries);
@@ -168,7 +172,8 @@ TEST(ModelSerializerTest, EntriesWithBadIdsOrUrlsAreDroppedNotFatal) {
 
 TEST(ModelSerializerTest, TruncatedJsonDoesNotParse) {
   ArciumModel original;
-  original.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  original.AddEntryForTesting(EntryKind::kPinned, GURL("https://a.example/"),
+                              u"A");
   std::string json = *base::WriteJson(SerializeModel(original));
   const std::string truncated = json.substr(0, json.size() / 2);
   EXPECT_FALSE(
@@ -177,8 +182,8 @@ TEST(ModelSerializerTest, TruncatedJsonDoesNotParse) {
 
 TEST(ModelSerializerTest, AnEntryInAnUnknownFolderLandsAtTheTopLevel) {
   ArciumModel original;
-  const EntryId id =
-      original.AddEntry(EntryKind::kPinned, GURL("https://a.example/"), u"A");
+  const EntryId id = original.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://a.example/"), u"A");
   base::DictValue dict = SerializeModel(original);
   base::ListValue* entries = dict.FindList("entries");
   ASSERT_TRUE(entries);
@@ -193,8 +198,8 @@ TEST(ModelSerializerTest, AnEntryInAnUnknownFolderLandsAtTheTopLevel) {
 
 TEST(ModelSerializerTest, RoundTripPreservesTheFolderTree) {
   ArciumModel source;
-  const FolderId outer = source.AddFolder(u"Outer");
-  const FolderId inner = source.AddFolder(u"Inner", outer);
+  const FolderId outer = source.AddFolderForTesting(u"Outer");
+  const FolderId inner = source.AddFolderForTesting(u"Inner", outer);
 
   ArciumModel restored;
   ASSERT_TRUE(DeserializeModel(SerializeModel(source), &restored));

@@ -45,8 +45,8 @@ class HomeBoundaryThrottleTest : public BrowserWithTestWindowTest {
     AddTab(browser(), GURL(kHomeUrl));
     ArciumProfileState* state =
         ArciumProfileState::GetForBrowserContext(profile());
-    const EntryId id =
-        state->model()->AddEntry(EntryKind::kPinned, GURL(kHomeUrl), u"Mail");
+    const EntryId id = state->model()->AddEntryForTesting(
+        EntryKind::kPinned, GURL(kHomeUrl), u"Mail");
     state->binding()->Bind(
         id, browser()->tab_strip_model()->GetTabAtIndex(0)->GetHandle());
   }

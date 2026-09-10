@@ -321,8 +321,8 @@ TEST_F(ArchiveServiceTest, ArchiveAllTodayLeavesPinnedAndFavouritesAlone) {
 TEST_F(ArchiveServiceTest, ATabBoundToAVanishedEntryIsStillArchivable) {
   AddTab(browser(), GURL("https://stale.example/"));
   AddTab(browser(), GURL("https://active.example/"));
-  const EntryId id =
-      model_.AddEntry(EntryKind::kPinned, GURL("https://stale.example/"), u"S");
+  const EntryId id = model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://stale.example/"), u"S");
   binding_.Bind(id, HandleAt(1));
   ASSERT_TRUE(binding_.IsBound(HandleAt(1)));
   ASSERT_FALSE(service_->MayArchive(HandleAt(1)));

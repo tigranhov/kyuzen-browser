@@ -99,7 +99,7 @@ class SessionTabEntryTest : public BrowserWithTestWindowTest {
 // brings the entry back warm, bound to the tab session restore just made.
 TEST_F(SessionTabEntryTest, AKeyNamingALiveEntryBindsTheRestoredTab) {
   AddTab(browser(), GURL("https://a.example/"));
-  const EntryId id = state()->model()->AddEntry(
+  const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
 
   StashRestoredEntryId(ContentsAt(0), {{kEntryIdExtraDataKey, id.value()}});
@@ -154,7 +154,7 @@ TEST_F(SessionTabEntryTest, AnAbsentKeyBindsNothing) {
 // calls in.
 TEST_F(SessionTabEntryTest, TheStashIsClearedAfterBinding) {
   AddTab(browser(), GURL("https://a.example/"));
-  const EntryId id = state()->model()->AddEntry(
+  const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
 
   StashRestoredEntryId(ContentsAt(0), {{kEntryIdExtraDataKey, id.value()}});
@@ -173,7 +173,7 @@ TEST_F(SessionTabEntryTest, TheStashIsClearedAfterBinding) {
 // as a Today tab.
 TEST_F(SessionTabEntryTest, TheStashIsClearedWhenTheEntryWasMissing) {
   AddTab(browser(), GURL("https://a.example/"));
-  const EntryId id = state()->model()->AddEntry(
+  const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
   const TabEntry saved = *state()->model()->GetEntry(id);
   state()->model()->RemoveEntry(id);
@@ -208,7 +208,7 @@ TEST_F(SessionTabEntryTest, AMalformedKeyLeavesNoStash) {
 // the tab id the session file will use.
 TEST_F(SessionTabEntryTest, ABoundTabAppendsExactlyOneExtraDataCommand) {
   AddTab(browser(), GURL("https://a.example/"));
-  const EntryId id = state()->model()->AddEntry(
+  const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
   state()->binding()->Bind(id, HandleAt(0));
 
@@ -230,7 +230,7 @@ TEST_F(SessionTabEntryTest, ABoundTabAppendsExactlyOneExtraDataCommand) {
 TEST_F(SessionTabEntryTest, AnUnboundTabAppendsNothing) {
   AddTab(browser(), GURL("https://a.example/"));
   AddTab(browser(), GURL("https://b.example/"));
-  const EntryId other = state()->model()->AddEntry(
+  const EntryId other = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://b.example/"), u"B");
   state()->binding()->Bind(other, HandleAt(1));
 
@@ -245,7 +245,7 @@ TEST_F(SessionTabEntryTest, AnUnboundTabAppendsNothing) {
 // next restart.
 TEST_F(SessionTabEntryTest, ATabBoundToAVanishedEntryAppendsNothing) {
   AddTab(browser(), GURL("https://a.example/"));
-  const EntryId id = state()->model()->AddEntry(
+  const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
   // Bound behind the model's back, exactly as ReplaceAll leaves it.
   state()->binding()->Bind(id, HandleAt(0));
@@ -266,7 +266,7 @@ TEST_F(SessionTabEntryTest, ATabBoundToAVanishedEntryAppendsNothing) {
 // cold — two sidebar rows for one page.
 TEST_F(SessionTabEntryTest, AClaimedTabContributesItsEntryIdToExtraData) {
   AddTab(browser(), GURL("https://a.example/"));
-  const EntryId id = state()->model()->AddEntry(
+  const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
   state()->binding()->Bind(id, HandleAt(0));
 
@@ -283,7 +283,7 @@ TEST_F(SessionTabEntryTest, AClaimedTabContributesItsEntryIdToExtraData) {
 TEST_F(SessionTabEntryTest, TheExtraDataItWritesIsTheExtraDataItReads) {
   AddTab(browser(), GURL("https://a.example/"));
   AddTab(browser(), GURL("https://b.example/"));
-  const EntryId id = state()->model()->AddEntry(
+  const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
   state()->binding()->Bind(id, HandleAt(0));
 
@@ -306,7 +306,7 @@ TEST_F(SessionTabEntryTest, TheExtraDataItWritesIsTheExtraDataItReads) {
 TEST_F(SessionTabEntryTest, AnUnboundTabContributesNoExtraData) {
   AddTab(browser(), GURL("https://a.example/"));
   AddTab(browser(), GURL("https://b.example/"));
-  const EntryId other = state()->model()->AddEntry(
+  const EntryId other = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://b.example/"), u"B");
   state()->binding()->Bind(other, HandleAt(1));
 
@@ -320,7 +320,7 @@ TEST_F(SessionTabEntryTest, AnUnboundTabContributesNoExtraData) {
 // must not be written down, here or anywhere.
 TEST_F(SessionTabEntryTest, ATabBoundToAVanishedEntryContributesNoExtraData) {
   AddTab(browser(), GURL("https://a.example/"));
-  const EntryId id = state()->model()->AddEntry(
+  const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
   state()->binding()->Bind(id, HandleAt(0));
   state()->model()->RemoveEntry(id);
@@ -365,7 +365,7 @@ TEST_F(SessionTabEntryTest, TheSessionPathConstructsNoProfileState) {
 TEST_F(SessionTabEntryTest, AnIncognitoTabNeitherBindsNorWritesRegularState) {
   // A live pinned entry on the REGULAR profile, named by the incognito tab's
   // extra_data. Nothing incognito may reach it.
-  const EntryId id = state()->model()->AddEntry(
+  const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
 
   Profile* otr = profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true);

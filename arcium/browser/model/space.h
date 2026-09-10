@@ -19,13 +19,24 @@ enum class ArchiveTimeout { kTwelveHours, kOneDay, kSevenDays, kNever };
 // Returns std::nullopt for kNever, which means no expiry is ever scheduled.
 std::optional<base::TimeDelta> ArchiveTimeoutToDelta(ArchiveTimeout timeout);
 
-// Stage 2 has exactly one space. The id travels through the model from the
-// start so Stage 3 is a UI change rather than a data migration.
+// A space owns its favourites, pins, folders and Today. Stage 3a made it
+// several; the id travelled through the model from Stage 2 so this was a UI
+// change rather than a data migration.
 struct Space {
   SpaceId id;
   std::u16string name;
+  // One emoji, or empty to draw the first letter of the name.
+  std::u16string icon;
+  // An index into the fixed palette in arcium/ui/sidebar/space_gradients.h.
+  // 0 is the sidebar's original pair, so a space that never chose one looks
+  // exactly as it did before spaces existed.
+  int gradient = 0;
   ArchiveTimeout archive_timeout = ArchiveTimeout::kTwelveHours;
   int position = 0;
+  // The tab a switch to this space lands on. A TabKey and not a SessionID:
+  // Chromium's tab ids do not survive a restart (Stage 2 finding 1) and this
+  // has to name a Today tab across one.
+  TabKey last_active_tab;
 };
 
 }  // namespace arcium

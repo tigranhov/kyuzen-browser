@@ -268,8 +268,8 @@ TEST_F(SidebarTabModelTest, AModelMutationAlsoFiresOnce) {
 }
 
 TEST_F(SidebarTabModelTest, AColdEntryAppearsWithNoTab) {
-  arcium_model_.AddEntry(EntryKind::kPinned, GURL("https://cold.example/"),
-                         u"Cold");
+  arcium_model_.AddEntryForTesting(EntryKind::kPinned,
+                                   GURL("https://cold.example/"), u"Cold");
   std::unique_ptr<SidebarTabModel> model = MakeModel();
 
   std::vector<SidebarRow> rows = model->rows();
@@ -321,7 +321,7 @@ TEST_F(SidebarTabModelTest, ClosingAPinnedEntrysTabLeavesItCold) {
 }
 
 TEST_F(SidebarTabModelTest, ActivatingAColdEntryOpensItsUrlAndBindsIt) {
-  const EntryId id = arcium_model_.AddEntry(
+  const EntryId id = arcium_model_.AddEntryForTesting(
       EntryKind::kPinned, GURL("https://cold.example/"), u"Cold");
   std::unique_ptr<SidebarTabModel> model = MakeModel();
   ASSERT_TRUE(model->rows()[0].is_cold);
@@ -361,7 +361,7 @@ TEST_F(SidebarTabModelTest, UnpinningReturnsTheTabToToday) {
 }
 
 TEST_F(SidebarTabModelTest, UnpinningAColdEntryJustRemovesIt) {
-  const EntryId id = arcium_model_.AddEntry(
+  const EntryId id = arcium_model_.AddEntryForTesting(
       EntryKind::kPinned, GURL("https://cold.example/"), u"Cold");
   std::unique_ptr<SidebarTabModel> model = MakeModel();
   model->UnpinEntry(id);
@@ -572,7 +572,7 @@ TEST_F(SidebarTabModelTest, MovingAWarmEntryToTodayLeavesItsTab) {
 // what an undo would otherwise have to exist to take back.
 TEST_F(SidebarTabModelTest, MovingAColdEntryToTodayOpensItsUrlFirst) {
   AddTab(browser(), GURL("https://a.example/"));
-  const EntryId id = arcium_model_.AddEntry(
+  const EntryId id = arcium_model_.AddEntryForTesting(
       EntryKind::kPinned, GURL("https://cold.example/"), u"Cold");
   std::unique_ptr<SidebarTabModel> model = MakeModel();
   ASSERT_TRUE(model->rows()[0].is_cold);
@@ -647,7 +647,7 @@ TEST_F(SidebarTabModelTest, ClosingAnEntryTabKeepsTheEntry) {
 }
 
 TEST_F(SidebarTabModelTest, SetEntryTitleWinsOverTheLiveTitle) {
-  const EntryId id = arcium_model_.AddEntry(
+  const EntryId id = arcium_model_.AddEntryForTesting(
       EntryKind::kPinned, GURL("https://cold.example/"), u"Cold");
   std::unique_ptr<SidebarTabModel> model = MakeModel();
   model->SetEntryTitle(id, u"Renamed");

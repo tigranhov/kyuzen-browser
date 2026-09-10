@@ -40,6 +40,10 @@ SpaceId ArciumModel::default_space_id() const {
   return spaces_.empty() ? SpaceId() : spaces_.front().id;
 }
 
+SpaceId ArciumModel::last_active_space() const {
+  return GetSpace(last_active_space_) ? last_active_space_ : default_space_id();
+}
+
 const Space* ArciumModel::GetSpace(SpaceId id) const {
   for (const Space& space : spaces_) {
     if (space.id == id) {
@@ -47,6 +51,101 @@ const Space* ArciumModel::GetSpace(SpaceId id) const {
     }
   }
   return nullptr;
+}
+
+SpaceId ArciumModel::AddSpace(const std::u16string& name) {
+  Space space;
+  space.id = SpaceId::Generate();
+  space.name = name;
+  space.position = static_cast<int>(spaces_.size());
+  const SpaceId id = space.id;
+  spaces_.push_back(std::move(space));
+  Notify();
+  return id;
+}
+
+void ArciumModel::RenameSpace(SpaceId id, const std::u16string& name) {
+  Space* space = FindSpace(id);
+  if (!space || space->name == name) {
+    return;
+  }
+  space->name = name;
+  Notify();
+}
+
+void ArciumModel::SetSpaceIcon(SpaceId id, const std::u16string& icon) {
+  Space* space = FindSpace(id);
+  if (!space || space->icon == icon) {
+    return;
+  }
+  space->icon = icon;
+  Notify();
+}
+
+void ArciumModel::SetSpaceGradient(SpaceId id, int gradient) {
+  Space* space = FindSpace(id);
+  if (!space || space->gradient == gradient) {
+    return;
+  }
+  space->gradient = gradient;
+  Notify();
+}
+
+void ArciumModel::SetLastActiveTab(SpaceId id, TabKey key) {
+  Space* space = FindSpace(id);
+  if (!space || space->last_active_tab == key) {
+    return;
+  }
+  space->last_active_tab = key;
+  Notify();
+}
+
+void ArciumModel::SetLastActiveSpace(SpaceId id) {
+  if (last_active_space_ == id) {
+    return;
+  }
+  last_active_space_ = id;
+  Notify();
+}
+
+void ArciumModel::ReorderSpace(SpaceId id, int new_position) {
+  if (!GetSpace(id)) {
+    return;
+  }
+  new_position =
+      std::clamp(new_position, 0, static_cast<int>(spaces_.size()) - 1);
+  std::vector<Space> order;
+  order.reserve(spaces_.size());
+  Space moved;
+  for (Space& space : spaces_) {
+    if (space.id == id) {
+      moved = std::move(space);
+    } else {
+      order.push_back(std::move(space));
+    }
+  }
+  order.insert(order.begin() + new_position, std::move(moved));
+  for (size_t i = 0; i < order.size(); ++i) {
+    order[i].position = static_cast<int>(i);
+  }
+  spaces_ = std::move(order);
+  Notify();
+}
+
+void ArciumModel::RemoveSpace(SpaceId id) {
+  // Every tab is in a space, so the last one cannot go: a model with no
+  // space at all is a state nothing downstream can draw.
+  if (spaces_.size() <= 1 || !GetSpace(id)) {
+    return;
+  }
+  std::erase_if(entries_, [id](const TabEntry& e) { return e.space_id == id; });
+  std::erase_if(folders_, [id](const Folder& f) { return f.space_id == id; });
+  std::erase_if(spaces_, [id](const Space& s) { return s.id == id; });
+  for (size_t i = 0; i < spaces_.size(); ++i) {
+    spaces_[i].position = static_cast<int>(i);
+  }
+  NormalisePositions();
+  Notify();
 }
 
 void ArciumModel::SetArchiveTimeout(SpaceId space_id, ArchiveTimeout timeout) {
@@ -59,13 +158,14 @@ void ArciumModel::SetArchiveTimeout(SpaceId space_id, ArchiveTimeout timeout) {
   }
 }
 
-EntryId ArciumModel::AddEntry(EntryKind kind,
+EntryId ArciumModel::AddEntry(SpaceId space_id,
+                              EntryKind kind,
                               const GURL& url,
                               const std::u16string& title) {
   TabEntry entry;
   entry.id = EntryId::Generate();
   entry.kind = kind;
-  entry.space_id = default_space_id();
+  entry.space_id = space_id;
   entry.url = url;
   entry.last_title = title;
   entry.created_at = base::Time::Now();
@@ -75,6 +175,20 @@ EntryId ArciumModel::AddEntry(EntryKind kind,
   entries_.push_back(std::move(entry));
   Notify();
   return id;
+}
+
+void ArciumModel::MoveEntryToSpace(EntryId id, SpaceId space_id) {
+  TabEntry* entry = FindEntry(id);
+  if (!entry || !GetSpace(space_id) || entry->space_id == space_id) {
+    return;
+  }
+  entry->space_id = space_id;
+  // Folders do not cross spaces, so the entry arrives at the top level.
+  entry->folder_id.reset();
+  entry->position =
+      static_cast<int>(EntriesForKind(space_id, entry->kind).size());
+  NormalisePositions();
+  Notify();
 }
 
 void ArciumModel::RemoveEntry(EntryId id) {
@@ -182,11 +296,12 @@ std::vector<const TabEntry*> ArciumModel::EntriesForKind(SpaceId space_id,
   return result;
 }
 
-FolderId ArciumModel::AddFolder(const std::u16string& name,
+FolderId ArciumModel::AddFolder(SpaceId space_id,
+                                const std::u16string& name,
                                 std::optional<FolderId> parent_id) {
   Folder folder;
   folder.id = FolderId::Generate();
-  folder.space_id = default_space_id();
+  folder.space_id = space_id;
   folder.name = name;
   // A parent the model does not have, one in another space, or one already at
   // the cap leaves the new folder at the top level rather than stranded under
@@ -385,6 +500,14 @@ void ArciumModel::ReplaceAll(std::vector<Space> spaces,
     space.name = u"Space";
     spaces_.push_back(std::move(space));
   }
+  // Loaded order is not trusted to already be position order, and
+  // spaces().front() has to be the first space.
+  std::sort(spaces_.begin(), spaces_.end(), [](const Space& a, const Space& b) {
+    return a.position < b.position;
+  });
+  if (!GetSpace(last_active_space_)) {
+    last_active_space_ = SpaceId();
+  }
   NormalisePositions();
   Notify();
 }
@@ -402,6 +525,15 @@ Folder* ArciumModel::FindFolder(FolderId id) {
   for (Folder& folder : folders_) {
     if (folder.id == id) {
       return &folder;
+    }
+  }
+  return nullptr;
+}
+
+Space* ArciumModel::FindSpace(SpaceId id) {
+  for (Space& space : spaces_) {
+    if (space.id == id) {
+      return &space;
     }
   }
   return nullptr;

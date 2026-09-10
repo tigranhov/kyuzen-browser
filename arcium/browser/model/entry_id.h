@@ -45,10 +45,12 @@ class TypedId {
 struct EntryIdTag;
 struct FolderIdTag;
 struct SpaceIdTag;
+struct TabKeyTag;
 
 using EntryId = TypedId<EntryIdTag>;
 using FolderId = TypedId<FolderIdTag>;
 using SpaceId = TypedId<SpaceIdTag>;
+using TabKey = TypedId<TabKeyTag>;
 
 }  // namespace arcium
 
