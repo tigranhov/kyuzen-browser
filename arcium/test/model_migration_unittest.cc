@@ -7,6 +7,7 @@
 #include <optional>
 #include <utility>
 
+#include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/model_serializer.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -55,6 +56,27 @@ TEST(ModelMigrationTest, AFileAlreadyAtTheCurrentVersionIsPassedThrough) {
   EXPECT_EQ(kModelSchemaVersion, migrated->FindInt("version"));
   ASSERT_TRUE(migrated->FindString("marker"));
   EXPECT_EQ("kept", *migrated->FindString("marker"));
+}
+
+TEST(ModelMigrationTest, AVersionTwoSpaceGainsTheStageThreeDefaults) {
+  base::DictValue dict = DictAtVersion(2);
+  base::DictValue space;
+  space.Set("id", SpaceId::Generate().value());
+  space.Set("name", "Space");
+  base::ListValue spaces;
+  spaces.Append(std::move(space));
+  dict.Set("spaces", std::move(spaces));
+
+  std::optional<base::DictValue> migrated = MigrateModelDict(std::move(dict));
+  ASSERT_TRUE(migrated.has_value());
+  EXPECT_EQ(kModelSchemaVersion, migrated->FindInt("version"));
+  const base::ListValue* list = migrated->FindList("spaces");
+  ASSERT_TRUE(list);
+  const base::DictValue* first = (*list)[0].GetIfDict();
+  ASSERT_TRUE(first);
+  EXPECT_EQ(0, first->FindInt("gradient"));
+  ASSERT_TRUE(first->FindString("icon"));
+  EXPECT_EQ("", *first->FindString("icon"));
 }
 
 }  // namespace

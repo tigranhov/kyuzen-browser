@@ -71,6 +71,11 @@ base::DictValue SerializeModel(const ArciumModel& model) {
     value.Set("name", base::UTF16ToUTF8(space.name));
     value.Set("archive_timeout", TimeoutToString(space.archive_timeout));
     value.Set("position", space.position);
+    value.Set("icon", base::UTF16ToUTF8(space.icon));
+    value.Set("gradient", space.gradient);
+    if (space.last_active_tab.is_valid()) {
+      value.Set("last_active_tab", space.last_active_tab.value());
+    }
     spaces.Append(std::move(value));
   }
   dict.Set("spaces", std::move(spaces));
@@ -115,6 +120,8 @@ base::DictValue SerializeModel(const ArciumModel& model) {
   }
   dict.Set("entries", std::move(entries));
 
+  dict.Set("last_active_space", model.last_active_space().value());
+
   return dict;
 }
 
@@ -143,6 +150,12 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
       space.archive_timeout =
           TimeoutFromString(value->FindString("archive_timeout"));
       space.position = value->FindInt("position").value_or(0);
+      const std::string* icon = value->FindString("icon");
+      space.icon = icon ? base::UTF8ToUTF16(*icon) : std::u16string();
+      space.gradient = value->FindInt("gradient").value_or(0);
+      const std::string* last_tab = value->FindString("last_active_tab");
+      space.last_active_tab =
+          last_tab ? TabKey::FromString(*last_tab) : TabKey();
       space_ids.insert(space.id);
       spaces.push_back(std::move(space));
     }
@@ -304,6 +317,14 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
   }
 
   model->ReplaceAll(std::move(spaces), std::move(folders), std::move(entries));
+
+  // After ReplaceAll, so the id is checked against the spaces that survived
+  // parsing; last_active_space() falls back to the first space on its own
+  // when this names one that did not.
+  if (const std::string* active = dict.FindString("last_active_space")) {
+    model->SetLastActiveSpace(SpaceId::FromString(*active));
+  }
+
   return true;
 }
 

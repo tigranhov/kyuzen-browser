@@ -26,9 +26,34 @@ bool MigrateV1ToV2(base::DictValue&) {
   return true;
 }
 
+// Version 2 -> 3: spaces gained an icon, a gradient preset and a last active
+// tab, and the model gained a last active space.
+//
+// Unlike the step before it this one writes: a version 2 space has no
+// `gradient` key at all, and a reader that defaults a missing key and a
+// migration that writes the default disagree the moment the default changes.
+// The last active tab and space are deliberately left absent — a file written
+// before spaces existed has no honest answer, and both fall back to the first
+// space.
+bool MigrateV2ToV3(base::DictValue& dict) {
+  base::ListValue* spaces = dict.FindList("spaces");
+  if (!spaces) {
+    return true;
+  }
+  for (base::Value& item : *spaces) {
+    base::DictValue* space = item.GetIfDict();
+    if (!space) {
+      continue;
+    }
+    space->Set("icon", "");
+    space->Set("gradient", 0);
+  }
+  return true;
+}
+
 // Indexed by source version: kSteps[0] takes a version 1 dict to version 2.
 using MigrationStep = bool (*)(base::DictValue&);
-constexpr MigrationStep kSteps[] = {&MigrateV1ToV2};
+constexpr MigrationStep kSteps[] = {&MigrateV1ToV2, &MigrateV2ToV3};
 static_assert(
     std::size(kSteps) == static_cast<size_t>(kModelSchemaVersion) - 1,
     "Bumping kModelSchemaVersion needs a step that gets a file there");

@@ -380,5 +380,48 @@ TEST(ModelSerializerTest, AFolderDeeperThanTheCapIsDetachedToTheTopLevel) {
   EXPECT_GT(detached, 1);
 }
 
+TEST(ModelSerializerTest, ASpacesIconGradientAndLastTabSurviveARoundTrip) {
+  ArciumModel written;
+  const SpaceId id = written.AddSpace(u"Work");
+  const TabKey key = TabKey::Generate();
+  written.SetSpaceIcon(id, u"💼");
+  written.SetSpaceGradient(id, 2);
+  written.SetLastActiveTab(id, key);
+  written.SetLastActiveSpace(id);
+
+  ArciumModel read;
+  ASSERT_TRUE(DeserializeModel(SerializeModel(written), &read));
+  const Space* space = read.GetSpace(id);
+  ASSERT_TRUE(space);
+  EXPECT_EQ(u"💼", space->icon);
+  EXPECT_EQ(2, space->gradient);
+  EXPECT_EQ(key, space->last_active_tab);
+  EXPECT_EQ(id, read.last_active_space());
+}
+
+TEST(ModelSerializerTest, ALastActiveSpaceNamingNothingFallsBackToTheFirst) {
+  ArciumModel written;
+  base::DictValue dict = SerializeModel(written);
+  dict.Set("last_active_space", SpaceId::Generate().value());
+  ArciumModel read;
+  ASSERT_TRUE(DeserializeModel(dict, &read));
+  EXPECT_EQ(read.default_space_id(), read.last_active_space());
+}
+
+TEST(ModelSerializerTest, AnUnreadableGradientOrIconLeavesTheDefaults) {
+  ArciumModel written;
+  base::DictValue dict = SerializeModel(written);
+  base::ListValue* spaces = dict.FindList("spaces");
+  ASSERT_TRUE(spaces);
+  base::DictValue* space = (*spaces)[0].GetIfDict();
+  ASSERT_TRUE(space);
+  space->Set("gradient", "not a number");
+  space->Set("icon", 7);
+  ArciumModel read;
+  ASSERT_TRUE(DeserializeModel(dict, &read));
+  EXPECT_EQ(0, read.spaces().front().gradient);
+  EXPECT_TRUE(read.spaces().front().icon.empty());
+}
+
 }  // namespace
 }  // namespace arcium

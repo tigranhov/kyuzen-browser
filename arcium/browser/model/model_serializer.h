@@ -18,7 +18,10 @@ class ArciumModel;
 //    parent is exactly what a version 1 folder meant -- but for writing:
 //    without it a Stage 2 build would open a nested file, draw every folder
 //    flat, and flatten the tree for good on its next save.
-inline constexpr int kModelSchemaVersion = 2;
+// 3: spaces gained `icon`, `gradient` and `last_active_tab`, and the model
+//    gained `last_active_space`. Bumped for the same reason 2 was: a Stage 2
+//    build opening a Stage 3 file would drop all four on its next save.
+inline constexpr int kModelSchemaVersion = 3;
 
 base::DictValue SerializeModel(const ArciumModel& model);
 
