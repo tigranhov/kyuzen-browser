@@ -1,6 +1,9 @@
 # Stage 3a design: spaces
 
-Status: approved in the design session of 2026-09-10. Stage 3 was split in that
+Status: approved in the design session of 2026-09-10. Implementation plan:
+`docs/superpowers/plans/2026-09-10-stage-3a-spaces.md`, whose three rulings
+(the `IDC_SELECT_TAB_n` count in §4.2, the delete flow in §6, and A3a.6) are
+already folded into the text below. Stage 3 was split in that
 session into a partition spike (done), 3a spaces (this document), 3b profiles,
 and R3.9 on its own. 3a implements R3.1, R3.2, R3.3 and R3.8 of the master
 spec; every space in 3a uses the default profile.
@@ -115,8 +118,8 @@ does not own, exactly as `HandleNewTabCommand` does.
 | Command | Meaning in a space |
 |---|---|
 | `IDC_SELECT_NEXT_TAB` / `IDC_SELECT_PREVIOUS_TAB` | next / previous open tab of the active space, in sidebar order, wrapping; cold rows are skipped, so cycling never loads a page |
-| `IDC_SELECT_TAB_0` … `IDC_SELECT_TAB_7` | the nth row of the active space in sidebar order — favourites, then pinned rows in visible folders, then Today; a cold row opens its entry, as clicking it does |
-| `IDC_SELECT_LAST_TAB` | the last row of the active space |
+| `IDC_SELECT_TAB_0` … `IDC_SELECT_TAB_7` | the nth **open** tab of the active space in sidebar order — favourites, then pinned, then Today. Cold rows are skipped and never opened: a cold row's place depends on which folders are collapsed, which only the view knows, so a count made in the browser layer would disagree with the screen. A digit past the space's last open tab does nothing |
+| `IDC_SELECT_LAST_TAB` | the last open tab of the active space |
 | `IDC_MOVE_TAB_NEXT` / `IDC_MOVE_TAB_PREVIOUS` | a Today tab swaps with the next / previous Today tab *of the same space*; on an entry's tab it does nothing, since entries are ordered by the model, not the strip |
 | `IDC_CLOSE_TAB` | when the tab is the active space's last open tab, a blank tab is opened in the space first (§4.3); otherwise Chromium's own close |
 | `IDC_WINDOW_CLOSE_OTHER_TABS` / `IDC_WINDOW_CLOSE_TABS_TO_RIGHT` | only the active space's Today tabs; never an entry's tab, never another space's |
@@ -196,10 +199,13 @@ reorder, delete, and move-to-space.
   pins and favourites go with it. If it is the active space, the switcher moves
   to the neighbouring space first. The space's tabs close through Chromium's
   normal close, so a page with unsaved work still gets its `beforeunload`
-  prompt. The space leaves the model only once its last tab has gone; if a
-  `beforeunload` is cancelled, the delete stops and the space remains, minus the
-  tabs that closed. Otherwise a cancelled prompt would leave a live tab tagged
-  with a deleted space, which §3.3 would silently move to the first space.
+  prompt. The space then leaves the model at once, and any tab still alive —
+  one held open by a prompt the user has not answered — is re-tagged into the
+  space the window moved to. Chromium offers no cancel signal at the seam
+  Arcium has, and a state machine waiting for one can hang on a dialog for
+  ever; re-tagging is deterministic and puts the survivor somewhere the user
+  can see it, rather than leaving it tagged with a space that is gone, which
+  §3.3 would silently move to the first space.
 - **Moving a pin or favourite whose tab is open** carries the tab, because the
   tab's space is read from the entry.
 - **Closing the last tab in a space** leaves the space with one blank tab and
@@ -261,8 +267,10 @@ All executed by hand.
   active tab never shows another space's tab.
 - **A3a.5** "Move to space" on a Today tab, a pin and a favourite. The pin lands
   at the target's top level, and you end up in the target space.
-- **A3a.6** Cmd+click opens in the current space. Choosing another space's tab
-  in tab search switches to that space.
+- **A3a.6** Cmd+click opens in the current space. The tab-search half of this
+  check is not run: nothing in the shipped UI reaches `TabSearchService` yet,
+  so §4.4's rule is checked through A3a.8 instead, where Cmd+Shift+T reopens a
+  tab of a background space.
 - **A3a.7** Quit and relaunch: every space comes back with its entries, its
   Today tabs and its last active tab, and the window opens on the space that
   was active at quit (R3.8).
