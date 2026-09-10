@@ -338,18 +338,17 @@ TEST_F(SpaceSwitcherTest, DeletingASpaceClosesItsTabsAndTakesItsEntries) {
   // The window moved to the neighbour before the space went, so it is never
   // showing a space that does not exist. With only two spaces, doomed's only
   // neighbour is first, so closing the active doomed tab also leaves
-  // Chromium activating a1 -- both paths agree on the same answer here; the
-  // controller's mutation check for the SwitchTo(NeighbourOf(id)) call is
-  // DeletingTheActiveSpaceMovesToItsNeighbourFirst below, which uses a third
-  // space so the two paths can disagree.
+  // Chromium activating a1 -- both paths agree on the same answer here.
+  // DeletingTheActiveSpaceMovesToItsNeighbourFirst below uses a third space
+  // so the two paths can disagree, which is what isolates the SwitchTo call.
   EXPECT_EQ(first, switcher->active_space());
 }
 
-// Controller ruling: three spaces, so a tab held open by an unanswered close
-// lands somewhere other than the first space -- SpaceOfTab already reads an
-// unresolvable tag as the first space, so a two-space version of this test
-// could not tell a real re-tag from that fallback and could not fail if the
-// re-tag loop were dropped.
+// Three spaces, so a tab held open by an unanswered close lands somewhere
+// other than the first space -- SpaceOfTab already reads an unresolvable tag
+// as the first space, so a two-space version of this test could not tell a
+// real re-tag from that fallback and could not fail if the re-tag loop were
+// dropped.
 TEST_F(SpaceSwitcherTest, ATabThatSurvivesTheDeleteJoinsTheLandingSpace) {
   const SpaceId first = model_.default_space_id();
   const SpaceId work = model_.AddSpace(u"Work");
@@ -384,14 +383,14 @@ TEST_F(SpaceSwitcherTest, OpenTabCountIsWhatTheConfirmationPromises) {
   EXPECT_EQ(2, switcher->OpenTabCount(work));
 }
 
-// Controller ruling, and the mutation check for DeleteSpace's
-// SwitchTo(NeighbourOf(id)) call: with only two spaces, closing the active
-// doomed tab makes Chromium activate the survivor anyway, so dropping that
-// call cannot fail DeletingASpaceClosesItsTabsAndTakesItsEntries above. A
-// third space in position order after doomed gives SwitchTo(NeighbourOf(id))
-// a landing that Chromium's own activation-on-close would not otherwise
-// reach, and the assertion runs before the posted ArciumModel fallback would
-// ever get a turn -- DeleteSpace's own SwitchTo is what has to have done it.
+// The mutation check for DeleteSpace's own SwitchTo(NeighbourOf(id)) call:
+// with only two spaces, closing the active doomed tab makes Chromium
+// activate the survivor anyway, so dropping that call cannot fail
+// DeletingASpaceClosesItsTabsAndTakesItsEntries above. A third space in
+// position order after doomed gives SwitchTo(NeighbourOf(id)) a landing that
+// Chromium's own activation-on-close would not otherwise reach, and the
+// assertion runs before the posted ArciumModel fallback would ever get a
+// turn -- DeleteSpace's own SwitchTo is what has to have done it.
 TEST_F(SpaceSwitcherTest, DeletingTheActiveSpaceMovesToItsNeighbourFirst) {
   const SpaceId first = model_.default_space_id();
   const SpaceId doomed = model_.AddSpace(u"Doomed");
