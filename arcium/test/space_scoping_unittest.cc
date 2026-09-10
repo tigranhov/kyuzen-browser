@@ -20,9 +20,11 @@
 #include "arcium/ui/browser/archive_service.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "arcium/ui/browser/tab_search_service.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/files/scoped_temp_dir.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
@@ -32,6 +34,7 @@
 #include "components/segmentation_platform/public/features.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -75,11 +78,14 @@ class SpaceScopingTest : public BrowserWithTestWindowTest {
         base::SequencedTaskRunner::GetCurrentDefault(), /*clock=*/nullptr,
         switcher_.get());
     sidebar_->SetArchiveService(archive_.get());
+    search_ = std::make_unique<TabSearchService>(
+        strip(), &model_, &binding_, archive_.get(), switcher_.get());
   }
 
   void TearDown() override {
     // Both observe the strip and the switcher, which are about to be torn
     // down; the switcher goes last because the services above observe it.
+    search_.reset();
     archive_.reset();
     sidebar_.reset();
     switcher_.reset();
@@ -95,6 +101,33 @@ class SpaceScopingTest : public BrowserWithTestWindowTest {
     return arcium::test::AddTabInSpace(strip(), profile(), url, space);
   }
 
+  // Same, plus a title a search can match on. Titles matter only for tests
+  // that need two results to score exactly the same.
+  tabs::TabInterface* AddTabInSpaceWithTitle(const GURL& url,
+                                             SpaceId space,
+                                             const std::u16string& title) {
+    tabs::TabInterface* tab = AddTabInSpace(url, space);
+    content::WebContentsTester::For(tab->GetContents())->SetTitle(title);
+    return tab;
+  }
+
+  // The only entry point a UI caller has, so it is the one the tie-break and
+  // cross-space tests drive. RunUntilIdle drains both the posted store read
+  // and its reply, mirroring TabSearchServiceTest::Search.
+  std::vector<SearchResult> Search(const std::u16string& query, int limit) {
+    std::vector<SearchResult> out;
+    bool ran = false;
+    search_->Search(
+        query, limit,
+        base::BindLambdaForTesting([&](std::vector<SearchResult> results) {
+          out = std::move(results);
+          ran = true;
+        }));
+    task_environment()->RunUntilIdle();
+    EXPECT_TRUE(ran) << "the search callback never ran";
+    return out;
+  }
+
   base::test::ScopedFeatureList scoped_feature_list_;
   base::ScopedTempDir temp_dir_;
   ArciumModel model_;
@@ -103,6 +136,7 @@ class SpaceScopingTest : public BrowserWithTestWindowTest {
   std::unique_ptr<SpaceSwitcher> switcher_;
   std::unique_ptr<SidebarTabModel> sidebar_;
   std::unique_ptr<ArchiveService> archive_;
+  std::unique_ptr<TabSearchService> search_;
 };
 
 TEST_F(SpaceScopingTest, RowsHoldOnlyTheActiveSpace) {
@@ -139,12 +173,19 @@ TEST_F(SpaceScopingTest, APinnedEntryOfAnotherSpaceIsNotDrawnHere) {
 
   ASSERT_EQ(1u, sidebar_->rows().size());
   EXPECT_EQ(GURL("https://a1.example/"), sidebar_->rows().front().url);
+  EXPECT_EQ(SidebarSection::kToday, sidebar_->rows().front().section);
 
   switcher_->SwitchTo(work);
   ASSERT_EQ(1u, sidebar_->rows().size());
   EXPECT_EQ(SidebarSection::kPinned, sidebar_->rows().front().section);
 }
 
+// This cannot actually fail: SwitchTo already notifies the sidebar twice over
+// (the model's last-active-space change, and the tab activation the switch
+// performs), so ArciumModel::Observer or TabStripModelObserver alone would
+// already cover it. Kept anyway as a backstop for a switch that changes
+// neither the strip nor the model — SpaceSwitcher::Observer is the only thing
+// that would notice one.
 TEST_F(SpaceScopingTest, TheSidebarRebuildsWhenTheSpaceChanges) {
   const SpaceId first = model_.default_space_id();
   const SpaceId work = model_.AddSpace(u"Work");
@@ -198,6 +239,24 @@ TEST_F(SpaceScopingTest, AnotherSpacesLandingTabIsNeverArchived) {
   EXPECT_FALSE(archive_->MayArchive(strip()->GetTabAtIndex(1)->GetHandle()));
 }
 
+// The landing-tab refusal above is scoped to the tab's OWN space, not to
+// every space in the model: a tab that used to be a space's landing tab and
+// has since moved elsewhere is not held hostage by a memory the space it left
+// still carries.
+TEST_F(SpaceScopingTest, ATabMovedOutOfASpaceIsNotHeldByThatSpacesLandingRule) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  tabs::TabInterface* w1 = AddTabInSpace(GURL("https://w1.example/"), work);
+  model_.SetLastActiveTab(work, KeyOf(w1->GetContents()));
+
+  // w1 leaves `work` for `first` without ever being reactivated — a plain
+  // re-tag, exactly like SpaceSwitcher's own adoption rule performs.
+  SetSpaceTag(w1->GetContents(), first);
+
+  EXPECT_TRUE(archive_->MayArchive(w1->GetHandle()));
+}
+
 TEST_F(SpaceScopingTest, EachSpaceAgesAgainstItsOwnTimeout) {
   const SpaceId first = model_.default_space_id();
   const SpaceId work = model_.AddSpace(u"Work");
@@ -223,6 +282,88 @@ TEST_F(SpaceScopingTest, EachSpaceAgesAgainstItsOwnTimeout) {
             strip()->GetWebContentsAt(0)->GetVisibleURL());
   EXPECT_EQ(GURL("https://w1.example/"),
             strip()->GetWebContentsAt(1)->GetVisibleURL());
+}
+
+// The swapped case: the timeout that fires belongs to the BACKGROUND space,
+// not the one on screen, and the row the sweep writes is filed under that
+// same background space rather than whichever space the window happens to be
+// showing. A MakeRow that read the window's active space instead of
+// SpaceOfTab would file this row under `first` and this test would find
+// nothing at `work`.
+TEST_F(SpaceScopingTest, EachSpaceAgesAgainstItsOwnTimeoutAndFilesUnderIt) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  model_.SetArchiveTimeout(first, ArchiveTimeout::kNever);
+  model_.SetArchiveTimeout(work, ArchiveTimeout::kTwelveHours);
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  tabs::TabInterface* w1 = AddTabInSpace(GURL("https://w1.example/"), work);
+  AddTabInSpace(GURL("https://w2.example/"), work);
+  // w1 is work's landing tab, so it survives the sweep; w2, idle in the same
+  // background space, does not.
+  model_.SetLastActiveTab(work, KeyOf(w1->GetContents()));
+
+  task_environment()->AdvanceClock(base::Hours(13));
+  task_environment()->RunUntilIdle();
+
+  ASSERT_EQ(2, strip()->count());
+  EXPECT_EQ(GURL("https://a1.example/"),
+            strip()->GetWebContentsAt(0)->GetVisibleURL());
+  EXPECT_EQ(GURL("https://w1.example/"),
+            strip()->GetWebContentsAt(1)->GetVisibleURL());
+
+  const std::vector<ArchivedTab> recent = archive_store_.ListRecent(work, 10);
+  ASSERT_EQ(1u, recent.size());
+  EXPECT_EQ(GURL("https://w2.example/"), recent.front().url);
+}
+
+// Tab search finds every space, not only the one the window is showing:
+// another space's pinned entry and another space's Today tab are both
+// reachable from a query issued while `first` is on screen.
+TEST_F(SpaceScopingTest, SearchFindsAnotherSpacesEntryAndItsTodayTab) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  AddTabInSpace(GURL("https://first.example/"), first);
+  AddTabInSpace(GURL("https://alpha-today.example/"), work);
+  const EntryId pinned_id = model_.AddEntry(
+      work, EntryKind::kPinned, GURL("https://alpha-pin.example/"), u"Pin");
+
+  const std::vector<SearchResult> results = Search(u"alpha", 10);
+
+  bool found_today = false;
+  bool found_pinned = false;
+  for (const SearchResult& result : results) {
+    if (result.source == SearchResult::Source::kLiveTab &&
+        result.url == GURL("https://alpha-today.example/")) {
+      found_today = true;
+    }
+    if (result.source == SearchResult::Source::kEntry &&
+        result.entry_id == pinned_id) {
+      found_pinned = true;
+    }
+  }
+  EXPECT_TRUE(found_today) << "another space's Today tab was not found";
+  EXPECT_TRUE(found_pinned) << "another space's pinned entry was not found";
+}
+
+// The active space is a tie-break, not a filter: two results that score the
+// same sort with the active space's result first, and switching spaces flips
+// which one that is without changing which results exist.
+TEST_F(SpaceScopingTest, SearchTieBreaksTowardTheActiveSpace) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  AddTabInSpaceWithTitle(GURL("https://a1.example/"), first, u"Match");
+  AddTabInSpaceWithTitle(GURL("https://w1.example/"), work, u"Match");
+
+  std::vector<SearchResult> results = Search(u"match", 10);
+  ASSERT_EQ(2u, results.size());
+  EXPECT_EQ(GURL("https://a1.example/"), results[0].url);
+  EXPECT_EQ(GURL("https://w1.example/"), results[1].url);
+
+  switcher_->SwitchTo(work);
+  results = Search(u"match", 10);
+  ASSERT_EQ(2u, results.size());
+  EXPECT_EQ(GURL("https://w1.example/"), results[0].url);
+  EXPECT_EQ(GURL("https://a1.example/"), results[1].url);
 }
 
 }  // namespace

@@ -47,6 +47,12 @@ struct SearchResult {
   // Valid only for kEntry.
   EntryId entry_id;
 
+  // The space this result belongs to: a live tab's own space (SpaceOfTab), an
+  // entry's space_id, or an archived row's space_id. Every source is searched
+  // across every space; this is read only to break a tie in RankAndTruncate,
+  // never to filter anything out.
+  SpaceId space_id;
+
   // Set only for kLiveTab, and a handle rather than a strip index on purpose.
   // Every result reaches its caller across an async boundary, and a strip
   // index taken before the archive read is not the index the tab has when the
@@ -143,12 +149,16 @@ class TabSearchService {
   //     superset — nothing wrong is ever shown, some things are missing.
   //     Fixing it is a schema change, and also the FTS migration.
   //
-  //   * It is NOT SCOPED TO A SPACE, while the live and entry halves are both
-  //     scoped to the window's active space — its SpaceSwitcher's, or the
-  //     first space when the window has none. ArchiveStore::Search has no
-  //     space filter, so it searches every space regardless of which one the
-  //     window is showing: switching spaces changes what the live and entry
-  //     halves find and never touches what the archive half offers.
+  //   * SPACE IS A TIE-BREAK, NOT A FILTER. All three sources are searched
+  //     across every space: another space's Today tab, another space's
+  //     pinned or favourite entry, and an archived row of a space that is not
+  //     showing right now are all found exactly as if the window were showing
+  //     that space. What the window's active space changes is only the order
+  //     of two results that score the same — the active space's own result
+  //     sorts ahead of one from any other space, so activating a result found
+  //     this way switches the window to that result's space. Without a
+  //     SpaceSwitcher the active space is the first space, exactly as
+  //     everything else here falls back to it.
   void Search(const std::u16string& query, int limit, ResultsCallback callback);
 
  private:

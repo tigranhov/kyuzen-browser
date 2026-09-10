@@ -13,6 +13,7 @@
 #include "arcium/browser/model/space.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
+#include "arcium/browser/tab_space.h"
 #include "arcium/ui/browser/archive_service.h"
 #include "arcium/ui/browser/space_switcher.h"
 #include "base/functional/bind.h"
@@ -123,7 +124,6 @@ int StoreFetchLimit(int limit,
 std::vector<SearchResult> CollectLocal(TabStripModel* tab_strip_model,
                                        const ArciumModel& model,
                                        const TabBinding& binding,
-                                       SpaceId space_id,
                                        Matcher& matcher,
                                        std::set<GURL>* reachable) {
   std::vector<SearchResult> results;
@@ -155,6 +155,7 @@ std::vector<SearchResult> CollectLocal(TabStripModel* tab_strip_model,
       result.title = ui_helper->GetTitle();
       result.url = url;
       result.tab_handle = tab->GetHandle();
+      result.space_id = SpaceOfTab(model, binding, tab->GetHandle());
       result.score = ScoreFor(matcher, result.title, result.url);
       if (result.score != kNoMatch) {
         results.push_back(std::move(result));
@@ -162,43 +163,63 @@ std::vector<SearchResult> CollectLocal(TabStripModel* tab_strip_model,
     }
   }
 
-  // The window's active space, threaded in by the caller: the entries here
-  // are scoped to whichever space the window is showing, exactly as the
-  // sidebar and ArchiveService are. The archive half is not — ArchiveStore::
-  // Search has no space filter — which is the caveat on
-  // TabSearchService::Search, where both halves are visible.
-  for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
-    for (const TabEntry* entry : model.EntriesForKind(space_id, kind)) {
-      if (reachable) {
-        reachable->insert(entry->url);
-      }
+  // Every space, not just the one the window is showing: tab search finds
+  // another space's pinned and favourite entries exactly as it finds this
+  // space's, matching the archive half, which has never filtered by space
+  // either. `space.id` is only stamped onto the result so RankAndTruncate can
+  // use it as a tie-break later — nothing here reads the window's active
+  // space at all.
+  for (const Space& space : model.spaces()) {
+    for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
+      for (const TabEntry* entry : model.EntriesForKind(space.id, kind)) {
+        if (reachable) {
+          reachable->insert(entry->url);
+        }
 
-      SearchResult result;
-      result.source = SearchResult::Source::kEntry;
-      result.title = entry->DisplayTitle();
-      result.url = entry->url;
-      result.entry_id = entry->id;
-      result.score = ScoreFor(matcher, result.title, result.url);
-      if (result.score != kNoMatch) {
-        results.push_back(std::move(result));
+        SearchResult result;
+        result.source = SearchResult::Source::kEntry;
+        result.title = entry->DisplayTitle();
+        result.url = entry->url;
+        result.entry_id = entry->id;
+        result.space_id = entry->space_id;
+        result.score = ScoreFor(matcher, result.title, result.url);
+        if (result.score != kNoMatch) {
+          results.push_back(std::move(result));
+        }
       }
     }
   }
   return results;
 }
 
-// Score first, then source. std::stable_sort so the discovery order above
-// survives inside one (score, source) bucket: two live tabs with the same
-// title come back in strip order rather than in whatever order the sort felt
-// like, which is what makes the results stable across keystrokes.
-void RankAndTruncate(std::vector<SearchResult>& results, int limit) {
-  std::stable_sort(results.begin(), results.end(),
-                   [](const SearchResult& a, const SearchResult& b) {
-                     if (a.score != b.score) {
-                       return a.score > b.score;
-                     }
-                     return a.source < b.source;
-                   });
+// Score first, then whether a result is in the window's active space, then
+// source. std::stable_sort so the discovery order above survives inside one
+// (score, active, source) bucket: two live tabs with the same title in the
+// same space come back in strip order rather than in whatever order the sort
+// felt like, which is what makes the results stable across keystrokes.
+//
+// The active-space tie-break is what lets activating a result switch the
+// window there: among two results that score the same, the one already in
+// the space on screen sorts first, and switching spaces moves a
+// same-scoring result from the far side of the tie to the near side without
+// changing which results exist at all. See the space caveat on
+// TabSearchService::Search.
+void RankAndTruncate(std::vector<SearchResult>& results,
+                     int limit,
+                     SpaceId active_space) {
+  std::stable_sort(
+      results.begin(), results.end(),
+      [active_space](const SearchResult& a, const SearchResult& b) {
+        if (a.score != b.score) {
+          return a.score > b.score;
+        }
+        const bool a_active = a.space_id == active_space;
+        const bool b_active = b.space_id == active_space;
+        if (a_active != b_active) {
+          return a_active;
+        }
+        return a.source < b.source;
+      });
   if (results.size() > static_cast<size_t>(limit)) {
     results.resize(static_cast<size_t>(limit));
   }
@@ -239,10 +260,9 @@ std::vector<SearchResult> TabSearchService::SearchLocal(
   Matcher matcher(query);
   // No reachable set: nothing on this path reads it, and building one would
   // cost a GURL copy and a tree node per tab and per entry, per keystroke.
-  std::vector<SearchResult> results =
-      CollectLocal(tab_strip_model_, *model_, *binding_, active_space(),
-                   matcher, /*reachable=*/nullptr);
-  RankAndTruncate(results, limit);
+  std::vector<SearchResult> results = CollectLocal(
+      tab_strip_model_, *model_, *binding_, matcher, /*reachable=*/nullptr);
+  RankAndTruncate(results, limit, active_space());
   return results;
 }
 
@@ -288,8 +308,7 @@ void TabSearchService::OnArchiveRead(std::u16string query,
   Matcher matcher(query);
   std::set<GURL> reachable;
   std::vector<SearchResult> results =
-      CollectLocal(tab_strip_model_, *model_, *binding_, active_space(),
-                   matcher, &reachable);
+      CollectLocal(tab_strip_model_, *model_, *binding_, matcher, &reachable);
 
   // ArchiveReadResult::readable is deliberately dropped. The archive list
   // needs it because "nothing archived" and "the file would not open" are
@@ -303,6 +322,7 @@ void TabSearchService::OnArchiveRead(std::u16string query,
     result.source = SearchResult::Source::kArchive;
     result.title = std::move(row.title);
     result.url = std::move(row.url);
+    result.space_id = row.space_id;
     result.archived_at = row.archived_at;
     // The store already decided this row matches, on its folded columns. If
     // the primary-strength matcher disagrees — it should not, since it matches
@@ -314,7 +334,7 @@ void TabSearchService::OnArchiveRead(std::u16string query,
     results.push_back(std::move(result));
   }
 
-  RankAndTruncate(results, limit);
+  RankAndTruncate(results, limit, active_space());
   std::move(callback).Run(std::move(results));
 }
 

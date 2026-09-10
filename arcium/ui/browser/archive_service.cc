@@ -228,11 +228,18 @@ bool ArchiveService::MayArchive(tabs::TabHandle handle) const {
   // active tab is refused above; this is the same rule for the spaces that
   // are not on screen, and without it a quiet background space loses the
   // page it was left on.
-  for (const Space& space : model_->spaces()) {
-    if (space.last_active_tab.is_valid() &&
-        space.last_active_tab == ExistingKeyOf(contents)) {
-      return false;
-    }
+  //
+  // Checked against the tab's OWN space only, via SpaceOfTab, not against
+  // every space in the model. A tab that used to be some space's landing tab
+  // and has since moved on (SetSpaceTag re-tags it, or it is claimed by
+  // another space's entry) is no longer that space's business: the space it
+  // left still remembers the tab's key until something else lands there, but
+  // that memory is stale for a tab that is not there to be landed on anymore.
+  const Space* own_space =
+      model_->GetSpace(SpaceOfTab(*model_, *binding_, handle));
+  if (own_space && own_space->last_active_tab.is_valid() &&
+      own_space->last_active_tab == ExistingKeyOf(contents)) {
+    return false;
   }
   if (contents->IsCurrentlyAudible()) {
     return false;
