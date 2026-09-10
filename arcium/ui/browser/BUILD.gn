@@ -11,6 +11,8 @@ source_set("browser") {
     "cold_favicon_cache.cc",
     "cold_favicon_cache.h",
     "color_ids_check.cc",
+    "home_boundary_throttle.cc",
+    "home_boundary_throttle.h",
     "quick_entry_bubble.cc",
     "quick_entry_bubble.h",
     "session_rebuild_nudge.cc",

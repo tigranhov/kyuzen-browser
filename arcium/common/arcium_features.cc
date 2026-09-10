@@ -14,6 +14,8 @@ namespace arcium::features {
 
 BASE_FEATURE(kArciumSidebar, base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kArciumHomeBoundary, base::FEATURE_ENABLED_BY_DEFAULT);
+
 base::TimeDelta FakeClockOffset() {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
@@ -47,6 +49,10 @@ bool IsSidebarEnabled() {
 
 bool UsesImmersiveFullscreen() {
   return !IsSidebarEnabled();
+}
+
+bool IsHomeBoundaryEnabled() {
+  return base::FeatureList::IsEnabled(kArciumHomeBoundary);
 }
 
 }  // namespace arcium::features

@@ -1,0 +1,28 @@
+Seam: ChromeContentBrowserClient's navigation throttle registration, beside
+      web_app::TabbedWebAppNavigationThrottle.
+Why: Chromium has no app-tab concept, so the pinned / favourite home boundary
+     needs somewhere to see a link click before it commits. A plain same-frame
+     link click never reaches WebContentsDelegate::OpenURLFromTab, so a
+     throttle is the only seam that sees it at all.
+Delegates to: arcium::HomeBoundaryThrottle::MaybeCreateAndAdd
+
+diff --git a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+index 8de81338cc..1be8027b7d 100644
+--- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
++++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+@@ -4,6 +4,7 @@
+ 
+ #include "chrome/browser/chrome_content_browser_client_navigation_throttles.h"
+ 
++#include "arcium/ui/browser/home_boundary_throttle.h"
+ #include "base/command_line.h"
+ #include "base/feature_list.h"
+ #include "build/build_config.h"
+@@ -485,6 +486,7 @@ void CreateAndAddChromeThrottlesForNavigation(
+   NewTabPageNavigationThrottle::MaybeCreateAndAdd(registry);
+ 
+   web_app::TabbedWebAppNavigationThrottle::MaybeCreateAndAdd(registry);
++  arcium::HomeBoundaryThrottle::MaybeCreateAndAdd(registry);
+ 
+   web_app::WebUIWebAppNavigationThrottle::MaybeCreateAndAdd(registry);
+ 

@@ -6,6 +6,8 @@ source_set("model") {
     "arcium_model.h",
     "entry_id.h",
     "folder.h",
+    "home_boundary.cc",
+    "home_boundary.h",
     "model_migration.cc",
     "model_migration.h",
     "model_serializer.cc",

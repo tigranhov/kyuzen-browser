@@ -44,6 +44,14 @@ patch `0010`'s hunk context, which breaks `0010`'s already-applied check and mak
 non-idempotent — the rule at the top of this file, met in practice. The long form is `0125`'s own
 header, and `docs/stage2-findings.md` finding 5 for why `:impl` is the right target.
 
+Stage 2.6 adds two. `0150` is the hook that registers `HomeBoundaryThrottle`; `0145` leads it,
+GN wiring with no call of its own, following the wiring-before-target order `0125`/`0130` set.
+
+| Patch | Seam | Delegates to |
+|---|---|---|
+| `0145-gn-navigation-throttles-arcium.patch` | `chrome/browser/BUILD.gn` `source_set("core")` — that target only | nothing — GN wiring for 0150 |
+| `0150-navigation-throttle-home-boundary.patch` | `CreateAndAddChromeThrottlesForNavigation` in `chrome/browser/chrome_content_browser_client_navigation_throttles.cc`, beside `web_app::TabbedWebAppNavigationThrottle` | `arcium::HomeBoundaryThrottle::MaybeCreateAndAdd` |
+
 ## Monthly rebase routine
 
 1. Find the new stable tag on https://chromiumdash.appspot.com/releases?platform=Mac
