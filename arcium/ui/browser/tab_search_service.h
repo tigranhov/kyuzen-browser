@@ -22,6 +22,7 @@ namespace arcium {
 
 class ArchiveService;
 class ArciumModel;
+class SpaceSwitcher;
 class TabBinding;
 struct ArchiveReadResult;
 
@@ -81,10 +82,16 @@ class TabSearchService {
   // `archive_service` may be null — the playground and the tests have none —
   // and its store may be null off the record. Search works either way, with
   // the archive contributing nothing.
+  //
+  // `switcher` is null in the playground, in a window built without a
+  // sidebar, and in every fixture written before spaces — all of which keep
+  // working unchanged, in the first space, which is what they have always
+  // meant by it. It must outlive this object.
   TabSearchService(TabStripModel* tab_strip_model,
                    ArciumModel* model,
                    TabBinding* binding,
-                   ArchiveService* archive_service);
+                   ArchiveService* archive_service,
+                   SpaceSwitcher* switcher = nullptr);
   TabSearchService(const TabSearchService&) = delete;
   TabSearchService& operator=(const TabSearchService&) = delete;
   ~TabSearchService();
@@ -137,10 +144,11 @@ class TabSearchService {
   //     Fixing it is a schema change, and also the FTS migration.
   //
   //   * It is NOT SCOPED TO A SPACE, while the live and entry halves are both
-  //     scoped to ArciumModel::default_space_id(). ArchiveStore::Search has no
-  //     space filter, so it searches every space. Stage 2 has exactly one
-  //     space, so the two halves agree today and nothing is wrong. Stage 3 has
-  //     to pick one answer for both when a window can switch spaces.
+  //     scoped to the window's active space — its SpaceSwitcher's, or the
+  //     first space when the window has none. ArchiveStore::Search has no
+  //     space filter, so it searches every space regardless of which one the
+  //     window is showing: switching spaces changes what the live and entry
+  //     halves find and never touches what the archive half offers.
   void Search(const std::u16string& query, int limit, ResultsCallback callback);
 
  private:
@@ -152,10 +160,16 @@ class TabSearchService {
                      ResultsCallback callback,
                      ArchiveReadResult archive);
 
+  // The space this window is showing. Without a switcher — the playground, a
+  // window built with no sidebar, every fixture written before spaces — it is
+  // the first space, which is what those callers have always meant.
+  SpaceId active_space() const;
+
   raw_ptr<TabStripModel> tab_strip_model_;
   raw_ptr<ArciumModel> model_;
   raw_ptr<TabBinding> binding_;
   raw_ptr<ArchiveService> archive_service_;
+  raw_ptr<SpaceSwitcher> switcher_;
 
   base::WeakPtrFactory<TabSearchService> weak_factory_{this};
 };

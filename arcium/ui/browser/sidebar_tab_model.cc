@@ -16,6 +16,7 @@
 #include "arcium/browser/entry_claim.h"
 #include "arcium/browser/model/reorder_index.h"
 #include "arcium/browser/model/tab_entry.h"
+#include "arcium/browser/tab_space.h"
 #include "arcium/ui/browser/archive_service.h"
 #include "arcium/ui/browser/tab_close_types.h"
 #include "base/auto_reset.h"
@@ -82,12 +83,17 @@ ColdFaviconCache::Lookup ProfileIconLookup(
 
 SidebarTabModel::SidebarTabModel(TabStripModel* tab_strip_model,
                                  ArciumModel* arcium_model,
-                                 TabBinding* binding)
+                                 TabBinding* binding,
+                                 SpaceSwitcher* switcher)
     : tab_strip_model_(tab_strip_model),
       arcium_model_(arcium_model),
-      binding_(binding) {
+      binding_(binding),
+      switcher_(switcher) {
   tab_strip_model_->AddObserver(this);
   arcium_model_->AddObserver(this);
+  if (switcher_) {
+    switcher_->AddObserver(this);
+  }
   Profile* profile = tab_strip_model_->profile();
   cold_favicons_ = std::make_unique<ColdFaviconCache>(
       ProfileIconLookup(profile
@@ -100,10 +106,22 @@ SidebarTabModel::SidebarTabModel(TabStripModel* tab_strip_model,
 }
 
 SidebarTabModel::~SidebarTabModel() {
+  if (switcher_) {
+    switcher_->RemoveObserver(this);
+  }
   arcium_model_->RemoveObserver(this);
   if (tab_strip_model_) {
     tab_strip_model_->RemoveObserver(this);
   }
+}
+
+SpaceId SidebarTabModel::active_space() const {
+  return switcher_ ? switcher_->active_space()
+                   : arcium_model_->default_space_id();
+}
+
+void SidebarTabModel::OnActiveSpaceChanged() {
+  NotifyChanged();
 }
 
 std::vector<SidebarRow> SidebarTabModel::rows() const {
@@ -111,17 +129,22 @@ std::vector<SidebarRow> SidebarTabModel::rows() const {
   if (!tab_strip_model_) {
     return rows;
   }
-  const SpaceId space = arcium_model_->default_space_id();
+  const SpaceId space = active_space();
   for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
     for (const TabEntry* entry : arcium_model_->EntriesForKind(space, kind)) {
       rows.push_back(RowForEntry(*entry));
     }
   }
-  // Whatever no entry claims is Today, in strip order.
+  // Whatever no entry claims is Today, in strip order, and only this space's:
+  // the strip holds every space's tabs, and a window draws only the one it is
+  // showing.
   const int count = tab_strip_model_->count();
   for (int i = 0; i < count; ++i) {
     tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(i);
     if (IsClaimedByEntry(tab)) {
+      continue;
+    }
+    if (SpaceOfTab(*arcium_model_, *binding_, tab->GetHandle()) != space) {
       continue;
     }
     rows.push_back(RowForTab(i, tab));
@@ -192,9 +215,13 @@ void SidebarTabModel::ClearToday() {
   }
   // No service: the playground and the model's own tests. Close from the end
   // so indices stay valid. A tab an entry claims is not a Today tab, whatever
-  // Chromium thinks of its pinned state.
+  // Chromium thinks of its pinned state, and a tab of another space is not
+  // this window's Today to clear.
+  const SpaceId space = active_space();
   for (int i = tab_strip_model_->count() - 1; i >= 0; --i) {
-    if (!IsClaimedByEntry(tab_strip_model_->GetTabAtIndex(i))) {
+    tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(i);
+    if (!IsClaimedByEntry(tab) &&
+        SpaceOfTab(*arcium_model_, *binding_, tab->GetHandle()) == space) {
       tab_strip_model_->CloseWebContentsAt(i, kUserCloseTypes);
     }
   }
@@ -204,10 +231,13 @@ int SidebarTabModel::TodayStripIndexForPosition(int position) const {
   if (position < 0 || !tab_strip_model_) {
     return -1;
   }
+  const SpaceId space = active_space();
   int seen = 0;
   const int count = tab_strip_model_->count();
   for (int i = 0; i < count; ++i) {
-    if (IsClaimedByEntry(tab_strip_model_->GetTabAtIndex(i))) {
+    tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(i);
+    if (IsClaimedByEntry(tab) ||
+        SpaceOfTab(*arcium_model_, *binding_, tab->GetHandle()) != space) {
       continue;
     }
     if (seen == position) {
@@ -237,14 +267,13 @@ void SidebarTabModel::SetArchiveService(ArchiveService* service) {
 }
 
 void SidebarTabModel::SetArchiveTimeout(ArchiveTimeout timeout) {
-  arcium_model_->SetArchiveTimeout(arcium_model_->default_space_id(), timeout);
+  arcium_model_->SetArchiveTimeout(active_space(), timeout);
 }
 
 ArchiveTimeout SidebarTabModel::archive_timeout() const {
-  // See ArchiveService::TimeoutForDefaultSpace, which asks the same question
-  // for the same space through the same accessor.
-  const Space* space =
-      arcium_model_->GetSpace(arcium_model_->default_space_id());
+  // See ArchiveService::TimeoutForTab, which asks the same question for a
+  // tab's own space through the same accessor.
+  const Space* space = arcium_model_->GetSpace(active_space());
   return space ? space->archive_timeout : Space().archive_timeout;
 }
 
@@ -280,7 +309,7 @@ void SidebarTabModel::RequestArchivedRows(int limit,
     return;
   }
   archive_service_->RequestRecent(
-      arcium_model_->default_space_id(), limit,
+      active_space(), limit,
       base::BindOnce(&SidebarTabModel::DeliverArchivedRows,
                      weak_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -404,7 +433,7 @@ void SidebarTabModel::RequestColdFavicons() {
   if (!tab_strip_model_) {
     return;
   }
-  const SpaceId space = arcium_model_->default_space_id();
+  const SpaceId space = active_space();
   for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
     for (const TabEntry* entry : arcium_model_->EntriesForKind(space, kind)) {
       if (!LiveTabForEntry(entry->id)) {

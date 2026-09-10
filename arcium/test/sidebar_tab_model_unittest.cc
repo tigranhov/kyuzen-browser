@@ -730,19 +730,11 @@ TEST_F(SidebarTabModelTest, TwoWindowsOverOneModelBothShowTheEntry) {
   browser_b->tab_strip_model()->CloseAllTabs();
 }
 
-// The close-out obligation deferred from Task 13. Entries carry a space id and
-// rows() emits only the default space's, but IsClaimedByEntry asked the model
-// for the entry without caring which space it was in. A tab bound to an entry
-// of another space was therefore claimed — kept out of Today — while nothing
-// drew it either: an invisible tab, and one MayArchive would refuse to close
-// for as long as the browser ran. The same shape as the stale-binding bug the
-// predicate was written for, one field further along.
-//
-// Disabled by Task 3: IsClaimedByEntry lost its space clause, so a tab bound
-// to an entry of another space is now claimed, which is the opposite of what
-// this test checks. Task 5 replaces it with a test of the new rule.
-TEST_F(SidebarTabModelTest,
-       DISABLED_ATabClaimedByAnotherSpacesEntryIsStillATodayTab) {
+// Stage 2 drew one space, so a tab bound to another space's entry was
+// nowhere: claimed, and drawn by no section. Stage 3a gave the window a
+// space of its own, and the answer changed rather than the bug being fixed —
+// the tab is claimed, and it is drawn when its own space is on screen.
+TEST_F(SidebarTabModelTest, ATabClaimedByAnotherSpacesEntryIsNotDrawnHere) {
   AddTab(browser(), GURL("https://a.example/"));
   // Two spaces, the entry in the second. Through ReplaceAll because that is
   // the only way a second space exists in Stage 2 — it is what ModelStore
@@ -763,16 +755,11 @@ TEST_F(SidebarTabModelTest,
   ASSERT_EQ(first.id, arcium_model_.default_space_id());
   binding_.Bind(entry.id, strip()->GetTabAtIndex(0)->GetHandle());
 
+  // No switcher, so this model draws the first space — the entry is in
+  // `other`, so its tab is claimed (Today skips it) and its row is drawn by
+  // no section here at all.
   std::unique_ptr<SidebarTabModel> model = MakeModel();
-  std::vector<SidebarRow> rows = model->rows();
-  ASSERT_EQ(1u, rows.size());
-  EXPECT_EQ(SidebarSection::kToday, rows[0].section);
-  EXPECT_FALSE(rows[0].entry_id.is_valid());
-
-  // And it behaves as one: Clear takes it, rather than leaving it behind on
-  // the strength of an entry no window in this space can see.
-  model->ClearToday();
-  EXPECT_EQ(0, strip()->count());
+  EXPECT_TRUE(model->rows().empty());
 }
 
 // I4, the other half: an entry survives its tab being dragged from one window

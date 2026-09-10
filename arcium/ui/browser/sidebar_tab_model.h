@@ -15,6 +15,7 @@
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/ui/browser/cold_favicon_cache.h"
+#include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -51,13 +52,18 @@ struct TabEntry;
 // timers.
 class SidebarTabModel : public SidebarModel,
                         public TabStripModelObserver,
-                        public ArciumModel::Observer {
+                        public ArciumModel::Observer,
+                        public SpaceSwitcher::Observer {
  public:
   // `arcium_model` and `binding` are shared by every window on the profile
-  // and must outlive this object.
+  // and must outlive this object. `switcher` is null in the playground, in a
+  // window built without a sidebar, and in every fixture written before
+  // spaces -- all of which keep working unchanged, in the first space, which
+  // is what they have always meant by it. It must outlive this object.
   SidebarTabModel(TabStripModel* tab_strip_model,
                   ArciumModel* arcium_model,
-                  TabBinding* binding);
+                  TabBinding* binding,
+                  SpaceSwitcher* switcher = nullptr);
   SidebarTabModel(const SidebarTabModel&) = delete;
   SidebarTabModel& operator=(const SidebarTabModel&) = delete;
   ~SidebarTabModel() override;
@@ -131,7 +137,14 @@ class SidebarTabModel : public SidebarModel,
   // ArciumModel::Observer:
   void OnArciumModelChanged() override;
 
+  // SpaceSwitcher::Observer:
+  void OnActiveSpaceChanged() override;
+
  private:
+  // The space this window is showing. Without a switcher — the playground, a
+  // window built with no sidebar, every fixture written before spaces — it is
+  // the first space, which is what those callers have always meant.
+  SpaceId active_space() const;
   // The entry's tab if it is live, in whichever window's strip it sits.
   tabs::TabInterface* BoundTabAnywhere(EntryId id) const;
   // The entry's tab if it is live and in this window's strip, else null.
@@ -183,6 +196,7 @@ class SidebarTabModel : public SidebarModel,
   raw_ptr<TabStripModel> tab_strip_model_;
   raw_ptr<ArciumModel> arcium_model_;
   raw_ptr<TabBinding> binding_;
+  raw_ptr<SpaceSwitcher> switcher_;
   raw_ptr<ArchiveService> archive_service_ = nullptr;
   base::ObserverList<SidebarModel::Observer> observers_;
   bool notification_pending_ = false;

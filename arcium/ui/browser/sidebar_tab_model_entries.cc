@@ -191,9 +191,8 @@ EntryId SidebarTabModel::AddEntryForTab(int tab_index, EntryKind kind) {
   const tabs::TabData data = tabs::TabData::FromTabInterface(tab);
   // Deliberately not TabStripModel::SetTabPinned: a Chromium pinned tab is
   // always live, which is precisely what a cold entry must not be.
-  const EntryId id = arcium_model_->AddEntry(
-      // Task 5: the window's space.
-      arcium_model_->default_space_id(), kind, data.visible_url, data.title);
+  const EntryId id = arcium_model_->AddEntry(active_space(), kind,
+                                             data.visible_url, data.title);
   binding_->Bind(id, tab->GetHandle());
   NotifyChanged();
   return id;
@@ -390,7 +389,7 @@ void SidebarTabModel::MoveEntryToSection(EntryId id,
 }
 
 std::vector<SidebarFolder> SidebarTabModel::folders() const {
-  const SpaceId space = arcium_model_->default_space_id();
+  const SpaceId space = active_space();
   // One pass over the entries counts every folder, so a header never scans
   // and rows() is not walked once per folder. Direct counts only: the walk
   // rolls them up over each subtree.
@@ -456,9 +455,8 @@ FolderId SidebarTabModel::CreateFolderWithEntry(EntryId id,
   // Inside the folder the entry is already in, so a folder made from a nested
   // row appears at the level that row was drawn at. A top-level entry has no
   // folder and so still makes a top-level one.
-  const FolderId folder = arcium_model_->AddFolder(
-      // Task 5: the window's space.
-      arcium_model_->default_space_id(), name, entry->folder_id);
+  const FolderId folder =
+      arcium_model_->AddFolder(active_space(), name, entry->folder_id);
   arcium_model_->SetEntryFolder(id, folder);
   return folder;
 }
@@ -520,7 +518,7 @@ void SidebarTabModel::SyncEntryTitles() {
   // Collected first: SetLastTitle notifies, and an observer must not be able
   // to invalidate the entry pointers this loop is walking.
   std::vector<std::pair<EntryId, std::u16string>> updates;
-  const SpaceId space = arcium_model_->default_space_id();
+  const SpaceId space = active_space();
   for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
     for (const TabEntry* entry : arcium_model_->EntriesForKind(space, kind)) {
       auto it = tab_for_entry.find(entry->id);

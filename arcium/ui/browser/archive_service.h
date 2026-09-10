@@ -27,6 +27,7 @@ class TabStripModel;
 namespace arcium {
 
 class ArchiveStore;
+class SpaceSwitcher;
 class TabBinding;
 
 // One read of the archive. `readable` is the store's own is_open(), captured
@@ -79,12 +80,18 @@ class ArchiveService : public TabStripModelObserver,
   // base::Time::Now() for that question too, which is every window without
   // --arcium-fake-clock-offset. It must outlive this object;
   // BrowserSidebarController owns the one it passes.
+  //
+  // `switcher` is null in the playground, in a window built without a
+  // sidebar, and in every fixture written before spaces -- all of which keep
+  // working unchanged, in the first space, which is what they have always
+  // meant by it. It must outlive this object.
   ArchiveService(TabStripModel* tab_strip_model,
                  ArciumModel* model,
                  TabBinding* binding,
                  ArchiveStore* store,
                  scoped_refptr<base::SequencedTaskRunner> store_runner,
-                 const base::Clock* clock = nullptr);
+                 const base::Clock* clock = nullptr,
+                 SpaceSwitcher* switcher = nullptr);
   ArchiveService(const ArchiveService&) = delete;
   ArchiveService& operator=(const ArchiveService&) = delete;
   ~ArchiveService() override;
@@ -176,6 +183,10 @@ class ArchiveService : public TabStripModelObserver,
   void OnArciumModelChanged() override;
 
  private:
+  // The space this window is showing. Without a switcher — the playground, a
+  // window built with no sidebar, every fixture written before spaces — it is
+  // the first space, which is what those callers have always meant.
+  SpaceId active_space() const;
   // The instant `handle` becomes archivable, or nullopt when its space is set
   // to kNever.
   std::optional<base::Time> ExpiryFor(tabs::TabHandle handle) const;
@@ -186,7 +197,9 @@ class ArchiveService : public TabStripModelObserver,
   // measured from. See `last_active_`.
   base::Time IdleSince(tabs::TabHandle handle) const;
 
-  ArchiveTimeout TimeoutForDefaultSpace() const;
+  // `handle`'s own space's timeout — not the window's active space, which may
+  // differ from where a background tab actually sits.
+  ArchiveTimeout TimeoutForTab(tabs::TabHandle handle) const;
 
   void RescheduleTimer();
   void OnTimerFired();
@@ -205,6 +218,7 @@ class ArchiveService : public TabStripModelObserver,
   raw_ptr<TabStripModel> tab_strip_model_;
   raw_ptr<ArciumModel> model_;
   raw_ptr<TabBinding> binding_;
+  raw_ptr<SpaceSwitcher> switcher_;
   // Owned by ArciumProfileState, which deletes it on `store_runner_` — so a
   // write posted here always runs before the deletion behind it.
   raw_ptr<ArchiveStore> store_;

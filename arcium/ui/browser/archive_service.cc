@@ -13,6 +13,8 @@
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
+#include "arcium/browser/tab_space.h"
+#include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/browser/tab_close_types.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -88,10 +90,12 @@ ArchiveService::ArchiveService(
     TabBinding* binding,
     ArchiveStore* store,
     scoped_refptr<base::SequencedTaskRunner> store_runner,
-    const base::Clock* clock)
+    const base::Clock* clock,
+    SpaceSwitcher* switcher)
     : tab_strip_model_(tab_strip_model),
       model_(model),
       binding_(binding),
+      switcher_(switcher),
       store_(store),
       store_runner_(std::move(store_runner)),
       clock_(clock ? clock : base::DefaultClock::GetInstance()) {
@@ -113,19 +117,26 @@ ArchiveService::~ArchiveService() {
   }
 }
 
+SpaceId ArchiveService::active_space() const {
+  return switcher_ ? switcher_->active_space() : model_->default_space_id();
+}
+
 void ArchiveService::ArchiveAllToday() {
   if (!tab_strip_model_) {
     return;
   }
   // Collect first: closing a tab mutates the strip underneath the loop.
   // A tab an entry claims is not a Today tab, whatever Chromium thinks of its
-  // pinned state; everything else goes, including the active one. This is a
-  // button the user pressed, not the automatic sweep.
+  // pinned state; everything else in this window's own space goes, including
+  // the active one — a tab of another space is not this window's Today to
+  // clear. This is a button the user pressed, not the automatic sweep.
+  const SpaceId space = active_space();
   std::vector<tabs::TabHandle> today;
   for (int i = 0; i < tab_strip_model_->count(); ++i) {
     const tabs::TabHandle handle =
         tab_strip_model_->GetTabAtIndex(i)->GetHandle();
-    if (!IsClaimedByEntry(*model_, *binding_, handle)) {
+    if (!IsClaimedByEntry(*model_, *binding_, handle) &&
+        SpaceOfTab(*model_, *binding_, handle) == space) {
       today.push_back(handle);
     }
   }
@@ -212,6 +223,16 @@ bool ArchiveService::MayArchive(tabs::TabHandle handle) const {
   content::WebContents* contents = tab->GetContents();
   if (!contents) {
     return false;
+  }
+  // Never the tab a switch to that space would land on. The window's own
+  // active tab is refused above; this is the same rule for the spaces that
+  // are not on screen, and without it a quiet background space loses the
+  // page it was left on.
+  for (const Space& space : model_->spaces()) {
+    if (space.last_active_tab.is_valid() &&
+        space.last_active_tab == ExistingKeyOf(contents)) {
+      return false;
+    }
   }
   if (contents->IsCurrentlyAudible()) {
     return false;
@@ -334,18 +355,20 @@ base::Time ArchiveService::IdleSince(tabs::TabHandle handle) const {
   return contents ? contents->GetLastActiveTime() : base::Time::Now();
 }
 
-ArchiveTimeout ArchiveService::TimeoutForDefaultSpace() const {
+ArchiveTimeout ArchiveService::TimeoutForTab(tabs::TabHandle handle) const {
   // A model with no space at all is a model mid-construction; Space's own
   // default is the honest answer, and it is the only place twelve hours is
-  // written down.
-  const Space* space = model_->GetSpace(model_->default_space_id());
+  // written down. `handle`'s own space, not the window's active one: a
+  // background tab of a space this window is not showing still ages against
+  // that space's own timeout.
+  const Space* space = model_->GetSpace(SpaceOfTab(*model_, *binding_, handle));
   return space ? space->archive_timeout : Space().archive_timeout;
 }
 
 std::optional<base::Time> ArchiveService::ExpiryFor(
     tabs::TabHandle handle) const {
   const std::optional<base::TimeDelta> timeout =
-      ArchiveTimeoutToDelta(TimeoutForDefaultSpace());
+      ArchiveTimeoutToDelta(TimeoutForTab(handle));
   if (!timeout) {
     return std::nullopt;  // kNever.
   }
@@ -365,7 +388,9 @@ std::optional<base::Time> ArchiveService::EarliestExpiry() const {
     }
     const std::optional<base::Time> expiry = ExpiryFor(handle);
     if (!expiry) {
-      return std::nullopt;  // kNever: nothing in this space ever expires.
+      // kNever: this tab's own space never expires, but a strip holds every
+      // space's tabs, and another one may still have a timeout to honour.
+      continue;
     }
     if (!earliest || *expiry < *earliest) {
       earliest = expiry;
@@ -439,7 +464,7 @@ void ArchiveService::ArchiveAndClose(tabs::TabHandle handle,
   // tab survived this call missed the confirmed-later case entirely. Only the
   // kRemoved branch knows.
   const std::optional<ArchivedTab> row =
-      MakeRow(tab, model_->default_space_id());
+      MakeRow(tab, SpaceOfTab(*model_, *binding_, handle));
   if (row) {
     // Keyed by handle: pressing Clear again while the first close is still
     // waiting on a dialog replaces this row rather than queuing a second, so

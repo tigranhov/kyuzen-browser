@@ -14,6 +14,7 @@
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/ui/browser/archive_service.h"
+#include "arcium/ui/browser/space_switcher.h"
 #include "base/functional/bind.h"
 #include "base/i18n/string_search.h"
 #include "base/location.h"
@@ -122,6 +123,7 @@ int StoreFetchLimit(int limit,
 std::vector<SearchResult> CollectLocal(TabStripModel* tab_strip_model,
                                        const ArciumModel& model,
                                        const TabBinding& binding,
+                                       SpaceId space_id,
                                        Matcher& matcher,
                                        std::set<GURL>* reachable) {
   std::vector<SearchResult> results;
@@ -160,12 +162,11 @@ std::vector<SearchResult> CollectLocal(TabStripModel* tab_strip_model,
     }
   }
 
-  // Stage 2 has exactly one space, and searching the space the window is
-  // showing is what the command bar will want. Stage 3 has to revisit this
-  // when a window can switch spaces — and has to decide the same question for
-  // the archive half, which ArchiveStore::Search does not scope at all. See
-  // the note on TabSearchService::Search, where both halves are visible.
-  const SpaceId space_id = model.default_space_id();
+  // The window's active space, threaded in by the caller: the entries here
+  // are scoped to whichever space the window is showing, exactly as the
+  // sidebar and ArchiveService are. The archive half is not — ArchiveStore::
+  // Search has no space filter — which is the caveat on
+  // TabSearchService::Search, where both halves are visible.
   for (EntryKind kind : {EntryKind::kFavorite, EntryKind::kPinned}) {
     for (const TabEntry* entry : model.EntriesForKind(space_id, kind)) {
       if (reachable) {
@@ -215,13 +216,19 @@ SearchResult::~SearchResult() = default;
 TabSearchService::TabSearchService(TabStripModel* tab_strip_model,
                                    ArciumModel* model,
                                    TabBinding* binding,
-                                   ArchiveService* archive_service)
+                                   ArchiveService* archive_service,
+                                   SpaceSwitcher* switcher)
     : tab_strip_model_(tab_strip_model),
       model_(model),
       binding_(binding),
-      archive_service_(archive_service) {}
+      archive_service_(archive_service),
+      switcher_(switcher) {}
 
 TabSearchService::~TabSearchService() = default;
+
+SpaceId TabSearchService::active_space() const {
+  return switcher_ ? switcher_->active_space() : model_->default_space_id();
+}
 
 std::vector<SearchResult> TabSearchService::SearchLocal(
     const std::u16string& query,
@@ -232,8 +239,9 @@ std::vector<SearchResult> TabSearchService::SearchLocal(
   Matcher matcher(query);
   // No reachable set: nothing on this path reads it, and building one would
   // cost a GURL copy and a tree node per tab and per entry, per keystroke.
-  std::vector<SearchResult> results = CollectLocal(
-      tab_strip_model_, *model_, *binding_, matcher, /*reachable=*/nullptr);
+  std::vector<SearchResult> results =
+      CollectLocal(tab_strip_model_, *model_, *binding_, active_space(),
+                   matcher, /*reachable=*/nullptr);
   RankAndTruncate(results, limit);
   return results;
 }
@@ -280,7 +288,8 @@ void TabSearchService::OnArchiveRead(std::u16string query,
   Matcher matcher(query);
   std::set<GURL> reachable;
   std::vector<SearchResult> results =
-      CollectLocal(tab_strip_model_, *model_, *binding_, matcher, &reachable);
+      CollectLocal(tab_strip_model_, *model_, *binding_, active_space(),
+                   matcher, &reachable);
 
   // ArchiveReadResult::readable is deliberately dropped. The archive list
   // needs it because "nothing archived" and "the file would not open" are
