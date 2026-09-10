@@ -19,6 +19,7 @@ class TabStripModel;
 
 namespace arcium {
 
+class ArchiveService;
 class TabBinding;
 
 // One per window. Holds which space the window is showing, answers whether a
@@ -62,6 +63,24 @@ class SpaceSwitcher : public TabStripModelObserver,
   int OpenBlankTab();
   void MoveTabToSpace(int index, SpaceId space);
 
+  // Optional, and may be reset to null: the playground and fixtures that
+  // build no ArchiveService never call this, and DeleteSpace simply skips
+  // the archive cleanup then.
+  void SetArchiveService(ArchiveService* archive_service);
+
+  // Refuses the last space and an unknown id, same as the model does --
+  // refusing here too keeps the tabs from being closed first. Moves the
+  // window off `id` before it goes, closes `id`'s own tabs through the
+  // strip's normal close (so a page with unsaved work still gets its
+  // beforeunload prompt), removes the space from the model, and re-tags any
+  // tab a declined close left behind into the space the window landed on --
+  // it cannot stay tagged with a space that no longer exists.
+  void DeleteSpace(SpaceId id);
+
+  // How many strip tabs are currently in `space`. What a delete confirmation
+  // counts.
+  int OpenTabCount(SpaceId space) const;
+
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
@@ -84,6 +103,10 @@ class SpaceSwitcher : public TabStripModelObserver,
   // OnTabStripModelChanged and by MoveTabToSpace -- the two places that put
   // the window in a space it did not SwitchTo.
   void AdoptSpace(SpaceId id);
+  // The space after `id` in position order, or the one before it when `id`
+  // is last. Where DeleteSpace lands the window: never the space it is
+  // about to remove.
+  SpaceId NeighbourOf(SpaceId id) const;
   void NotifyActiveSpaceChanged();
   // Posted from OnArciumModelChanged rather than run inline: see the comment
   // there. Re-checks that the active space is still gone before switching,
@@ -93,6 +116,9 @@ class SpaceSwitcher : public TabStripModelObserver,
   raw_ptr<TabStripModel> tab_strip_model_;
   raw_ptr<ArciumModel> model_;
   raw_ptr<TabBinding> binding_;
+  // Null in the playground, in a window built without a sidebar, and in
+  // every fixture that does not set one. See SetArchiveService.
+  raw_ptr<ArchiveService> archive_service_ = nullptr;
   SpaceId active_space_;
   base::ObserverList<Observer> observers_;
   // Last: anything posted through this must run after every other member is

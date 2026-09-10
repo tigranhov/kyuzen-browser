@@ -150,6 +150,13 @@ class ArchiveService : public TabStripModelObserver,
   // row that is already gone is not an error.
   void RemoveArchived(const GURL& url, base::Time archived_at);
 
+  // Drops every archived row of `space_id`, posted to the store's sequence
+  // like every other write here: a deleted space can have thousands of rows,
+  // and the UI thread never waits for SQLite. Called by SpaceSwitcher when
+  // the space itself is deleted; the space's entries and folders are the
+  // model's to remove.
+  void RemoveSpaceRows(SpaceId space_id);
+
   // False for the tabs closing would be data loss rather than tidying: the
   // active tab, a tab playing audio, a tab with an unload handler, and any tab
   // an entry still claims (a pinned or favourite tab is not a Today tab).

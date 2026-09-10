@@ -260,6 +260,19 @@ TEST_F(ArchiveStoreTest, IsOpenFollowsTheResultOfOpen) {
   EXPECT_TRUE(store.is_open());
 }
 
+TEST_F(ArchiveStoreTest, RemovingASpaceTakesOnlyItsRows) {
+  const SpaceId other = SpaceId::Generate();
+  const base::Time now = base::Time::Now();
+  store_.Add(MakeTab("https://mine.example/", u"Mine", now));
+  ArchivedTab theirs = MakeTab("https://theirs.example/", u"Theirs", now);
+  theirs.space_id = other;
+  store_.Add(theirs);
+
+  store_.RemoveSpace(space_);
+  EXPECT_TRUE(store_.ListRecent(space_, 10).empty());
+  EXPECT_EQ(1u, store_.ListRecent(other, 10).size());
+}
+
 TEST_F(ArchiveStoreTest, OpeningACorruptFileStartsAFreshDatabase) {
   const base::FilePath path = dir_.GetPath().AppendASCII("corrupt.db");
   ASSERT_TRUE(base::WriteFile(path, "this is not a sqlite database"));

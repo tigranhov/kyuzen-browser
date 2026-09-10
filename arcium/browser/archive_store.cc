@@ -340,4 +340,14 @@ void ArchiveStore::Remove(const GURL& url, base::Time archived_at) {
   statement.Run();
 }
 
+void ArchiveStore::RemoveSpace(SpaceId space_id) {
+  if (!open_) {
+    return;
+  }
+  sql::Statement statement(db_.GetCachedStatement(
+      SQL_FROM_HERE, "DELETE FROM archived_tabs WHERE space_id = ?"));
+  statement.BindString(0, space_id.value());
+  statement.Run();
+}
+
 }  // namespace arcium

@@ -16,6 +16,7 @@
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/common/arcium_features.h"
+#include "arcium/test/space_test_util.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/files/scoped_temp_dir.h"
@@ -37,46 +38,17 @@
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/segmentation_platform/public/features.h"
 #include "components/tabs/public/tab_interface.h"
-#include "content/browser/renderer_host/render_frame_host_impl.h"  // nogncheck
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/public/mojom/frame/sudden_termination_disabler_type.mojom.h"
 #include "url/gurl.h"
 
 namespace arcium {
 namespace {
 
-// The production seam a close can be declined at: UnloadController asks every
-// registered TabUnloadHandler before it lets a tab go, and one that puts up
-// its own confirmation keeps the tab open until the user answers. It stands
-// in for the beforeunload dialog, which cannot be driven in this fixture —
-// that path reaches PerformanceManager::GetGraph(), which CHECKs here.
-class DecliningUnloadHandler : public UnloadController::TabUnloadHandler {
- public:
-  void set_intercept(bool intercept) { intercept_ = intercept; }
-
-  bool ShouldSkipBeforeUnload(content::WebContents* contents) override {
-    return false;
-  }
-  bool ShouldShowCustomConfirmation(content::WebContents* contents) override {
-    return intercept_;
-  }
-  bool ShowCustomConfirmation(
-      content::WebContents* contents,
-      base::OnceCallback<void(bool)> on_closed) override {
-    if (!intercept_) {
-      return false;
-    }
-    // Held, not answered. The tab stays until Confirm() runs this.
-    on_closed_ = std::move(on_closed);
-    return true;
-  }
-
- private:
-  bool intercept_ = true;
-  base::OnceCallback<void(bool)> on_closed_;
-};
+// Moved to arcium/test/space_test_util.h, which SpaceSwitcherTest's own
+// HoldTabOpen also needs: the production seam a close can be declined at.
+using arcium::test::DecliningUnloadHandler;
 
 // BrowserWithTestWindowTest::AddTab inserts at index 0 and activates, so the
 // tab named last is the one at index 0 and the one the strip calls active.
@@ -158,23 +130,17 @@ class ArchiveServiceTest : public BrowserWithTestWindowTest {
     AppendTestTab(url)->SetIsCurrentlyAudible(true);
   }
 
-  // content exposes no public way to give a test page a beforeunload handler:
-  // the only seam is the mojo call a live renderer makes, which lands on
-  // RenderFrameHostImpl. The brief's SimulateBeforeUnloadHandlerPresent does
-  // not exist in 152, and this is what content's own tests do instead (see
-  // render_frame_host_impl_browsertest.cc). The cast is sound because the
-  // frame of a TestWebContents really is a TestRenderFrameHost.
+  // The real seam for this is content's mojo call from a live renderer;
+  // arcium::test::SetBeforeUnloadHandler stands in for it, in
+  // space_test_util.h, shared with SpaceSwitcherTest.
   void AppendTabWithBeforeUnloadHandler(const GURL& url) {
     AppendTestTab(url);
     SetBeforeUnloadHandler(strip()->count() - 1, true);
   }
 
   void SetBeforeUnloadHandler(int index, bool present) {
-    static_cast<content::RenderFrameHostImpl*>(
-        strip()->GetWebContentsAt(index)->GetPrimaryMainFrame())
-        ->SuddenTerminationDisablerChanged(
-            present,
-            blink::mojom::SuddenTerminationDisablerType::kBeforeUnloadHandler);
+    arcium::test::SetBeforeUnloadHandler(strip()->GetWebContentsAt(index),
+                                         present);
   }
 
   TabStripModel* strip() { return browser()->tab_strip_model(); }

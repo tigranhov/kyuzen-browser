@@ -82,6 +82,12 @@ class ArchiveStore {
 
   void Remove(const GURL& url, base::Time archived_at);
 
+  // Drops every row of `space_id`. Called once, when the space itself is
+  // deleted: the space's own entries and folders go through the model, and
+  // its archive rows go through here, on the same sequence as every other
+  // write to this store.
+  void RemoveSpace(SpaceId space_id);
+
   // Exposes the file-unusable classifier for a unit test that pins it
   // directly: the codes it must never crash on (SQLITE_BUSY, SQLITE_LOCKED,
   // SQLITE_NOMEM, an unrecognised code) are hard to reach through a real

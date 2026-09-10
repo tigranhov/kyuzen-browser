@@ -10,6 +10,8 @@
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/browser/tab_space.h"
+#include "arcium/ui/browser/archive_service.h"
+#include "arcium/ui/browser/tab_close_types.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/no_destructor.h"
@@ -212,6 +214,80 @@ void SpaceSwitcher::MoveTabToSpace(int index, SpaceId space) {
   if (index == tab_strip_model_->active_index()) {
     AdoptSpace(space);
   }
+}
+
+void SpaceSwitcher::SetArchiveService(ArchiveService* archive_service) {
+  archive_service_ = archive_service;
+}
+
+SpaceId SpaceSwitcher::NeighbourOf(SpaceId id) const {
+  const std::vector<Space>& spaces = model_->spaces();
+  for (size_t i = 0; i < spaces.size(); ++i) {
+    if (spaces[i].id != id) {
+      continue;
+    }
+    if (i + 1 < spaces.size()) {
+      return spaces[i + 1].id;
+    }
+    if (i > 0) {
+      return spaces[i - 1].id;
+    }
+    return SpaceId();
+  }
+  return SpaceId();
+}
+
+int SpaceSwitcher::OpenTabCount(SpaceId space) const {
+  if (!tab_strip_model_) {
+    return 0;
+  }
+  int count = 0;
+  for (int index = 0; index < tab_strip_model_->count(); ++index) {
+    if (SpaceOfTabAt(index) == space) {
+      ++count;
+    }
+  }
+  return count;
+}
+
+void SpaceSwitcher::DeleteSpace(SpaceId id) {
+  // The last space cannot go: every tab has to be in one. The model refuses
+  // it too; refusing here as well keeps the tabs from being closed first.
+  if (model_->spaces().size() <= 1 || !model_->GetSpace(id) ||
+      !tab_strip_model_) {
+    return;
+  }
+  // Move off it before it goes, so the window is never showing a space the
+  // model no longer has.
+  if (id == active_space_) {
+    SwitchTo(NeighbourOf(id));
+  }
+  const SpaceId landing = active_space_;
+
+  // Chromium's own close, so a page with unsaved work still gets its
+  // beforeunload prompt.
+  for (int index = tab_strip_model_->count() - 1; index >= 0; --index) {
+    if (SpaceOfTabAt(index) == id) {
+      tab_strip_model_->CloseWebContentsAt(index, kUserCloseTypes);
+    }
+  }
+  model_->RemoveSpace(id);
+  // A tab still here refused to close -- a beforeunload dialog the user has
+  // not answered -- and Chromium offers no signal for that at this seam.
+  // Rather than leaving it tagged with a space that is gone, where
+  // SpaceOfTab would silently move it to the first space, it joins the
+  // space the window moved to, where the user can see it.
+  for (int index = 0; index < tab_strip_model_->count(); ++index) {
+    content::WebContents* contents =
+        tab_strip_model_->GetTabAtIndex(index)->GetContents();
+    if (SpaceTagOf(contents) == id) {
+      SetSpaceTag(contents, landing);
+    }
+  }
+  if (archive_service_) {
+    archive_service_->RemoveSpaceRows(id);
+  }
+  NotifyActiveSpaceChanged();
 }
 
 void SpaceSwitcher::AddObserver(Observer* observer) {

@@ -14,6 +14,7 @@
 #include "arcium/test/space_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/unload_controller.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
@@ -45,6 +46,24 @@ class SpaceSwitcherTest : public BrowserWithTestWindowTest {
   tabs::TabInterface* AddTabWithOpener(tabs::TabInterface* opener) {
     return arcium::test::AddTabWithOpener(
         strip(), profile(), GURL("https://opened.example/"), opener);
+  }
+
+  // Installs a handler that declines the next close it is asked about, so a
+  // tab DeleteSpace tries to close stays open exactly as a page behind an
+  // unanswered beforeunload dialog would. `tab` names the tab this is meant
+  // to hold open, but the handler itself is asked about whichever contents
+  // is actually closing -- every test here only ever asks DeleteSpace to
+  // close the tabs of the one space being deleted, so that is always `tab`.
+  // The real dialog cannot run in this fixture (PerformanceManager CHECK);
+  // DecliningUnloadHandler stands in for it. The caller must call
+  // set_intercept(false) on the return value once it is done asserting, so
+  // TearDown can close what is left.
+  arcium::test::DecliningUnloadHandler* HoldTabOpen(
+      [[maybe_unused]] tabs::TabInterface* tab) {
+    auto handler = std::make_unique<arcium::test::DecliningUnloadHandler>();
+    arcium::test::DecliningUnloadHandler* handler_ptr = handler.get();
+    UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+    return handler_ptr;
   }
 
   ArciumModel model_;
@@ -299,6 +318,95 @@ TEST_F(SpaceSwitcherTest, RemovingTheActiveSpaceFallsBackAfterThePostedTask) {
 
   task_environment()->RunUntilIdle();
   EXPECT_EQ(first, switcher->active_space());
+}
+
+TEST_F(SpaceSwitcherTest, DeletingASpaceClosesItsTabsAndTakesItsEntries) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId doomed = model_.AddSpace(u"Doomed");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  AddTabInSpace(GURL("https://d1.example/"), doomed);
+  model_.AddEntry(doomed, EntryKind::kPinned, GURL("https://d2.example/"),
+                  u"D");
+  switcher->SwitchTo(doomed);
+
+  switcher->DeleteSpace(doomed);
+  EXPECT_FALSE(model_.GetSpace(doomed));
+  EXPECT_TRUE(model_.entries().empty());
+  ASSERT_EQ(1, strip()->count());
+  EXPECT_EQ(first, switcher->SpaceOfTabAt(0));
+  // The window moved to the neighbour before the space went, so it is never
+  // showing a space that does not exist. With only two spaces, doomed's only
+  // neighbour is first, so closing the active doomed tab also leaves
+  // Chromium activating a1 -- both paths agree on the same answer here; the
+  // controller's mutation check for the SwitchTo(NeighbourOf(id)) call is
+  // DeletingTheActiveSpaceMovesToItsNeighbourFirst below, which uses a third
+  // space so the two paths can disagree.
+  EXPECT_EQ(first, switcher->active_space());
+}
+
+// Controller ruling: three spaces, so a tab held open by an unanswered close
+// lands somewhere other than the first space -- SpaceOfTab already reads an
+// unresolvable tag as the first space, so a two-space version of this test
+// could not tell a real re-tag from that fallback and could not fail if the
+// re-tag loop were dropped.
+TEST_F(SpaceSwitcherTest, ATabThatSurvivesTheDeleteJoinsTheLandingSpace) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  const SpaceId doomed = model_.AddSpace(u"Doomed");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  AddTabInSpace(GURL("https://w1.example/"), work);
+  tabs::TabInterface* d1 = AddTabInSpace(GURL("https://d1.example/"), doomed);
+  switcher->SwitchTo(work);
+
+  arcium::test::DecliningUnloadHandler* handler = HoldTabOpen(d1);
+  switcher->DeleteSpace(doomed);
+  ASSERT_EQ(3, strip()->count());  // d1 refused to close.
+  EXPECT_EQ(work, switcher->SpaceOfTabAt(strip()->GetIndexOfTab(d1)));
+  handler->set_intercept(false);
+}
+
+TEST_F(SpaceSwitcherTest, TheLastSpaceCannotBeDeleted) {
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), model_.default_space_id());
+  switcher->DeleteSpace(model_.default_space_id());
+  EXPECT_EQ(1u, model_.spaces().size());
+  EXPECT_EQ(1, strip()->count());
+}
+
+TEST_F(SpaceSwitcherTest, OpenTabCountIsWhatTheConfirmationPromises) {
+  const SpaceId work = model_.AddSpace(u"Work");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), model_.default_space_id());
+  AddTabInSpace(GURL("https://w1.example/"), work);
+  AddTabInSpace(GURL("https://w2.example/"), work);
+  EXPECT_EQ(2, switcher->OpenTabCount(work));
+}
+
+// Controller ruling, and the mutation check for DeleteSpace's
+// SwitchTo(NeighbourOf(id)) call: with only two spaces, closing the active
+// doomed tab makes Chromium activate the survivor anyway, so dropping that
+// call cannot fail DeletingASpaceClosesItsTabsAndTakesItsEntries above. A
+// third space in position order after doomed gives SwitchTo(NeighbourOf(id))
+// a landing that Chromium's own activation-on-close would not otherwise
+// reach, and the assertion runs before the posted ArciumModel fallback would
+// ever get a turn -- DeleteSpace's own SwitchTo is what has to have done it.
+TEST_F(SpaceSwitcherTest, DeletingTheActiveSpaceMovesToItsNeighbourFirst) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId doomed = model_.AddSpace(u"Doomed");
+  const SpaceId third = model_.AddSpace(u"Third");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  tabs::TabInterface* d1 = AddTabInSpace(GURL("https://d1.example/"), doomed);
+  AddTabInSpace(GURL("https://t1.example/"), third);
+  switcher->SwitchTo(doomed);
+
+  arcium::test::DecliningUnloadHandler* handler = HoldTabOpen(d1);
+  switcher->DeleteSpace(doomed);
+  EXPECT_EQ(third, switcher->active_space());
+  EXPECT_EQ(third, switcher->SpaceOfTabAt(strip()->GetIndexOfTab(d1)));
+  handler->set_intercept(false);
 }
 
 }  // namespace

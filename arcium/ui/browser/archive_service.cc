@@ -199,6 +199,17 @@ void ArchiveService::RemoveArchived(const GURL& url, base::Time archived_at) {
                                 url, archived_at));
 }
 
+void ArchiveService::RemoveSpaceRows(SpaceId space_id) {
+  if (!store_ || !store_runner_) {
+    return;
+  }
+  // On the store's sequence, like every other write here: this can be
+  // thousands of rows and the UI thread never waits for SQLite.
+  store_runner_->PostTask(FROM_HERE,
+                          base::BindOnce(&ArchiveStore::RemoveSpace,
+                                         base::Unretained(store_), space_id));
+}
+
 bool ArchiveService::MayArchive(tabs::TabHandle handle) const {
   if (!tab_strip_model_) {
     return false;
