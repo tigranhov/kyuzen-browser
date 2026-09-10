@@ -147,7 +147,7 @@ busy; touching one Views file and rebuilding 17 s; rebase no-op 29 s; views_exam
 | 1 Visual MVP | done, see docs/stage1-findings.md and docs/perf/ |
 | 2 Arc tab model | done, see docs/stage2-findings.md and docs/perf/2026-09-07-stage2.md — A2.1, A2.2 and the session-restore list executed by hand 2026-09-08; four defects found and fixed during the pass |
 | 2.5 Entry behaviour | done, see docs/stage2.5-findings.md and docs/perf/2026-09-09-stage2.5.md — A2.5.2 and A2.5.3 executed by hand 2026-09-09; one defect found and fixed (cold entries drew a globe instead of their stored favicon, 48f19f0) and two owner-requested changes made (depth cap 5 to 4, and "New folder" now nests where the row is, f179115); A2.5.1's collapse-then-relaunch half still NOT run, perf not yet measured |
-| 2.6 Pinned and favourite home boundary | designed, not implemented, see docs/superpowers/specs/2026-09-09-stage-2.6-home-boundary-design.md and docs/research/zen-home-boundary.md |
+| 2.6 Pinned and favourite home boundary | done, see docs/stage2.6-findings.md, docs/superpowers/specs/2026-09-09-stage-2.6-home-boundary-design.md and docs/research/zen-home-boundary.md — A2.6.1-A2.6.9 executed by hand 2026-09-10 against a local four-host harness, all passed, no defects found; perf not yet measured |
 | 3 Spaces and profiles | not started |
 | 4 Command bar and navigation | not started |
 | 5 Layout | not started |
