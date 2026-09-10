@@ -5,6 +5,83 @@
 #ifndef ARCIUM_BROWSER_TAB_SPACE_H_
 #define ARCIUM_BROWSER_TAB_SPACE_H_
 
-namespace arcium {}  // namespace arcium
+#include <map>
+#include <string>
+
+#include "arcium/browser/model/entry_id.h"
+#include "components/sessions/core/session_id.h"
+#include "components/tabs/public/tab_interface.h"
+
+namespace content {
+class WebContents;
+}
+
+namespace sessions {
+class CommandStorageManager;
+}
+
+namespace tabs {
+class TabInterface;
+}
+
+namespace arcium {
+
+class ArciumModel;
+class TabBinding;
+
+// The two facts a tab carries about itself, ridden through the session file
+// the same way kEntryIdExtraDataKey is.
+inline constexpr char kSpaceIdExtraDataKey[] = "arcium.space_id";
+inline constexpr char kTabKeyExtraDataKey[] = "arcium.tab_key";
+
+// The space a tab was tagged with, or an invalid SpaceId when it carries no
+// tag. Not the space it is drawn in — SpaceOfTab is that, and it consults the
+// entry binding first.
+SpaceId SpaceTagOf(content::WebContents* web_contents);
+
+void SetSpaceTag(content::WebContents* web_contents, SpaceId id);
+
+// The stable id a tab carries across a restart, generated on first ask so
+// every tab ends up with one.
+TabKey KeyOf(content::WebContents* web_contents);
+
+// The key if one was set or generated, or an invalid TabKey otherwise. Never
+// generates: a comparison over every tab in a strip must not hand out a UUID
+// to a tab nothing has ever asked about.
+TabKey ExistingKeyOf(content::WebContents* web_contents);
+
+// Sets the key directly, for the restore path, which is handed a key read
+// off disk rather than one it is minting itself.
+void SetTabKey(content::WebContents* web_contents, TabKey key);
+
+// The space `handle` is drawn in. An entry's space wins over the tab's own
+// tag, and a tag naming no space falls back to the model's first.
+SpaceId SpaceOfTab(const ArciumModel& model,
+                   const TabBinding& binding,
+                   tabs::TabHandle handle);
+
+// Restore, first half's counterpart for the two facts above. Reads
+// kSpaceIdExtraDataKey and kTabKeyExtraDataKey out of `extra_data` and, for
+// each that parses, sets it on `web_contents`. A key that fails to parse
+// leaves the corresponding fact untouched.
+void RestoreTabSpaceData(content::WebContents* web_contents,
+                         const std::map<std::string, std::string>& extra_data);
+
+// Save. Appends the resolved space and the tab's key as rebuild commands for
+// `web_contents`, or nothing when it names no tab.
+void AppendTabSpaceCommands(
+    sessions::CommandStorageManager* command_storage_manager,
+    SessionID tab_id,
+    content::WebContents* web_contents,
+    const ArciumModel& model,
+    const TabBinding& binding);
+
+// Save, the in-session half. Writes the same two facts into `extra_data`.
+void PopulateTabSpaceExtraData(tabs::TabInterface* tab,
+                               const ArciumModel& model,
+                               const TabBinding& binding,
+                               std::map<std::string, std::string>* extra_data);
+
+}  // namespace arcium
 
 #endif  // ARCIUM_BROWSER_TAB_SPACE_H_

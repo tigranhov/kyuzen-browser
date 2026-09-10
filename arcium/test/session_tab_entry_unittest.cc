@@ -4,10 +4,12 @@
 
 #include "arcium/browser/session_tab_entry.h"
 
+#include <algorithm>
 #include <map>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "arcium/browser/arcium_profile_state.h"
 #include "arcium/browser/entry_claim.h"
@@ -15,6 +17,7 @@
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
+#include "arcium/browser/tab_space.h"
 #include "base/files/scoped_temp_dir.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
@@ -87,6 +90,26 @@ class SessionTabEntryTest : public BrowserWithTestWindowTest {
 
   size_t pending_count() {
     return command_storage_manager_->pending_commands().size();
+  }
+
+  // Maps the manager's pending commands through PayloadOf, so a test can
+  // search the encoded pickles without reaching past the fixture.
+  std::vector<std::string> PendingPayloads() {
+    std::vector<std::string> payloads;
+    for (const auto& command : command_storage_manager_->pending_commands()) {
+      payloads.push_back(PayloadOf(*command));
+    }
+    return payloads;
+  }
+
+  // A session command's payload is a length-prefixed pickle, so the id being
+  // looked for sits inside a longer string rather than being one.
+  static bool ContainsValue(const std::vector<std::string>& payloads,
+                            const std::string& value) {
+    return std::any_of(payloads.begin(), payloads.end(),
+                       [&value](const std::string& payload) {
+                         return payload.find(value) != std::string::npos;
+                       });
   }
 
   base::ScopedTempDir temp_dir_;
@@ -204,9 +227,11 @@ TEST_F(SessionTabEntryTest, AMalformedKeyLeavesNoStash) {
   EXPECT_FALSE(state()->binding()->IsBound(HandleAt(0)));
 }
 
-// The write half. One command, carrying the key and the entry's own id, for
-// the tab id the session file will use.
-TEST_F(SessionTabEntryTest, ABoundTabAppendsExactlyOneExtraDataCommand) {
+// The write half. Exactly one command carries the entry's own id, for the tab
+// id the session file will use; the space tag and key ride their own
+// commands (tab_space.cc), which is why this checks for the entry id
+// specifically rather than a total.
+TEST_F(SessionTabEntryTest, ABoundTabAppendsExactlyOneEntryIdCommand) {
   AddTab(browser(), GURL("https://a.example/"));
   const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
@@ -215,19 +240,25 @@ TEST_F(SessionTabEntryTest, ABoundTabAppendsExactlyOneExtraDataCommand) {
   const SessionID tab_id = SessionID::NewUnique();
   AppendTabEntryCommand(command_storage_manager_.get(), tab_id, ContentsAt(0));
 
-  ASSERT_EQ(1u, pending_count());
-  const std::string payload =
-      PayloadOf(*command_storage_manager_->pending_commands()[0]);
-  EXPECT_NE(std::string::npos, payload.find(kEntryIdExtraDataKey));
-  EXPECT_NE(std::string::npos, payload.find(id.value()));
+  const std::vector<std::string> payloads = PendingPayloads();
+  std::string entry_id_payload;
+  int entry_id_commands = 0;
+  for (const std::string& payload : payloads) {
+    if (payload.find(kEntryIdExtraDataKey) != std::string::npos) {
+      ++entry_id_commands;
+      entry_id_payload = payload;
+    }
+  }
+  ASSERT_EQ(1, entry_id_commands);
+  EXPECT_NE(std::string::npos, entry_id_payload.find(id.value()));
 }
 
-// Most tabs are Today tabs and must leave the session file alone.
+// Most tabs are Today tabs and must leave no entry id in the session file.
 //
 // A live entry claiming the *other* tab, so the profile state exists and has
 // something to say — just not about this tab. Without it the writer returns
 // at its no-state guard and the test proves nothing.
-TEST_F(SessionTabEntryTest, AnUnboundTabAppendsNothing) {
+TEST_F(SessionTabEntryTest, AnUnboundTabAppendsNoEntryId) {
   AddTab(browser(), GURL("https://a.example/"));
   AddTab(browser(), GURL("https://b.example/"));
   const EntryId other = state()->model()->AddEntryForTesting(
@@ -237,13 +268,13 @@ TEST_F(SessionTabEntryTest, AnUnboundTabAppendsNothing) {
   AppendTabEntryCommand(command_storage_manager_.get(), SessionID::NewUnique(),
                         ContentsAt(0));
 
-  EXPECT_EQ(0u, pending_count());
+  EXPECT_FALSE(ContainsValue(PendingPayloads(), kEntryIdExtraDataKey));
 }
 
 // The stale binding IsClaimedByEntry exists for: bound, but the model dropped
-// the entry. Writing the key here would resurrect a dead entry's claim on the
-// next restart.
-TEST_F(SessionTabEntryTest, ATabBoundToAVanishedEntryAppendsNothing) {
+// the entry. Writing the entry id here would resurrect a dead entry's claim
+// on the next restart.
+TEST_F(SessionTabEntryTest, ATabBoundToAVanishedEntryAppendsNoEntryId) {
   AddTab(browser(), GURL("https://a.example/"));
   const EntryId id = state()->model()->AddEntryForTesting(
       EntryKind::kPinned, GURL("https://a.example/"), u"A");
@@ -256,7 +287,7 @@ TEST_F(SessionTabEntryTest, ATabBoundToAVanishedEntryAppendsNothing) {
   AppendTabEntryCommand(command_storage_manager_.get(), SessionID::NewUnique(),
                         ContentsAt(0));
 
-  EXPECT_EQ(0u, pending_count());
+  EXPECT_FALSE(ContainsValue(PendingPayloads(), kEntryIdExtraDataKey));
 }
 
 // The in-session close. BrowserLiveTabContext::GetExtraDataForTab builds the
@@ -400,6 +431,50 @@ TEST_F(SessionTabEntryTest, AnIncognitoTabNeitherBindsNorWritesRegularState) {
   EXPECT_EQ(0u, pending_count());
 
   otr_browser->tab_strip_model()->CloseAllTabs();
+}
+
+// A rebuild carries both new facts, on the space the tab is actually in
+// rather than whatever it was tagged with.
+TEST_F(SessionTabEntryTest, ARebuildWritesTheSpaceTagAndTheTabKey) {
+  AddTab(browser(), GURL("https://a.example/"));
+  const SpaceId work = state()->model()->AddSpace(u"Work");
+  content::WebContents* contents = ContentsAt(0);
+  SetSpaceTag(contents, work);
+  const TabKey key = KeyOf(contents);
+
+  AppendTabEntryCommand(command_storage_manager_.get(), SessionID::NewUnique(),
+                        contents);
+  const std::vector<std::string> payloads = PendingPayloads();
+  EXPECT_TRUE(ContainsValue(payloads, work.value()));
+  EXPECT_TRUE(ContainsValue(payloads, key.value()));
+}
+
+// The in-session close carries the same two facts as the rebuild does.
+TEST_F(SessionTabEntryTest, AnInSessionCloseCarriesTheSpaceTagAndTheTabKey) {
+  AddTab(browser(), GURL("https://a.example/"));
+  const SpaceId work = state()->model()->AddSpace(u"Work");
+  tabs::TabInterface* tab = TabAt(0);
+  SetSpaceTag(tab->GetContents(), work);
+  const TabKey key = KeyOf(tab->GetContents());
+
+  std::map<std::string, std::string> extra_data;
+  PopulateTabEntryExtraData(tab, &extra_data);
+  EXPECT_EQ(work.value(), extra_data[kSpaceIdExtraDataKey]);
+  EXPECT_EQ(key.value(), extra_data[kTabKeyExtraDataKey]);
+}
+
+// The restore half: a tab that comes back with both extra_data keys reads
+// back its own space and key, whether or not any entry ever claims it.
+TEST_F(SessionTabEntryTest, ARestoredTabComesBackInItsOwnSpace) {
+  AddTab(browser(), GURL("https://a.example/"));
+  const SpaceId work = state()->model()->AddSpace(u"Work");
+  const TabKey key = TabKey::Generate();
+  content::WebContents* contents = ContentsAt(0);
+
+  StashRestoredEntryId(contents, {{kSpaceIdExtraDataKey, work.value()},
+                                  {kTabKeyExtraDataKey, key.value()}});
+  EXPECT_EQ(work, SpaceTagOf(contents));
+  EXPECT_EQ(key, KeyOf(contents));
 }
 
 }  // namespace

@@ -12,6 +12,7 @@
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/tab_binding.h"
+#include "arcium/browser/tab_space.h"
 #include "components/sessions/core/command_storage_manager.h"
 #include "components/sessions/core/session_service_commands.h"
 #include "components/tabs/public/tab_interface.h"
@@ -79,6 +80,12 @@ std::optional<EntryId> LiveEntryFor(ArciumProfileState* state,
 void StashRestoredEntryId(
     content::WebContents* web_contents,
     const std::map<std::string, std::string>& extra_data) {
+  // Before the entry-id lookup below, and unconditionally: a tab with no
+  // entry at all is still a tab with a space and a key, and this is the only
+  // seam a restore passes through with both the contents and the extra_data
+  // in hand.
+  RestoreTabSpaceData(web_contents, extra_data);
+
   auto it = extra_data.find(kEntryIdExtraDataKey);
   if (it == extra_data.end()) {
     return;
@@ -144,6 +151,10 @@ void AppendTabEntryCommand(
   if (!state) {
     return;
   }
+  // Every tab gets its space and key; only a claimed one also gets an entry
+  // id.
+  AppendTabSpaceCommands(command_storage_manager, tab_id, web_contents,
+                         *state->model(), *state->binding());
   const std::optional<EntryId> id = LiveEntryFor(state, tab->GetHandle());
   if (!id.has_value()) {
     return;
@@ -164,6 +175,10 @@ void PopulateTabEntryExtraData(tabs::TabInterface* tab,
   if (!state) {
     return;
   }
+  // Every tab contributes its space and key; only a claimed one also
+  // contributes an entry id.
+  PopulateTabSpaceExtraData(tab, *state->model(), *state->binding(),
+                            extra_data);
   const std::optional<EntryId> id = LiveEntryFor(state, tab->GetHandle());
   if (!id.has_value()) {
     return;

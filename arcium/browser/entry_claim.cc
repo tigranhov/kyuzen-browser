@@ -17,15 +17,7 @@ bool IsClaimedByEntry(const ArciumModel& model,
                       const TabBinding& binding,
                       tabs::TabHandle handle) {
   const std::optional<EntryId> id = binding.EntryForTab(handle);
-  if (!id.has_value()) {
-    return false;
-  }
-  const TabEntry* entry = model.GetEntry(*id);
-  // Scoped to the space whose rows are actually drawn. GetEntry searches every
-  // space, and an entry of some other space claiming this tab would keep it
-  // out of Today while nothing put it anywhere else — the same invisible,
-  // unarchivable tab a stale binding gives, one field further along.
-  return entry && entry->space_id == model.default_space_id();
+  return id.has_value() && model.GetEntry(*id) != nullptr;
 }
 
 }  // namespace arcium

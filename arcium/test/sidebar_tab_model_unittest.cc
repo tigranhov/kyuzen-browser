@@ -737,7 +737,12 @@ TEST_F(SidebarTabModelTest, TwoWindowsOverOneModelBothShowTheEntry) {
 // drew it either: an invisible tab, and one MayArchive would refuse to close
 // for as long as the browser ran. The same shape as the stale-binding bug the
 // predicate was written for, one field further along.
-TEST_F(SidebarTabModelTest, ATabClaimedByAnotherSpacesEntryIsStillATodayTab) {
+//
+// Disabled by Task 3: IsClaimedByEntry lost its space clause, so a tab bound
+// to an entry of another space is now claimed, which is the opposite of what
+// this test checks. Task 5 replaces it with a test of the new rule.
+TEST_F(SidebarTabModelTest,
+       DISABLED_ATabClaimedByAnotherSpacesEntryIsStillATodayTab) {
   AddTab(browser(), GURL("https://a.example/"));
   // Two spaces, the entry in the second. Through ReplaceAll because that is
   // the only way a second space exists in Stage 2 — it is what ModelStore
