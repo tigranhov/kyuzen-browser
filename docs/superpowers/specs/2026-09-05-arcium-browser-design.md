@@ -264,12 +264,14 @@ Goal: multiple spaces, each bound to a profile with its own sign-ins, in one win
 - R3.5 Log into the same site in two spaces with different profiles; sessions are independent.
 - R3.6 New tabs, links and popups stay in their space and profile.
 - R3.7 Per-profile clear data control.
-- R3.8 Session restore restores every space and its active tab.
+- R3.8 Spaces, profiles, favourites, pins and folders are Arcium's own data: they load from the model file on every launch and are never restored. Each space's last active tab is a field of the space, saved with everything else. Today tabs, which have no home, come back on the page they were left on.
+- R3.9 No page loads unless the user asks for it. After a launch only the tab on screen in the active space loads. Every other tab that comes back, pinned, favourite or Today, in any space, stays unloaded until it is clicked, and when clicked it opens on the page it was left on, with its back history. Chromium does not behave this way on its own: `BackgroundTabLoadingPolicy` loads between 4 and 20 restored tabs in the background after launch, so this needs a hook. A tab in this state is warm but not loaded, the state R7.5 must later draw.
 
 Acceptance:
 - A3.1 Two spaces, two profiles, two accounts on the same site, both stay logged in across relaunch.
 - A3.2 Space switch animation holds 60 fps in tracing.
 - A3.3 Idle memory with three spaces and two profiles within NF2 plus the measured per-partition cost, which is recorded.
+- A3.4 Pin tabs and open Today tabs in two spaces, quit, relaunch: Chromium's task manager shows a renderer for the tab on screen and for no other tab. Clicking a pin that was left off its home loads it on that page, and Back works.
 
 ### Stage 4. Command bar and navigation
 
