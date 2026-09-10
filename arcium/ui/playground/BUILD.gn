@@ -6,6 +6,7 @@ source_set("fake_model") {
   sources = [
     "fake_sidebar_model.cc",
     "fake_sidebar_model.h",
+    "fake_sidebar_spaces.cc",
   ]
   public_deps = [
     "//arcium/ui/sidebar",

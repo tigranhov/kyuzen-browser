@@ -14,6 +14,8 @@ source_set("browser") {
     "session_tab_entry.h",
     "tab_binding.cc",
     "tab_binding.h",
+    "tab_space.cc",
+    "tab_space.h",
   ]
   public_deps = [
     "//arcium/browser/model",
