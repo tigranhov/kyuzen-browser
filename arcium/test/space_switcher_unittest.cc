@@ -185,6 +185,101 @@ TEST_F(SpaceSwitcherTest, MovingATabToAnotherSpaceRetagsItAndFollowsIt) {
   EXPECT_EQ(work, switcher->active_space());
 }
 
+// Review finding, Important 2: MoveTabToSpace used to call SwitchTo on the
+// target, which lands on whatever that space already remembers as its last
+// active tab -- a different tab than the one that just moved, so the page
+// the user was looking at would disappear behind it. Moving the active tab
+// must adopt the target space instead: land on the moved tab itself, and
+// record it as the target's new place.
+TEST_F(SpaceSwitcherTest,
+       MovingTheActiveTabFollowsItPastTheTargetsRecordedTab) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  auto switcher = MakeSwitcher();
+  tabs::TabInterface* a1 = AddTabInSpace(GURL("https://a1.example/"), first);
+  tabs::TabInterface* w1 = AddTabInSpace(GURL("https://w1.example/"), work);
+
+  // Work already remembers w1 as where the user left it.
+  strip()->ActivateTabAt(strip()->GetIndexOfTab(w1));
+  ASSERT_EQ(work, switcher->active_space());
+  strip()->ActivateTabAt(strip()->GetIndexOfTab(a1));
+  ASSERT_EQ(first, switcher->active_space());
+  ASSERT_EQ(KeyOf(w1->GetContents()), model_.GetSpace(work)->last_active_tab);
+
+  // Moving the tab the user is looking at into work should take them with
+  // it, landing on the moved tab -- not on w1, which work still remembers.
+  switcher->MoveTabToSpace(strip()->GetIndexOfTab(a1), work);
+
+  EXPECT_EQ(work, switcher->active_space());
+  EXPECT_EQ(strip()->GetIndexOfTab(a1), strip()->active_index());
+  EXPECT_EQ(KeyOf(a1->GetContents()), model_.GetSpace(work)->last_active_tab);
+}
+
+// Review finding, Important 1 (chained adoption): activating another
+// space's tab adopts that space without recording which tab was adopted, so
+// if the window then adopts a third space before the user ever switches
+// back, the second space's remembered tab is stale -- SwitchTo lands on
+// whatever was recorded before the adoption, not on the tab the user
+// actually left it on.
+TEST_F(SpaceSwitcherTest, ChainedAdoptionKeepsEachSpacesPlace) {
+  const SpaceId a = model_.default_space_id();
+  const SpaceId b = model_.AddSpace(u"B");
+  const SpaceId c = model_.AddSpace(u"C");
+  auto switcher = MakeSwitcher();
+  tabs::TabInterface* a1 = AddTabInSpace(GURL("https://a1.example/"), a);
+  tabs::TabInterface* b0 = AddTabInSpace(GURL("https://b0.example/"), b);
+  tabs::TabInterface* b1 = AddTabInSpace(GURL("https://b1.example/"), b);
+  tabs::TabInterface* c1 = AddTabInSpace(GURL("https://c1.example/"), c);
+
+  // The user is on a1 in space A, with b0 recorded as B's last active tab.
+  strip()->ActivateTabAt(strip()->GetIndexOfTab(b0));
+  strip()->ActivateTabAt(strip()->GetIndexOfTab(a1));
+  ASSERT_EQ(a, switcher->active_space());
+  ASSERT_EQ(KeyOf(b0->GetContents()), model_.GetSpace(b)->last_active_tab);
+
+  // Ctrl+Tab reaches b1, so the window adopts B.
+  strip()->ActivateTabAt(strip()->GetIndexOfTab(b1));
+  ASSERT_EQ(b, switcher->active_space());
+
+  // Ctrl+Tab reaches c1, so the window adopts C.
+  strip()->ActivateTabAt(strip()->GetIndexOfTab(c1));
+  ASSERT_EQ(c, switcher->active_space());
+
+  // Clicking B's dot should land on b1, where the user left it -- not b0.
+  switcher->SwitchTo(b);
+  EXPECT_EQ(strip()->GetIndexOfTab(b1), strip()->active_index());
+}
+
+// Review finding, Important 1 (stale landing): SwitchTo's own landing
+// activation used to be suppressed by `switching_`, so the tab a switch
+// lands on -- an existing open tab or a freshly opened blank one -- was
+// never recorded as the space's last active tab.
+TEST_F(SpaceSwitcherTest, SwitchingRecordsTheTabItLandsOn) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  tabs::TabInterface* w1 = AddTabInSpace(GURL("https://w1.example/"), work);
+  AddTabInSpace(GURL("https://w2.example/"), work);
+
+  switcher->SwitchTo(work);
+
+  EXPECT_EQ(strip()->GetIndexOfTab(w1), strip()->active_index());
+  EXPECT_EQ(KeyOf(w1->GetContents()), model_.GetSpace(work)->last_active_tab);
+}
+
+TEST_F(SpaceSwitcherTest, SwitchingIntoAnEmptySpaceRecordsTheBlankTab) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), first);
+
+  switcher->SwitchTo(work);
+
+  EXPECT_EQ(KeyOf(strip()->GetActiveTab()->GetContents()),
+            model_.GetSpace(work)->last_active_tab);
+}
+
 // Ruling A4 in the stage-3a ledger: the fallback in OnArciumModelChanged is
 // posted rather than run inline, because RecordActiveTab can mutate the
 // model from inside a strip observer callback and a synchronous SwitchTo

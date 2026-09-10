@@ -10,7 +10,6 @@
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/browser/tab_space.h"
-#include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/no_destructor.h"
@@ -125,10 +124,12 @@ void SpaceSwitcher::SwitchTo(SpaceId id) {
   // tab, then a new blank one. A space is never left showing another
   // space's page, which is the whole of §4.3's rule.
   //
-  // `switching_` keeps the activation this causes from being read, back
-  // through OnTabStripModelChanged, as the user choosing a foreign tab --
-  // which would try to switch again while this call is still on the stack.
-  base::AutoReset<bool> switching(&switching_, true);
+  // The activation below re-enters OnTabStripModelChanged, but active_space_
+  // already names `id` by then, so the landing tab -- one of `id`'s own open
+  // tabs, or the blank tab OpenBlankTab tags into `id` before inserting it --
+  // reads as in-space there. That runs RecordActiveTab instead of the
+  // foreign-tab branch, which is exactly what should record this space's new
+  // place; nothing here needs to suppress it.
   const std::vector<int> open = OpenTabsInSidebarOrder(id);
   int landing = -1;
   const TabKey last = model_->GetSpace(id)->last_active_tab;
@@ -165,6 +166,18 @@ void SpaceSwitcher::RecordActiveTab() {
       KeyOf(tab_strip_model_->GetTabAtIndex(index)->GetContents()));
 }
 
+void SpaceSwitcher::AdoptSpace(SpaceId id) {
+  // Shared by the foreign-activation branch of OnTabStripModelChanged and by
+  // MoveTabToSpace: both put the window in a space it did not SwitchTo, and
+  // both need the tab already on screen recorded as that space's place --
+  // otherwise a later switch or a further adoption lands on whatever was
+  // recorded before, not on the tab the user is actually looking at.
+  active_space_ = id;
+  model_->SetLastActiveSpace(id);
+  RecordActiveTab();
+  NotifyActiveSpaceChanged();
+}
+
 int SpaceSwitcher::OpenBlankTab() {
   if (!tab_strip_model_) {
     return TabStripModel::kNoTab;
@@ -191,9 +204,13 @@ void SpaceSwitcher::MoveTabToSpace(int index, SpaceId space) {
     return;
   }
   SetSpaceTag(tab_strip_model_->GetTabAtIndex(index)->GetContents(), space);
-  // Moving the tab you are looking at takes you with it, as Zen does.
+  // Moving the tab you are looking at takes you with it, as Zen does --
+  // adopted, not switched to: SwitchTo would land on whatever `space`
+  // already remembers as its last active tab, which can be a different tab
+  // than the one that just moved, so the moved page would disappear behind
+  // it.
   if (index == tab_strip_model_->active_index()) {
-    SwitchTo(space);
+    AdoptSpace(space);
   }
 }
 
@@ -242,7 +259,7 @@ void SpaceSwitcher::OnTabStripModelChanged(
       TagInsertedTabs(*insert);
     }
   }
-  if (switching_ || !selection.active_tab_changed()) {
+  if (!selection.active_tab_changed()) {
     return;
   }
   const int index = tab_strip_model_->active_index();
@@ -259,14 +276,9 @@ void SpaceSwitcher::OnTabStripModelChanged(
   // ReentrancyCheck that this very callback runs inside, so calling it would
   // CHECK-crash, and it would also drag the user's selection back to
   // whatever tab this space last showed instead of leaving it where they put
-  // it. So the window simply adopts the space the visible tab is already
-  // in -- sets it, records it as last active, and tells observers -- without
-  // touching the strip at all. Nothing needs to record the space being left:
-  // RecordActiveTab already kept its last_active_tab current every time a
-  // tab became active while it was still the one on screen.
-  active_space_ = SpaceOfTabAt(index);
-  model_->SetLastActiveSpace(active_space_);
-  NotifyActiveSpaceChanged();
+  // it. AdoptSpace puts the window in the visible tab's space and records
+  // that tab as its place, without touching the strip.
+  AdoptSpace(SpaceOfTabAt(index));
 }
 
 void SpaceSwitcher::OnTabStripModelDestroyed(TabStripModel* tab_strip_model) {

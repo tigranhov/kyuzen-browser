@@ -78,6 +78,12 @@ class SpaceSwitcher : public TabStripModelObserver,
  private:
   void TagInsertedTabs(const TabStripModelChange::Insert& insert);
   void RecordActiveTab();
+  // Puts the window in `id` without touching the strip: sets the active
+  // space, records whatever tab is already on screen as `id`'s place, and
+  // notifies. Shared by the foreign-activation branch of
+  // OnTabStripModelChanged and by MoveTabToSpace -- the two places that put
+  // the window in a space it did not SwitchTo.
+  void AdoptSpace(SpaceId id);
   void NotifyActiveSpaceChanged();
   // Posted from OnArciumModelChanged rather than run inline: see the comment
   // there. Re-checks that the active space is still gone before switching,
@@ -88,9 +94,6 @@ class SpaceSwitcher : public TabStripModelObserver,
   raw_ptr<ArciumModel> model_;
   raw_ptr<TabBinding> binding_;
   SpaceId active_space_;
-  // Set while SwitchTo activates a tab, so the activation it causes is not
-  // read back as the user choosing a foreign tab.
-  bool switching_ = false;
   base::ObserverList<Observer> observers_;
   // Last: anything posted through this must run after every other member is
   // already constructed.
