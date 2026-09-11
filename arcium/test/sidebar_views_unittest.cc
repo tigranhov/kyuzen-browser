@@ -1420,7 +1420,7 @@ TEST_F(SidebarViewsTest, AColdRowsTitleIsDimmedAndALoadedRowsIsNot) {
   EXPECT_EQ(*warm->title_for_testing()->GetRequestedEnabledColor(),
             kColorArciumRowText);
   EXPECT_EQ(*cold->title_for_testing()->GetRequestedEnabledColor(),
-            kColorArciumRowTextCold);
+            kColorArciumRowTextUnloaded);
 }
 
 // The favicon half of the same rule. Both rows are seeded from the same URL

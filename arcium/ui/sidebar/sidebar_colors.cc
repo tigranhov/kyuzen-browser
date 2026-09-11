@@ -39,7 +39,7 @@ void AddArciumColorMixer(ui::ColorProvider* provider,
   // would let that tint show through unevenly between the two tones. Half the
   // row text's weight reads as closed beside a loaded row without fading to
   // the point of being unreadable in either theme.
-  mixer[kColorArciumRowTextCold] = {ui::AlphaBlend(text, surface, 0x80)};
+  mixer[kColorArciumRowTextUnloaded] = {ui::AlphaBlend(text, surface, 0x80)};
   mixer[kColorArciumRowActiveBackground] = {
       ui::SetAlpha(ink, dark ? 0x1F : 0x14)};
   mixer[kColorArciumRowHoverBackground] = {

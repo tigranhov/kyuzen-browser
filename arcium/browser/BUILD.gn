@@ -10,6 +10,8 @@ source_set("browser") {
     "entry_claim.h",
     "model_store.cc",
     "model_store.h",
+    "restored_tab_loading.cc",
+    "restored_tab_loading.h",
     "session_tab_entry.cc",
     "session_tab_entry.h",
     "tab_binding.cc",
@@ -35,5 +37,9 @@ source_set("browser") {
 
     # BrowserContext and WebContentsUserData. No //chrome deps.
     "//content/public/browser",
+
+    # ContentFaviconDriver, for the favicon a restored tab asks for without
+    # loading. //components, not //chrome.
+    "//components/favicon/content",
   ]
 }

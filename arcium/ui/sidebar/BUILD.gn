@@ -22,8 +22,6 @@ source_set("sidebar") {
   sources = [
     "archive_list_view.cc",
     "archive_list_view.h",
-    "cold_row_dimming.cc",
-    "cold_row_dimming.h",
     "favorites_grid_view.cc",
     "favorites_grid_view.h",
     "folder_header_view.cc",
@@ -61,6 +59,8 @@ source_set("sidebar") {
     "tab_row_view.h",
     "tint_background.cc",
     "tint_background.h",
+    "unloaded_row_dimming.cc",
+    "unloaded_row_dimming.h",
     "url_pill_view.cc",
     "url_pill_view.h",
     "view_snapshot.cc",

@@ -15,6 +15,7 @@ test("arcium_unittests") {
     "model_serializer_unittest.cc",
     "model_store_unittest.cc",
     "reorder_index_unittest.cc",
+    "restored_tab_loading_unittest.cc",
     "session_tab_entry_unittest.cc",
     "sidebar_drag_unittest.cc",
     "sidebar_folders_unittest.cc",
@@ -33,6 +34,7 @@ test("arcium_unittests") {
     "tab_search_service_unittest.cc",
     "tab_space_unittest.cc",
     "test_app_activation.h",
+    "unloaded_rows_unittest.cc",
   ]
 
   # The activation-policy override is the one thing here that has to speak to

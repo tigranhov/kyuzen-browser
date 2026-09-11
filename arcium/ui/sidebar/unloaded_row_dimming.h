@@ -2,15 +2,16 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#ifndef ARCIUM_UI_SIDEBAR_COLD_ROW_DIMMING_H_
-#define ARCIUM_UI_SIDEBAR_COLD_ROW_DIMMING_H_
+#ifndef ARCIUM_UI_SIDEBAR_UNLOADED_ROW_DIMMING_H_
+#define ARCIUM_UI_SIDEBAR_UNLOADED_ROW_DIMMING_H_
 
 #include "ui/base/models/image_model.h"
 
 namespace arcium {
 
-// A cold row's favicon at reduced opacity, so a closed entry reads as such
-// beside a loaded one at a glance. Shared by TabRowView and
+// A favicon at reduced opacity, for a row whose click has to load a page
+// first -- a closed entry, or a tab whose page is not in memory -- so it reads
+// as such beside a loaded one at a glance. Shared by TabRowView and
 // FavoritesGridView, the two places a row's favicon is drawn.
 //
 // Returns an image generator rather than a rasterized bitmap: `favicon` can
@@ -21,8 +22,8 @@ namespace arcium {
 // a row does not have until it is in a widget -- see SetRowDragImage for the
 // same constraint on a different favicon use). `favicon.IsEmpty()` is passed
 // through unchanged: there is nothing to dim.
-ui::ImageModel DimColdFavicon(const ui::ImageModel& favicon);
+ui::ImageModel DimUnloadedFavicon(const ui::ImageModel& favicon);
 
 }  // namespace arcium
 
-#endif  // ARCIUM_UI_SIDEBAR_COLD_ROW_DIMMING_H_
+#endif  // ARCIUM_UI_SIDEBAR_UNLOADED_ROW_DIMMING_H_

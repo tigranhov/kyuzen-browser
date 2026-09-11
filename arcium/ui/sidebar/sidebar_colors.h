@@ -24,11 +24,12 @@ enum ArciumColorIds : ui::ColorId {
   kColorArciumRowText,
   kColorArciumRowTextActive,
   kColorArciumRowTextSecondary,
-  // A cold entry's title -- one with no open tab. Distinct from
-  // kColorArciumRowTextSecondary, which marks auxiliary text (counts,
-  // timestamps) rather than a row's own state: the two are free to diverge
-  // later without one dragging the other along.
-  kColorArciumRowTextCold,
+  // A row whose click has to load a page first -- a closed entry, or a tab
+  // whose page is not in memory. Distinct from kColorArciumRowTextSecondary,
+  // which marks auxiliary text (counts, timestamps) rather than a row's own
+  // state: the two are free to diverge later without one dragging the other
+  // along.
+  kColorArciumRowTextUnloaded,
   kColorArciumRowActiveBackground,
   kColorArciumRowHoverBackground,
   kColorArciumControlBackground,

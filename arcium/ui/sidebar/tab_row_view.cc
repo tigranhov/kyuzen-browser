@@ -7,12 +7,12 @@
 #include <memory>
 #include <utility>
 
-#include "arcium/ui/sidebar/cold_row_dimming.h"
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/row_drag_image.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
+#include "arcium/ui/sidebar/unloaded_row_dimming.h"
 #include "arcium/ui/sidebar/vector_icons.h"
 #include "base/functional/bind.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
@@ -138,7 +138,7 @@ void TabRowView::SetRow(const SidebarRow& row) {
 }
 
 void TabRowView::UpdateVisuals() {
-  favicon_->SetImage(row_.is_cold ? DimColdFavicon(row_.favicon)
+  favicon_->SetImage(row_.is_cold ? DimUnloadedFavicon(row_.favicon)
                                   : row_.favicon);
   favicon_->SetVisible(!row_.is_loading);
   throbber_->SetVisible(row_.is_loading);
@@ -152,7 +152,7 @@ void TabRowView::UpdateVisuals() {
   // never one with no tab at all -- but the active check still goes first, so
   // that invariant is never load-bearing here.
   title_->SetEnabledColor(row_.is_active ? kColorArciumRowTextActive
-                          : row_.is_cold ? kColorArciumRowTextCold
+                          : row_.is_cold ? kColorArciumRowTextUnloaded
                                          : kColorArciumRowText);
   if (row_.is_audible || row_.is_muted) {
     audio_->SetImage(

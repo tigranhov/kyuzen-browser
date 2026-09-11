@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "arcium/ui/sidebar/cold_row_dimming.h"
+#include "arcium/ui/sidebar/unloaded_row_dimming.h"
 
 #include "base/functional/bind.h"
 #include "ui/gfx/image/image_skia.h"
@@ -24,7 +24,7 @@ gfx::ImageSkia Dim(ui::ImageModel favicon, const ui::ColorProvider* provider) {
 
 }  // namespace
 
-ui::ImageModel DimColdFavicon(const ui::ImageModel& favicon) {
+ui::ImageModel DimUnloadedFavicon(const ui::ImageModel& favicon) {
   if (favicon.IsEmpty()) {
     return favicon;
   }
