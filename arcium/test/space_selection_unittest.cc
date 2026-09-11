@@ -63,6 +63,24 @@ TEST_F(SpaceSelectionTest, ChromiumsPickIsKeptWhenItIsInTheSpace) {
   EXPECT_EQ(0, NextSelectedIndexInSpace(strip(), std::optional<int>(0), 0, 1));
 }
 
+// Chromium asks on every removal but reads the answer only when the active
+// tab is among the tabs going. A removal that spares it -- a background
+// space's tabs closing during a delete -- gets Chromium's own answer back,
+// not the result of a search nobody reads.
+TEST_F(SpaceSelectionTest, ARemovalThatSparesTheActiveTabKeepsChromiumsAnswer) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), first);  // 0, active
+  AddTabInSpace(GURL("https://w1.example/"), work);   // 1
+  AddTabInSpace(GURL("https://a2.example/"), first);  // 2
+  AddTabInSpace(GURL("https://w2.example/"), work);   // 3
+  ASSERT_EQ(0, strip()->active_index());
+  // Removing w2; Chromium's answer, index 1, is w1 -- another space's tab,
+  // which a search would have replaced with a2.
+  EXPECT_EQ(1, NextSelectedIndexInSpace(strip(), std::optional<int>(1), 3, 1));
+}
+
 TEST_F(SpaceSelectionTest, ASpaceWithNoOtherTabKeepsChromiumsAnswer) {
   const SpaceId first = model_.default_space_id();
   const SpaceId work = model_.AddSpace(u"Work");

@@ -21,6 +21,14 @@ std::optional<int> NextSelectedIndexInSpace(TabStripModel* tab_strip_model,
   if (!switcher || !chromium_choice.has_value()) {
     return chromium_choice;
   }
+  // Chromium asks on every removal but reads the answer only when the active
+  // tab is among the tabs going. Any other removal -- a background space's
+  // tabs closing in a delete, the archive sweep -- gets its own answer back
+  // rather than the result of a search nobody reads.
+  const int active = tab_strip_model->active_index();
+  if (active < removed_index || active >= removed_index + removed_count) {
+    return chromium_choice;
+  }
   // Chromium answers in post-removal indices and the strip has not moved
   // yet, so shift back past the removed block to ask which tab it means.
   const auto to_current = [removed_index, removed_count](int after) {
