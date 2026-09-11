@@ -57,6 +57,14 @@ SidebarExample::SidebarExample()
   model_->AddColdEntry(u"Chromium Gerrit",
                        "https://chromium-review.googlesource.com/",
                        SidebarSection::kPinned);
+  // Two tabs that exist but have not loaded, the state a restart leaves
+  // every tab but the one on screen in: they draw dimmed like the entries
+  // above.
+  for (const SidebarRow& row : model_->rows()) {
+    if (row.title == u"Notion" || row.title == u"Hacker News") {
+      model_->SetUnloaded(row.tab_index, true);
+    }
+  }
   model_->SetLoading(9, true);
   model_->SetAudible(8, true);
   // The four states Task 7 has to look right in: a warm row inside an

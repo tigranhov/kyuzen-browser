@@ -138,6 +138,13 @@ void FakeSidebarModel::SetLoading(int tab_index, bool loading) {
   }
 }
 
+void FakeSidebarModel::SetUnloaded(int tab_index, bool unloaded) {
+  if (SidebarRow* row = FindByTabIndex(tab_index)) {
+    row->is_unloaded = unloaded && !row->is_active;
+    Notify();
+  }
+}
+
 void FakeSidebarModel::SetAudible(int tab_index, bool audible) {
   if (SidebarRow* row = FindByTabIndex(tab_index)) {
     row->is_audible = audible;

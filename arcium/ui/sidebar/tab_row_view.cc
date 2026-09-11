@@ -138,8 +138,8 @@ void TabRowView::SetRow(const SidebarRow& row) {
 }
 
 void TabRowView::UpdateVisuals() {
-  favicon_->SetImage(row_.is_cold ? DimUnloadedFavicon(row_.favicon)
-                                  : row_.favicon);
+  favicon_->SetImage(row_.needs_load() ? DimUnloadedFavicon(row_.favicon)
+                                       : row_.favicon);
   favicon_->SetVisible(!row_.is_loading);
   throbber_->SetVisible(row_.is_loading);
   if (row_.is_loading) {
@@ -148,12 +148,11 @@ void TabRowView::UpdateVisuals() {
     throbber_->Stop();
   }
   title_->SetText(row_.title);
-  // is_active and is_cold never both hold -- an entry with a focused tab is
-  // never one with no tab at all -- but the active check still goes first, so
-  // that invariant is never load-bearing here.
-  title_->SetEnabledColor(row_.is_active ? kColorArciumRowTextActive
-                          : row_.is_cold ? kColorArciumRowTextUnloaded
-                                         : kColorArciumRowText);
+  // An active row is never cold and never unloaded -- but the active check
+  // still goes first, so that invariant is never load-bearing here.
+  title_->SetEnabledColor(row_.is_active      ? kColorArciumRowTextActive
+                          : row_.needs_load() ? kColorArciumRowTextUnloaded
+                                              : kColorArciumRowText);
   if (row_.is_audible || row_.is_muted) {
     audio_->SetImage(
         ui::ImageModel::FromVectorIcon(row_.is_muted ? kMutedIcon : kAudioIcon,

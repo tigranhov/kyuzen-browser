@@ -1449,6 +1449,58 @@ TEST_F(SidebarViewsTest, AColdRowsFaviconIsNotTheSameImageAsALoadedRows) {
   EXPECT_LT(cold_alpha, warm_alpha);
 }
 
+// A tab that exists but has not loaded -- what a restart leaves every tab but
+// the one on screen as -- is dimmed exactly as a cold row is: the question
+// both answer is whether a click has to load a page. Same URL on both rows so
+// is_unloaded is the only thing that can make them differ.
+TEST_F(SidebarViewsTest, AnUnloadedRowIsDimmedLikeAColdOne) {
+  model_.AddTab(u"Loaded", "https://shared.example/", SidebarSection::kPinned,
+                false);
+  model_.AddTab(u"Unloaded", "https://shared.example/", SidebarSection::kPinned,
+                false);
+  model_.SetUnloaded(1, true);
+  MakeList(SidebarSection::kPinned);
+  Refresh();
+
+  TabRowView* loaded = views::AsViewClass<TabRowView>(list_->children()[0]);
+  TabRowView* unloaded = views::AsViewClass<TabRowView>(list_->children()[1]);
+  ASSERT_TRUE(loaded);
+  ASSERT_TRUE(unloaded);
+  ASSERT_FALSE(loaded->row().is_unloaded);
+  ASSERT_TRUE(unloaded->row().is_unloaded);
+
+  ASSERT_TRUE(loaded->title_for_testing()->GetRequestedEnabledColor());
+  ASSERT_TRUE(unloaded->title_for_testing()->GetRequestedEnabledColor());
+  EXPECT_EQ(*loaded->title_for_testing()->GetRequestedEnabledColor(),
+            kColorArciumRowText);
+  EXPECT_EQ(*unloaded->title_for_testing()->GetRequestedEnabledColor(),
+            kColorArciumRowTextUnloaded);
+
+  EXPECT_EQ(SK_AlphaOPAQUE,
+            FaviconCenterAlpha(loaded->favicon_for_testing()->GetImage()));
+  EXPECT_LT(FaviconCenterAlpha(unloaded->favicon_for_testing()->GetImage()),
+            SK_AlphaOPAQUE);
+}
+
+TEST_F(SidebarViewsTest, AFavouriteTileForAnUnloadedTabIsDimmed) {
+  model_.AddTab(u"Loaded", "https://shared.example/",
+                SidebarSection::kFavorites, false);
+  model_.AddTab(u"Unloaded", "https://shared.example/",
+                SidebarSection::kFavorites, false);
+  model_.SetUnloaded(1, true);
+  auto* grid =
+      contents_->AddChildView(std::make_unique<FavoritesGridView>(&model_));
+  grid->SetRows(model_.rows());
+  ASSERT_EQ(2u, grid->children().size());
+
+  EXPECT_EQ(SK_AlphaOPAQUE,
+            FaviconCenterAlpha(grid->tile_at_for_testing(0)->GetImage(
+                views::Button::STATE_NORMAL)));
+  EXPECT_LT(FaviconCenterAlpha(grid->tile_at_for_testing(1)->GetImage(
+                views::Button::STATE_NORMAL)),
+            SK_AlphaOPAQUE);
+}
+
 TEST_F(SidebarViewsTest, UnpinFromAPinnedRowsMenu) {
   model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
   MakeList(SidebarSection::kPinned);

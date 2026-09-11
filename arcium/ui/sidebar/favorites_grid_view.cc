@@ -96,7 +96,7 @@ void FavoritesGridView::SetRows(const std::vector<SidebarRow>& rows) {
     // cold one can be told apart from a loaded one at a glance.
     tiles_[i]->SetImageModel(
         views::Button::STATE_NORMAL,
-        row.is_cold ? DimUnloadedFavicon(row.favicon) : row.favicon);
+        row.needs_load() ? DimUnloadedFavicon(row.favicon) : row.favicon);
     tiles_[i]->SetTooltipText(row.title);
     tiles_[i]->GetViewAccessibility().SetName(row.title);
     tiles_[i]->SetCallback(base::BindRepeating(

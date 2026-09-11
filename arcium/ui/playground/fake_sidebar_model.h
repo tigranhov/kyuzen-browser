@@ -38,6 +38,10 @@ class FakeSidebarModel : public SidebarModel {
                     const std::string& url,
                     SidebarSection section);
   void SetLoading(int tab_index, bool loading);
+  // A tab that exists without having loaded, the way a restart leaves every
+  // tab but the one on screen. The real model never marks the active row;
+  // neither does this.
+  void SetUnloaded(int tab_index, bool unloaded);
   void SetAudible(int tab_index, bool audible);
   void SetCanReturnToPinnedUrl(int tab_index, bool can_return);
   // Seeds a folder so the playground can show a header without a menu round
