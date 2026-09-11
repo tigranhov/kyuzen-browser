@@ -31,9 +31,11 @@ Made by the owner in the design session:
 
 1. **A tab that moves to a space with another profile is reopened there.** The
    same applies to every open tab of a space whose profile changes. The page
-   reloads at the same address, logged in as the new profile, and its back
-   history is lost. Zen keeps the old container instead, so a tab can sit in a
-   workspace logged in as someone else; the owner chose the stricter rule.
+   comes back at the same address, logged in as the new profile, keeping its
+   back history and its place; anything unsaved on it is lost, and so is what
+   the page kept for that one tab, because it is genuinely a new page. Zen
+   keeps the old container instead, so a tab can sit in a workspace logged in
+   as someone else; the owner chose the stricter rule.
 2. **Profiles are managed from the space menu.** A "Profile" submenu lists the
    profiles with a tick on the current one, then "New profile…", "Clear this
    profile's data…" and "Delete profile…". The space bar's badge, a placeholder
@@ -42,10 +44,13 @@ Made by the owner in the design session:
    data are erased, its spaces switch to Default, and their open tabs reopen
    logged out. Zen moves a deleted container's workspaces to no container
    (`ZenSpaceManager.mjs:166-173`); Arcium does the same and also erases.
-4. **Chrome's own Clear browsing data clears every profile, with a large
-   warning.** When cookies or cache are selected and a second profile exists,
-   a confirmation names the profiles that will be logged out, with Cancel as
-   the default button.
+4. **Chrome's own Clear browsing data asks first, with a large warning.** When
+   a second profile exists, a dialog says the removal cannot be undone and
+   offers two answers: clear the shared logins only, which is the default
+   button and is what Chrome has always done, or clear every space's own
+   logins as well. Nothing offered stops the removal, because the settings
+   page reports a deletion as soon as its request finishes and cannot be told
+   that nothing happened (`clear_browsing_data_dialog.ts:428-436`).
 
 Decided afterwards, following Zen where it has an answer:
 
@@ -159,7 +164,7 @@ cannot disagree. The existing rule that a tag is never overwritten keeps it.
 | Path | Today | Hook |
 |---|---|---|
 | Cmd+click, "Open link in new tab", the new-tab box, bookmarks, extension-created tabs, the home-boundary divert | default partition | `CreateTargetContents` (`browser_navigator.cc:479`): the source tab's space, else the window's active space, through `SiteInstanceForProfile`; a browser or extension page keeps Chromium's choice (decision 7) |
-| Session restore and Cmd+Shift+T | default partition | `CreateRestoredTab` (`browser_tabrestore.cc:75-77`), before the WebContents is made, and its session-storage map keyed to the same partition |
+| Session restore and Cmd+Shift+T | default partition | `CreateRestoredTab` (`browser_tabrestore.cc:75-77`), before the WebContents is made |
 | A tab Chromium discards and recreates | not proven either way | `FinishDiscard` (`tab_lifecycle_unit.cc:274`): the replacement keeps the old tab's `SiteInstance` partition |
 | Arcium's blank tab for an empty space | default partition | Arcium's own code, no patch |
 | Popups without an opener (`target=_blank`, `noopener`) | default partition | none: the guard (§5.3) reopens them |
@@ -168,6 +173,13 @@ A restored tab's profile rides in Chromium's per-tab session `extra_data` as
 `arcium.profile_id`, beside the space id. The model file is read on a
 background sequence and may not be loaded when restore creates tabs, so the
 profile has to come from the session itself.
+
+What a page keeps for one tab alone does not survive a restart, or a reopen,
+in a profile of its own: Chromium saves and recreates that only for the
+default partition (`session_service_base.cc:280-290`,
+`session_restore.cc:1092-1099`, both carrying upstream TODOs). Keeping it would
+mean two more patches carrying their own logic, which this design accepts
+losing instead. Cookies, local storage and IndexedDB are unaffected.
 
 ### 5.3 The guard
 
@@ -178,9 +190,12 @@ every main-frame navigation of a tab in the sidebar:
 - a browser or extension page must be in the default partition (decision 7).
 
 When a navigation would land in the wrong storage, the guard cancels it and
-opens the same URL in a new tab of the right kind at the same place in the
-sidebar; if the old tab had nothing else to show (no committed entry), it is
-closed. A POST body travels with the reopened navigation.
+opens the same address again through the browser's own "open in a new tab"
+path, so the new tab is built by the same hook as every other new tab and
+lands in the right storage; if the old tab had nothing else to show (no
+committed entry), it is closed. The new tab is marked with the address it was
+opened for and that one navigation is never guarded again, so a hole left in
+the hooks cannot turn into an endless chain of tabs.
 
 The hooks make this rare. It exists for two reasons. Popups without an opener
 are created by content, which cannot call into `arcium/`; the spike's
@@ -190,9 +205,11 @@ And a partition that leaks fails R3.5 silently; the guard turns any path the
 hooks missed into a visible reopen instead of a shared login.
 
 The guard reads the tab's space from its tag and the space's profile from the
-model. If the model has not loaded, it lets the navigation through: the hooks
-have already decided correctly for every path except noopener popups, which
-cannot happen before a page has loaded.
+model, so it stands aside until the model file has been read. Before that a
+restored tab's space is not yet known and every tab would look wrong, which
+would reopen a whole restored window into shared storage; the hooks have
+already decided correctly for every path except a popup that refuses its
+opener, and that cannot happen before a page has loaded.
 
 ### 5.4 Preloading
 
@@ -222,11 +239,14 @@ profile's name as its tooltip and accessible name.
 
 ### 6.2 Changing a space's profile, and moving a tab
 
-Both end in the same operation: **reopen a tab in a profile**. A new tab is
-created at the same address, in the new profile, tagged with the target space,
-inserted where the old one was in the strip, bound to the old tab's pinned or
-favourite entry if it had one, and activated if the old one was active; then
-the old tab closes. A tab that had not loaded (R3.9) reopens unloaded. A
+Both end in the same operation: **reopen a tab in a profile**. A page is built
+again at the same address in the new profile, with the history that stood
+behind it, and swapped into the same tab, the way Chromium replaces a tab it
+has discarded. The tab keeps its handle, its place in the strip, its pinned or
+favourite entry, its space tag and the selection, so nothing hanging off the
+tab has to be rebuilt. The tab on screen loads again at once; a background one
+comes back unloaded and loads when it is clicked, as a restored tab does. The
+page is never asked whether it may close, so anything unsaved on it is lost. A
 pinned or favourite entry that is closed has no tab and simply moves.
 
 `SpaceSwitcher::MoveTabToSpace` and `MoveEntryToSpace` reopen when the two
@@ -238,34 +258,40 @@ A confirmation names the profile and says it will log out of every site in
 it. Then one `BrowsingDataRemover` call with a filter naming the profile's
 partition removes cookies, site data and cache, the same types Chrome's dialog
 removes. Tabs are not reloaded (decision 8). History and passwords are shared,
-so they are untouched.
+so they are untouched. A profile nothing has opened this session has its
+storage built in order to be cleared, and it then stays built until quit:
+there is no way to remove a cookie store that does not exist yet.
 
 ### 6.4 Deleting a profile
 
 A confirmation names the profile and counts its spaces and open tabs. Then, in
 this order: every space on the profile switches to Default, which reopens their
 tabs (§6.2); the profile is removed from the model and the model saved; then
-`AsyncObliterateStoragePartition("arcium-" + id)` erases the partition. A
-partition that was loaded this session is still held open until quit; Chrome
-then deletes it at the next launch, which the plan confirms against
-`storage_partition_impl_map.cc:367-410` before relying on it. No tab can reach
-it in between, because no tab is in it.
+the storage goes, in one of two ways. A profile nothing has opened this
+session is deleted outright, together with its cache, which Chromium keeps
+under the user's cache directory rather than inside the profile's own folder,
+so nothing else would ever remove it. A profile that has been opened cannot be
+deleted while it is held open, so it is emptied instead — cookies, site data
+and cache through the same removal as §6.3 — and its folder goes at a later
+launch, when Chrome's own cleanup runs and the model no longer lists it
+(`storage_partition_impl_map.cc:367-410`). No tab can reach it in between,
+because no tab is in it.
 
 ### 6.5 Chrome's Clear browsing data
 
-Two hooks:
+One hook, in `ClearBrowsingDataHandler::HandleClearBrowsingData`
+(`clear_browsing_data_handler.cc`), before the removal starts. When a second
+profile exists it puts decision 4's warning in front of the removal and
+returns; once the question is answered the handler is called again with the
+same arguments and Chrome's removal runs exactly as it always has, covering
+the shared logins. If the answer was to clear every space's own logins too,
+the same removal runs once per profile as the answer is taken, each filtered
+to that profile.
 
-- **The warning**, in `ClearBrowsingDataHandler::HandleClearBrowsingData`
-  (`settings_clear_browsing_data_handler.cc:245`), just before the removal
-  starts. When cookies and site data or cache are selected and a non-default
-  profile exists, a native dialog lists the profiles that will be logged out.
-  Cancel is the default. On Cancel the handler resolves the page's promise
-  with no notices, which closes the dialog (`clear_browsing_data_dialog.ts:428-436`)
-  with nothing removed.
-- **Every profile**, in `ChromeBrowsingDataRemoverDelegate`, beside its loop
-  over Isolated Web App partitions (`chrome_browsing_data_remover_delegate.cc:1428-1466`):
-  when the filter names no partition, the same removal runs once per Arcium
-  profile partition.
+Nothing hooks `ChromeBrowsingDataRemoverDelegate`. A hook there would also
+catch the extensions browsing-data API, which has no way to put the question,
+and would have to build a partition filter inside a loop that is already
+building its own.
 
 ## 7. Keeping the data
 
@@ -281,10 +307,14 @@ logins.
 
 A hook in the cleanup command adds the partition path of every profile in the
 model to the keep list; the paths are computed from the ids, with no disk
-listing. The model is read on a background sequence and may not be loaded when
-the command runs, so when it is not, the hook tells the command to skip the
-cleanup for this launch and leave its pref set, and the cleanup runs at a later
-launch. Skipping never loses data; running with an incomplete list would. A
+listing. The model is read on a background sequence and may not have been read
+when the command runs; and a file that was there but could not be understood
+leaves an empty model, whose keep list would name nothing. So the hook offers
+a list only when the file was read and understood, or when there was no file
+at all. Otherwise it tells the command to skip the cleanup for this launch and
+leaves its pref set, and the cleanup runs at a later launch. Skipping costs a
+directory that lingers; running with an incomplete list costs every profile's
+logins. A
 deleted profile's partition is erased by §6.4, not by this sweep.
 
 ### 7.2 Session cookies
@@ -315,6 +345,10 @@ setting, exactly as the default partition does.
 - **A crash between a profile's deletion and the session's next write** can
   restore a tab into the erased partition's id. The guard sees a tab whose
   space is now on Default and reopens it there.
+- **What a page keeps for one tab alone** is lost when that tab is restored
+  into a profile of its own, or reopened in another one (§5.2).
+- **Nothing is loaded ahead of time** in a profile's storage (§5.4), so a link
+  Chrome would have prepared in advance is loaded when it is clicked.
 
 ## 9. Master spec corrections
 
@@ -371,7 +405,8 @@ Executed by hand, except where marked.
 - **A3b.4** Delete a profile: its spaces show Default's badge, their tabs are
   logged out, and after a relaunch its partition directory is gone.
 - **A3b.5** Chrome's Clear browsing data with cookies selected: the warning
-  names the second profile; Cancel clears nothing; confirming logs out both.
+  appears and says the removal cannot be undone; "shared logins only" leaves
+  the second profile signed in; "every space too" logs both out.
 - **A3b.6** Uninstall an extension, relaunch twice: every profile's logins
   survive.
 - **A3b.7** An extension's options page opened from a space on a non-default
@@ -385,6 +420,8 @@ Executed by hand, except where marked.
 2. **Idle memory:** per profile that has loaded a page this session, one
    network context and a partition's storage contexts, measured by A3.3.
    Nothing per tab; nothing for a profile none of whose tabs has loaded.
+   Clearing or erasing a profile builds the storage it touches, if nothing
+   had, for the rest of the session (§6.3).
 3. **Startup:** nothing before first paint; the model file gains a short list.
    A partition is created when its first tab loads, which after R3.9 means on
    the first click.
