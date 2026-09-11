@@ -309,6 +309,42 @@ TEST_F(SpaceBarTest, TheDeleteConfirmationCountsEntriesUnambiguously) {
   bar.ConfirmDeleteForTesting(/*accept=*/false);
 }
 
+// The tabs come back through Cmd+Shift+T because closing them is an
+// ordinary tab close; the pins and favourites do not, because they are
+// removed from the model itself. The confirmation has to promise only
+// that, not that the whole delete is beyond undoing.
+TEST_F(SpaceBarTest, TheDeleteConfirmationOnlyPromisesWhatIsTrue) {
+  FakeSidebarModel model;
+  // AddColdEntry always lands on the front space, so the space under test is
+  // the default one, renamed rather than added, and given a live tab the
+  // same way.
+  const SpaceId work = model.spaces()[0].id;
+  model.RenameSpace(work, u"Work");
+  model.AddTabInSpaceForTesting(u"One", "https://w1.example/", work);
+  model.AddColdEntry(u"Pin", "https://p.example/", SidebarSection::kPinned);
+  SpaceBarView bar(&model);
+  bar.BuildMenuForTesting(work);
+
+  bar.ExecuteCommand(SpaceBarView::kDelete, 0);
+  const std::u16string& text = bar.confirm_text_for_testing();
+  EXPECT_NE(std::u16string::npos, text.find(u"Work"));
+  EXPECT_NE(std::u16string::npos, text.find(u"1 tab"));
+  EXPECT_NE(std::u16string::npos, text.find(u"will close"));
+  EXPECT_NE(std::u16string::npos,
+            text.find(u"1 pin or favourite will be deleted for good"));
+  // The old blanket claim does not survive: the tabs it counted are not
+  // gone for good, so the sentence must not say the whole action is.
+  EXPECT_EQ(std::u16string::npos, text.find(u"cannot be undone"));
+  bar.ConfirmDeleteForTesting(/*accept=*/false);
+
+  model.AddColdEntry(u"Fav", "https://f.example/", SidebarSection::kFavorites);
+  bar.ExecuteCommand(SpaceBarView::kDelete, 0);
+  EXPECT_NE(std::u16string::npos,
+            bar.confirm_text_for_testing().find(
+                u"2 pins and favourites will be deleted for good"));
+  bar.ConfirmDeleteForTesting(/*accept=*/false);
+}
+
 TEST_F(SpaceBarTest, DecliningTheConfirmationKeepsTheSpace) {
   FakeSidebarModel model;
   model.AddSpaceForTesting(u"Work", u"", 0);

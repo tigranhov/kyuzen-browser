@@ -289,18 +289,21 @@ void SpaceBarView::ExecuteCommand(int command_id, int event_flags) {
       }
       return;
     case kDelete:
-      // Arcium's one delete that does not come back, so the sentence says
-      // what goes and that it is gone for good: Zen's wording, over more than
-      // Zen loses, because an Arcium space owns its favourites too. One entry
-      // is one thing whichever kind it is, so it reads "1 pin or favourite";
-      // "1 pin and favourite" would read as two.
+      // The tabs and the entries do not leave the same way, so the sentence
+      // makes two separate promises instead of one blanket one. Closing a
+      // space's tabs is an ordinary tab close underneath, so Cmd+Shift+T
+      // brings them back; the pins and favourites are removed from the model
+      // itself, with nothing to reopen, so only they are promised gone for
+      // good. One entry is one thing whichever kind it is, so it reads "1
+      // pin or favourite"; "1 pin and favourite" would read as two.
       pending_delete_ = space.id;
-      confirm_text_ = base::StrCat(
-          {u"Delete “", space.name, u"”? Its ",
-           CountPhrase(space.open_tab_count, u"tab", u"tabs"), u" and ",
-           CountPhrase(space.entry_count, u"pin or favourite",
-                       u"pins and favourites"),
-           u" will be deleted. This action cannot be undone."});
+      confirm_text_ =
+          base::StrCat({u"Delete “", space.name, u"”? Its ",
+                        CountPhrase(space.open_tab_count, u"tab", u"tabs"),
+                        u" will close and its ",
+                        CountPhrase(space.entry_count, u"pin or favourite",
+                                    u"pins and favourites"),
+                        u" will be deleted for good."});
       ShowConfirmation(space.id);
       return;
     default:
