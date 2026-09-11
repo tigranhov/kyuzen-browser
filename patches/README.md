@@ -74,6 +74,15 @@ row. It is the only patch that touches `browser_native_widget_mac.mm`.
 |---|---|---|
 | `0065-mac-titlebar-height.patch` | `BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight` in `chrome/browser/ui/views/frame/browser_native_widget_mac.mm` | `arcium::BrowserSidebarController::TitlebarHeight` |
 
+Stage 3, R3.9. `0170` stops Chromium loading restored tabs in the background after a restart: the
+tab on screen still loads, and every other one waits for a click. It is the only patch in
+`session_restore_delegate.cc`, and it needs no GN wiring because `0125` already gives that file's
+target `//arcium/browser`.
+
+| Patch | Seam | Delegates to |
+|---|---|---|
+| `0170-session-restore-defer-loads.patch` | `SessionRestoreDelegate::RestoreTabs` in `chrome/browser/sessions/session_restore_delegate.cc`, at its call to `ScheduleLoadForRestoredTabs` | `arcium::DeferRestoredTabLoads` |
+
 ## Monthly rebase routine
 
 1. Find the new stable tag on https://chromiumdash.appspot.com/releases?platform=Mac
