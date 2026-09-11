@@ -50,6 +50,12 @@ class BrowserSidebarController : public SidebarModel::Observer {
   SidebarView* view() { return view_; }
   int width() const;
 
+  // The height macOS should treat as this window's title bar, so the traffic
+  // lights land on the nav row's centre line rather than hard against the top
+  // of the window. See metrics::kTitlebarHeight for why the number is what it
+  // is; this exists so the frame hook stays a call and carries no arithmetic.
+  int TitlebarHeight() const;
+
   // Layout hooks. See the patch inventory in the Stage 1 plan.
   void AdjustLayoutParams(BrowserLayoutParams& params);
   void LayoutSidebar(const gfx::Rect& host_bounds);

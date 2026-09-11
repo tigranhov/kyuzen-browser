@@ -65,6 +65,15 @@ new method returns what it is handed, so every other delegate behaves as before.
 | `0155-tab-commands-space.patch` | `BrowserCommandController::HandleCommandWithDisposition` in `chrome/browser/ui/browser_command_controller.cc`: next and previous, the Ctrl+Tab cycle, Cmd+1..9, move, close, close-others and close-to-the-right | `arcium::HandleTabCommand` |
 | `0160-tab-strip-selection-space.patch` | `DetermineNewSelectedIndex`'s two call sites in `chrome/browser/ui/tabs/tab_strip_model.cc`, through a new defaulted `TabStripModelDelegate::AdjustNewSelectedIndex` that `BrowserTabStripModelDelegate` overrides | `arcium::NextSelectedIndexInSpace` |
 
+Outside any stage, `0065` fixes where macOS draws the traffic lights. Arcium hides the tab strip
+and the toolbar, so upstream's title-bar height comes out near zero and the buttons sit hard
+against the top of the window; the hook asks the sidebar for a height that centres them on the nav
+row. It is the only patch that touches `browser_native_widget_mac.mm`.
+
+| Patch | Seam | Delegates to |
+|---|---|---|
+| `0065-mac-titlebar-height.patch` | `BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight` in `chrome/browser/ui/views/frame/browser_native_widget_mac.mm` | `arcium::BrowserSidebarController::TitlebarHeight` |
+
 ## Monthly rebase routine
 
 1. Find the new stable tag on https://chromiumdash.appspot.com/releases?platform=Mac

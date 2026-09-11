@@ -117,6 +117,10 @@ int BrowserSidebarController::width() const {
   return visible_ ? metrics::kSidebarWidth : 0;
 }
 
+int BrowserSidebarController::TitlebarHeight() const {
+  return metrics::kTitlebarHeight;
+}
+
 void BrowserSidebarController::AdjustLayoutParams(BrowserLayoutParams& params) {
   // Remember the frame's caption-button area so the nav row leaves room for
   // the traffic lights, then take the sidebar column off the leading edge and

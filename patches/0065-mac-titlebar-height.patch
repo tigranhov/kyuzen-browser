@@ -1,0 +1,34 @@
+Seam: BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight.
+Why: Arcium hides the tab strip and the toolbar, so upstream's height comes
+     out near zero and macOS puts the traffic lights hard against the top of
+     the window, above the nav row they sit beside. AppKit centres those
+     buttons in the title bar, so the window needs a height that centres them
+     on the nav row instead.
+Delegates to: BrowserSidebarController::TitlebarHeight
+
+diff --git a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+index 93eeda2daf..68a67e0d67 100644
+--- a/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
++++ b/chrome/browser/ui/views/frame/browser_native_widget_mac.mm
+@@ -33,6 +33,7 @@
+ #include "chrome/browser/ui/tabs/vertical_tab_strip_state_controller.h"
+ #include "chrome/browser/ui/ui_features.h"
+ #include "chrome/browser/ui/views/frame/browser_frame_view.h"
++#include "arcium/ui/browser/browser_sidebar_controller.h"
+ #include "chrome/browser/ui/views/frame/browser_view.h"
+ #include "chrome/browser/ui/views/frame/browser_widget.h"
+ #include "chrome/browser/ui/views/frame/glass_frame_service.h"
+@@ -216,6 +217,13 @@ - (NSTouchBar*)makeTouchBar {
+ void BrowserNativeWidgetMac::GetWindowFrameTitlebarHeight(
+     bool* override_titlebar_height,
+     float* titlebar_height) {
++  if (browser_view_) {
++    if (auto* sidebar = browser_view_->arcium_sidebar()) {
++      *override_titlebar_height = true;
++      *titlebar_height = sidebar->TitlebarHeight();
++      return;
++    }
++  }
+   if (browser_view_ && browser_view_->browser_widget() &&
+       browser_view_->browser_widget()->GetFrameView()) {
+     *override_titlebar_height = true;

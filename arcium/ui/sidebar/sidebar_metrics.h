@@ -29,6 +29,21 @@ inline constexpr int kContentCornerRadius = 12;
 // The browser overrides this from the frame's real exclusion area at runtime.
 inline constexpr int kDefaultCaptionButtonWidth = 70;
 
+// Where the nav row's buttons sit: the sidebar's own padding, plus the
+// vertical margin FlexLayout gives every child by default.
+inline constexpr int kNavRowTopMargin = 3;
+inline constexpr int kNavRowY = kSidebarPadding + kNavRowTopMargin;
+
+// The height macOS should treat as this window's title bar.
+//
+// It has no title bar to speak of -- Arcium hides the tab strip and the
+// toolbar, so upstream's height comes out near zero and the traffic lights
+// end up hard against the top of the window, above everything they sit
+// beside. AppKit centres those buttons vertically in the title bar, so a
+// height of twice the nav row's centre puts them on the nav row's own centre
+// line, level with back, forward and reload.
+inline constexpr int kTitlebarHeight = 2 * (kNavRowY + kNavButtonSize / 2);
+
 }  // namespace arcium::metrics
 
 #endif  // ARCIUM_UI_SIDEBAR_SIDEBAR_METRICS_H_
