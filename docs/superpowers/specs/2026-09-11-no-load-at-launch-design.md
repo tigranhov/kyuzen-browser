@@ -1,6 +1,8 @@
 # Stage 3 design: no page loads at launch
 
-Status: approved in the design session of 2026-09-11. Implements R3.9 of the
+Status: implemented and accepted by hand on 2026-09-11; see
+`docs/stage3-no-load-at-launch-findings.md`. Approved in the design session of
+2026-09-11. Implements R3.9 of the
 master spec, the piece Stage 3 split off in the design session of 2026-09-10
 to be built on its own, before 3b's profiles. Every space still uses the
 default profile.

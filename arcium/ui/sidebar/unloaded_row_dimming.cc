@@ -12,14 +12,14 @@ namespace arcium {
 
 namespace {
 
-// Low enough to read as closed next to a loaded row's full-strength favicon,
-// high enough that the icon -- often the only way to tell one cold entry from
-// another -- is still legible.
-constexpr double kColdFaviconAlpha = 0.45;
+// Low enough to read as "this has to load" next to a loaded row's
+// full-strength favicon, high enough that the icon -- often the only way to
+// tell one dimmed row from another -- is still legible.
+constexpr double kUnloadedFaviconAlpha = 0.45;
 
 gfx::ImageSkia Dim(ui::ImageModel favicon, const ui::ColorProvider* provider) {
   return gfx::ImageSkiaOperations::CreateTransparentImage(
-      favicon.Rasterize(provider), kColdFaviconAlpha);
+      favicon.Rasterize(provider), kUnloadedFaviconAlpha);
 }
 
 }  // namespace

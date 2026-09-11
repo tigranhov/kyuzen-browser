@@ -447,6 +447,13 @@ favourite entries are gone from the model, and only its Today tabs can be brough
 Cmd+Shift+T, because they close through Chromium's own close. The confirmation names what will go
 and promises only that.
 
+**D3-2. A tab that has not loaded is drawn like a closed one.** R7.5 asks the sidebar to
+distinguish three states: closed, warm and discarded, warm and loaded. The owner chose two looks
+instead: any row whose click has to load a page is dimmed, whether it is a closed entry or a tab
+whose page is not in memory. The state itself reaches the model as R7.5 requires (`is_unloaded`
+beside `is_cold`), so a third look remains a change to the views alone if it is ever wanted. See
+`docs/superpowers/specs/2026-09-11-no-load-at-launch-design.md`.
+
 ## 8. Testing strategy
 
 - Unit tests for every model and service in `arcium/test/`, run with Chromium's test runner.
