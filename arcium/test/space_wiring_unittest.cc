@@ -152,5 +152,37 @@ TEST_F(SpaceWiringTest, ClearingWithoutAnArchiveLeavesABlankOneToo) {
   ExpectABlankTabOnScreenIn(work);
 }
 
+// Nothing here hands the service to the switcher: the service does that
+// itself, so a space delete drops the space's archived rows with it.
+TEST_F(SpaceWiringTest, ADeletedSpacesArchivedRowsGoWithIt) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  AddTabInSpace(GURL("https://w1.example/"), work);
+  switcher_->SwitchTo(work);
+  sidebar_->ClearToday();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(1u, archive_store_.ListRecent(work, 10).size());
+
+  switcher_->DeleteSpace(work);
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(archive_store_.ListRecent(work, 10).empty());
+}
+
+// The switcher outlives the service, so the service takes itself back when
+// it goes; a delete after that has no service to reach.
+TEST_F(SpaceWiringTest, ADeleteAfterTheServiceIsGoneDoesNotReachIt) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  AddTabInSpace(GURL("https://w1.example/"), work);
+  sidebar_->SetArchiveService(nullptr);
+  archive_.reset();
+
+  switcher_->DeleteSpace(work);
+  task_environment()->RunUntilIdle();
+  EXPECT_EQ(1u, model_.spaces().size());
+}
+
 }  // namespace
 }  // namespace arcium

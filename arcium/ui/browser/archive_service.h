@@ -84,7 +84,8 @@ class ArchiveService : public TabStripModelObserver,
   // `switcher` is null in the playground, in a window built without a
   // sidebar, and in every fixture written before spaces -- all of which keep
   // working unchanged, in the first space, which is what they have always
-  // meant by it. It must outlive this object.
+  // meant by it. It must outlive this object, which registers itself with
+  // it for as long as it lives.
   ArchiveService(TabStripModel* tab_strip_model,
                  ArciumModel* model,
                  TabBinding* binding,

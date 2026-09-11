@@ -35,6 +35,16 @@ std::map<const TabStripModel*, SpaceSwitcher*>& Registry() {
   return *registry;
 }
 
+// Erases `tab_strip_model`'s entry only when it names `switcher`, so no
+// switcher can take another's registration with it.
+void Unregister(const TabStripModel* tab_strip_model,
+                const SpaceSwitcher* switcher) {
+  auto it = Registry().find(tab_strip_model);
+  if (it != Registry().end() && it->second == switcher) {
+    Registry().erase(it);
+  }
+}
+
 }  // namespace
 
 SpaceSwitcher::SpaceSwitcher(TabStripModel* tab_strip_model,
@@ -44,7 +54,12 @@ SpaceSwitcher::SpaceSwitcher(TabStripModel* tab_strip_model,
       model_(model),
       binding_(binding),
       active_space_(model->last_active_space()) {
-  Registry().emplace(tab_strip_model_.get(), this);
+  // One switcher per strip. A second would silently fail to register, and
+  // every hooked command and close would then quietly fall back to
+  // Chromium's whole-strip behaviour once the first one went.
+  const bool registered =
+      Registry().emplace(tab_strip_model_.get(), this).second;
+  CHECK(registered);
   tab_strip_model_->AddObserver(this);
   model_->AddObserver(this);
   // Through this window's own strip, so whoever builds the switcher has
@@ -60,7 +75,7 @@ SpaceSwitcher::SpaceSwitcher(TabStripModel* tab_strip_model,
 SpaceSwitcher::~SpaceSwitcher() {
   model_->RemoveObserver(this);
   if (tab_strip_model_) {
-    Registry().erase(tab_strip_model_.get());
+    Unregister(tab_strip_model_.get(), this);
     tab_strip_model_->RemoveObserver(this);
   }
 }
@@ -359,7 +374,7 @@ void SpaceSwitcher::OnTabStripModelChanged(
 }
 
 void SpaceSwitcher::OnTabStripModelDestroyed(TabStripModel* tab_strip_model) {
-  Registry().erase(tab_strip_model);
+  Unregister(tab_strip_model, this);
   tab_strip_model_->RemoveObserver(this);
   tab_strip_model_ = nullptr;
 }

@@ -33,6 +33,11 @@ class TabBinding;
 class SpaceSwitcher : public TabStripModelObserver,
                       public ArciumModel::Observer {
  public:
+  // OnActiveSpaceChanged can arrive from inside a TabStripModel notification
+  // -- a tab of another space activated in the strip is adopted right there
+  // -- so an observer must never mutate the strip from it; post instead, the
+  // way OnArciumModelChanged does. Every observer removes itself before the
+  // switcher goes: the list checks that it is empty.
   class Observer : public base::CheckedObserver {
    public:
     virtual void OnActiveSpaceChanged() = 0;
@@ -87,9 +92,10 @@ class SpaceSwitcher : public TabStripModelObserver,
   // `space` already remembers as its own place, not on the tab that moved.
   void MoveEntryToSpace(EntryId id, SpaceId space);
 
-  // Optional, and may be reset to null: the playground and fixtures that
-  // build no ArchiveService never call this, and DeleteSpace simply skips
-  // the archive cleanup then.
+  // Called by ArchiveService itself, which hands itself over when it is built
+  // with this switcher and resets it to null when it goes. Without one -- the
+  // playground, fixtures with no service -- DeleteSpace skips the archive
+  // cleanup.
   void SetArchiveService(ArchiveService* archive_service);
 
   // Refuses the last space and an unknown id, same as the model does --
@@ -161,7 +167,9 @@ class SpaceSwitcher : public TabStripModelObserver,
   base::RepeatingClosure blank_tab_callback_;
   // Null off the record, where there is no session file to keep in step.
   base::RepeatingClosure session_rebuild_request_;
-  base::ObserverList<Observer> observers_;
+  // Checked empty on destruction: an observer still here would call
+  // RemoveObserver on a switcher that is gone.
+  base::ObserverList<Observer, /*check_empty=*/true> observers_;
   // Last: anything posted through this must run after every other member is
   // already constructed.
   base::WeakPtrFactory<SpaceSwitcher> weak_factory_{this};

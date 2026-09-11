@@ -107,10 +107,19 @@ ArchiveService::ArchiveService(
   // them the same way it measures the ones that arrive later.
   tab_strip_model_->AddObserver(this);
   model_->AddObserver(this);
+  // Handed over here and taken back in the destructor, so a space delete can
+  // drop the space's archived rows and no wiring can leave the switcher, which
+  // outlives this, holding a service that is gone.
+  if (switcher_) {
+    switcher_->SetArchiveService(this);
+  }
   RescheduleTimer();
 }
 
 ArchiveService::~ArchiveService() {
+  if (switcher_) {
+    switcher_->SetArchiveService(nullptr);
+  }
   model_->RemoveObserver(this);
   if (tab_strip_model_) {
     tab_strip_model_->RemoveObserver(this);

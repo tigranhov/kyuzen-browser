@@ -2766,7 +2766,7 @@ In the controller's constructor, before the sidebar model:
       &BrowserSidebarController::ShowQuickEntry, weak_factory_.GetWeakPtr()));
 ```
 
-and pass `space_switcher_.get()` as the trailing argument of the `SidebarTabModel` and `ArchiveService` constructions. Give the switcher the archive service with `space_switcher_->SetArchiveService(archive_service_.get())` immediately after the service is built, beside the existing `model_->SetArchiveService(...)` call — the same shape, for the same reason: the service needs a built strip and the switcher does not.
+and pass `space_switcher_.get()` as the trailing argument of the `SidebarTabModel` and `ArchiveService` constructions. There is no `space_switcher_->SetArchiveService(...)` step any more: `ArchiveService` hands itself to the switcher it is constructed with and resets it to null in its own destructor, so no wiring can leave the switcher, which outlives the service, holding a pointer to one that is gone. The switcher must still be declared before the service.
 
 - [ ] **Step 2: Build and run the browser**
 
