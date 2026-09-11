@@ -91,7 +91,14 @@ stash-and-bind, and patch 0140's in-session writer for Cmd+Shift+T. They live
 in a new `arcium/browser/tab_space.{h,cc}` beside `session_tab_entry`.
 
 A tab that arrives with no tag, or with a tag naming a space that no longer
-exists, is in the first space.
+exists, is in the first space. That is the restore case; a tab that appears
+untagged during a session joins the window's active space, which is §3.4.
+
+The rebuild writer runs only when Chromium rebuilds its session commands, so
+the browser asks for a rebuild — the coalesced, posted one Stage 2 installed —
+whenever a live tab's tag changes or a key is minted. Without that, a space
+made and used shortly before quitting comes back with its tabs in the first
+space.
 
 ### 3.4 Which space a new tab joins
 
@@ -128,11 +135,12 @@ does not own, exactly as `HandleNewTabCommand` does.
 
 `TabStripModel::DetermineNewSelectedIndex`
 (`chrome/browser/ui/tabs/tab_strip_model.h:1385`) is the single choke point
-behind both close paths (`tab_strip_model.cc:803` and `:4565`). The patch has
+behind the close path (`tab_strip_model.cc:4565`) and the detach-for-insertion
+path a group or split takes (`:803`). The patch has
 it first ask a new method on `TabStripModelDelegate`
-(`chrome/browser/ui/tabs/tab_strip_model_delegate.h`) that returns
-`std::optional<int>` and defaults to `std::nullopt`, so a delegate that does not
-answer changes nothing. `BrowserTabStripModelDelegate` answers by calling
+(`chrome/browser/ui/tabs/tab_strip_model_delegate.h`) that takes Chromium's own
+choice and returns it unchanged by default, so a delegate that does not answer
+changes nothing. `BrowserTabStripModelDelegate` answers by calling
 `arcium::NextSelectedIndexInSpace`.
 
 The indirection is forced by the build graph, not chosen: `tab_strip_model.cc`
@@ -148,7 +156,8 @@ returns `std::nullopt` only when the strip is about to be empty (`count() == 1`)
 while other spaces' tabs remain, Chromium must activate a real tab, and the
 quick entry is a floating bubble over the current page, not a tab. So a space
 is never allowed to run out: when the active space's last open tab is closed by
-Cmd+W (§4.2) or from the sidebar, Arcium first opens a blank tab in the space,
+Cmd+W (§4.2) or from the sidebar — a row's close button, a row menu, or the
+Clear button — Arcium first opens a blank tab in the space,
 activates it, and shows the quick entry over it, and only then closes the old
 tab. A close Arcium does not see — a script closing the popup it opened — falls
 through to Chromium's pick, and §4.4 then switches to that tab's space. That is
@@ -206,6 +215,11 @@ reorder, delete, and move-to-space.
   ever; re-tagging is deterministic and puts the survivor somewhere the user
   can see it, rather than leaving it tagged with a space that is gone, which
   §3.3 would silently move to the first space.
+- **Deleting a space with several windows open** reaches only the window the
+  delete was made in: its other windows' tabs of that space stay open and
+  resolve to the first space, and the confirmation's count is this window's.
+  Spaces are per profile but the switcher is per window, and 3a ships one
+  switcher's view of the strip. The rule for several windows is 3b's to settle.
 - **Moving a pin or favourite whose tab is open** carries the tab, because the
   tab's space is read from the entry.
 - **Closing the last tab in a space** leaves the space with one blank tab and

@@ -437,6 +437,16 @@ untouched for a week. The stated behaviour is unchanged — a browser closed ove
 archives yesterday's Today tabs on launch — and there is now one source for a tab's idle time
 instead of two, which is the failure mode this feature had already been bitten by once.
 
+### Stage 3a
+
+**D3-1. Deleting a space is destructive.** Stage 2.5 established that Arcium has no destructive
+delete: deleting a folder moves its contents up a level. Deleting a space breaks that rule on
+purpose, to match Zen (`ZenSpaceManager.mjs:1266`). A space owns its favourites in Arcium, which
+Zen's spaces do not, so an Arcium delete removes more than Zen's does: the space's pinned and
+favourite entries are gone from the model, and only its Today tabs can be brought back, by
+Cmd+Shift+T, because they close through Chromium's own close. The confirmation names what will go
+and promises only that.
+
 ## 8. Testing strategy
 
 - Unit tests for every model and service in `arcium/test/`, run with Chromium's test runner.
