@@ -84,13 +84,17 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
-  // A two-finger sideways swipe switches to the neighbouring space. Reached
+  // A two-finger swipe that starts sideways switches to the neighbouring
+  // space; one that starts vertically is left to the view under it. Reached
   // for scrolls over any view inside the sidebar, not only over its own
   // background; see ScrollForwarder.
   void OnScrollEvent(ui::ScrollEvent* event) override;
 
  private:
   class ScrollForwarder;
+
+  // Which way a trackpad gesture goes, fixed by its first movement.
+  enum class SwipeAxis { kUnknown, kHorizontal, kVertical };
 
   void Rebuild();
   // Switches to the space `step` places along the bar from the active one,
@@ -120,10 +124,13 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   // does not.
   SpaceId shown_space_;
   size_t shown_space_index_ = 0;
-  // Sideways travel since the current trackpad gesture began, and whether
-  // that gesture has already switched.
+  // The current trackpad gesture: which way it goes, its sideways travel so
+  // far, whether it has already switched, and whether the fingers are still
+  // down, which is what tells its momentum from a new gesture.
+  SwipeAxis swipe_axis_ = SwipeAxis::kUnknown;
   float swipe_offset_ = 0;
   bool swipe_spent_ = false;
+  bool swipe_fingers_down_ = false;
   std::unique_ptr<ScrollForwarder> scroll_forwarder_;
 
   raw_ptr<NavRowView> nav_row_ = nullptr;

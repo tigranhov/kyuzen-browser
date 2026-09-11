@@ -36,7 +36,7 @@ class RowContextMenu : public ui::SimpleMenuModel::Delegate {
  public:
   // Every space in the "Move to space" submenu, in spaces() order. Above the
   // folder range, which starts at 100 and is dispatched by a `>=` test that
-  // must come after this one; so the folder range holds 200 folders.
+  // must come after this one; so "Move to folder" lists at most 200 folders.
   static constexpr int kMoveToSpaceFirst = 300;
 
   explicit RowContextMenu(SidebarModel* model);
@@ -47,9 +47,9 @@ class RowContextMenu : public ui::SimpleMenuModel::Delegate {
   // `point` is in screen coordinates. Both take a snapshot of what they are
   // shown for: the model can move while the menu is open, so every command
   // re-checks the entry and folder ids it names when it runs. Tab indices are
-  // the exception — Pin, Add to Favorites and Close on a Today row use the
-  // snapshot's index, because a tab index is a position and there is nothing
-  // to re-check it against.
+  // the exception — Pin, Add to Favorites, Move to space and Close on a Today
+  // row use the snapshot's index, because a tab index is a position and there
+  // is nothing to re-check it against.
   void RunForRow(const SidebarRow& row,
                  views::View* source,
                  const gfx::Point& point,

@@ -44,6 +44,12 @@ enum RowCommand {
   kMoveToFolderFirst = 100,
 };
 
+// The folder range ends where the space range begins, so "Move to folder"
+// lists this many folders at most: one more would get a space's command id
+// and move the row to a space instead.
+constexpr size_t kMaxFolderTargets =
+    static_cast<size_t>(RowContextMenu::kMoveToSpaceFirst - kMoveToFolderFirst);
+
 // The name a folder gets when it is made from the menu. There is no dialog at
 // this stage, so the folder appears named and the header's rename is the way
 // to change it.
@@ -113,6 +119,9 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
       move_submenu_ = std::make_unique<ui::SimpleMenuModel>(this);
       move_submenu_->AddItem(kMoveToTopLevel, u"Top level");
       for (const SidebarFolder& folder : model_->folders()) {
+        if (move_targets_.size() == kMaxFolderTargets) {
+          break;
+        }
         move_submenu_->AddItem(
             kMoveToFolderFirst + static_cast<int>(move_targets_.size()),
             folder.name);
@@ -156,6 +165,9 @@ void RowContextMenu::BuildForFolder(const SidebarFolder& folder,
   move_submenu_ = std::make_unique<ui::SimpleMenuModel>(this);
   move_submenu_->AddItem(kMoveToTopLevel, u"Top level");
   for (const SidebarFolder& target : model_->folders()) {
+    if (move_targets_.size() == kMaxFolderTargets) {
+      break;
+    }
     if (!model_->CanMoveFolderTo(folder.id, target.id)) {
       continue;
     }

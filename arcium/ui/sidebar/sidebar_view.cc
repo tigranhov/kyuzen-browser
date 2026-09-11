@@ -50,8 +50,9 @@ namespace {
 // How long the column takes to slide in when the space changes.
 constexpr base::TimeDelta kSwitchSlideDuration = base::Milliseconds(200);
 
-// How far two fingers travel sideways before a swipe switches spaces: a
-// quarter of the sidebar, so a vertical scroll that drifts does not.
+// How far a sideways gesture travels, momentum included, before it switches
+// spaces: a quarter of the sidebar. Which gestures are sideways is decided by
+// their first movement, not by this; see SidebarView::OnScrollEvent.
 constexpr float kSwipeThreshold = metrics::kSidebarWidth / 4;
 
 }  // namespace
@@ -68,6 +69,11 @@ class SidebarView::ScrollForwarder : public ui::EventHandler {
 
   // ui::EventHandler:
   void OnScrollEvent(ui::ScrollEvent* event) override {
+    // Over the sidebar's own background the sidebar is the target and is
+    // handed the event anyway; reading it here too would count it twice.
+    if (event->target() == view_.get()) {
+      return;
+    }
     view_->OnScrollEvent(event);
   }
 
@@ -256,22 +262,51 @@ bool SidebarView::AcceleratorPressed(const ui::Accelerator& accelerator) {
 }
 
 void SidebarView::OnScrollEvent(ui::ScrollEvent* event) {
-  // A trackpad gesture opens with kBegan, and that is where the last swipe's
-  // travel is forgotten. Not at kEnd: the momentum events after the fingers
-  // lift arrive later, and would switch a second time.
-  if (event->scroll_event_phase() == ui::ScrollEventPhase::kBegan) {
+  // A gesture's direction is fixed by its first movement, as Chromium's
+  // history swipe fixes it. Fingers scrolling a long list drift sideways, and
+  // the drift adds up, so judging each event alone would switch spaces in the
+  // middle of a scroll, and would take the sideways-leaning events from the
+  // column, dropping their vertical part so the list stutters.
+  //
+  // The fingers landing begin a gesture. macOS says so with the momentum
+  // phase, MAY_BEGIN, and leaves the scroll phase at kNone throughout;
+  // elsewhere the scroll phase says kBegan.
+  const ui::EventMomentumPhase momentum = event->momentum_phase();
+  const bool begins =
+      event->scroll_event_phase() == ui::ScrollEventPhase::kBegan ||
+      momentum == ui::EventMomentumPhase::MAY_BEGIN;
+  // Momentum runs on after the fingers lift and belongs to the gesture they
+  // made: it neither starts a gesture nor decides which way one goes.
+  const bool coasting = momentum == ui::EventMomentumPhase::BEGAN ||
+                        momentum == ui::EventMomentumPhase::INERTIAL_UPDATE;
+  // Anything else once the fingers are up -- the momentum's own end, a wheel,
+  // a gesture that began outside the sidebar -- starts afresh, so nothing of
+  // the last gesture carries into it.
+  if (begins || (!swipe_fingers_down_ && !coasting)) {
+    swipe_axis_ = SwipeAxis::kUnknown;
     swipe_offset_ = 0;
     swipe_spent_ = false;
+    swipe_fingers_down_ = true;
   }
   const float dx = event->x_offset();
-  if (std::abs(dx) <= std::abs(event->y_offset())) {
-    // Mostly vertical: the column's to scroll.
+  const float dy = event->y_offset();
+  if (swipe_axis_ == SwipeAxis::kUnknown && !coasting && (dx != 0 || dy != 0)) {
+    swipe_axis_ = std::abs(dx) > std::abs(dy) ? SwipeAxis::kHorizontal
+                                              : SwipeAxis::kVertical;
+  }
+  // The fingers lift. Not a reset: momentum may follow, and it is still this
+  // gesture's. On macOS the momentum's end reads the same, which is why the
+  // reset waits for the next event that is not momentum.
+  if (event->scroll_event_phase() == ui::ScrollEventPhase::kEnd ||
+      momentum == ui::EventMomentumPhase::END) {
+    swipe_fingers_down_ = false;
+  }
+  if (swipe_axis_ != SwipeAxis::kHorizontal) {
+    // Vertical, or not moving yet: the column's to scroll.
     return;
   }
-  // Nothing in the sidebar scrolls sideways, so a sideways scroll belongs to
-  // the swipe whatever it is over. Stopping it here also means it is counted
-  // once, although this runs both before the target and, over the sidebar's
-  // own background, as the target.
+  // Nothing in the sidebar scrolls sideways, so every event of a sideways
+  // gesture is the swipe's, whatever it is over.
   event->SetHandled();
   event->StopPropagation();
   if (swipe_spent_) {
@@ -281,16 +316,10 @@ void SidebarView::OnScrollEvent(ui::ScrollEvent* event) {
   if (std::abs(swipe_offset_) < kSwipeThreshold) {
     return;
   }
-  // A positive offset is fingers moving right, which goes back a space, the
-  // way a page turns.
-  const int step = swipe_offset_ > 0 ? -1 : 1;
-  swipe_offset_ = 0;
-  // A trackpad swipe is one gesture and switches once, momentum included. A
-  // wheel's events carry no phase, so there is no gesture to spend and each
-  // threshold's worth switches again.
-  swipe_spent_ = event->scroll_event_phase() != ui::ScrollEventPhase::kNone ||
-                 event->momentum_phase() != ui::EventMomentumPhase::NONE;
-  SwitchToNeighbour(step);
+  // One gesture switches once, momentum included. A positive offset is
+  // fingers moving right, which goes back a space, the way a page turns.
+  swipe_spent_ = true;
+  SwitchToNeighbour(swipe_offset_ > 0 ? -1 : 1);
 }
 
 void SidebarView::SwitchToNeighbour(int step) {

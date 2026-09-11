@@ -34,8 +34,8 @@ class TintBackground : public views::Background {
   void SetPreset(int preset);
   int preset() const { return preset_; }
 
-  // What Paint draws for `view`: the preset's pair for the view's colour
-  // mode, or the colour mixer's pair for preset 0.
+  // What Paint draws for `view`: the colour mixer's pair for preset 0, or the
+  // preset's pair for the mode the mixer's own sidebar colour is in.
   Stops StopsFor(const views::View& view) const;
 
   // views::Background:

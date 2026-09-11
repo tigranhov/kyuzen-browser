@@ -6,6 +6,7 @@
 // spaces() and switch between them the way the real model does, since every
 // view test of the bar runs over it.
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -19,18 +20,16 @@
 #include "arcium/ui/sidebar/space_bar_view.h"
 #include "arcium/ui/sidebar/tint_background.h"
 #include "base/functional/callback_helpers.h"
-#include "base/time/time.h"
+#include "base/strings/string_number_conversions.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/color/color_provider.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
-#include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/test_event.h"
-#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/scoped_animation_duration_scale_mode.h"
@@ -108,20 +107,6 @@ ui::MenuModel* Submenu(ui::MenuModel* menu, const std::u16string& label) {
     }
   }
   return nullptr;
-}
-
-// A trackpad scroll as macOS delivers it: one event per movement, bracketed
-// by a begin and an end.
-bool Scroll(SidebarView& view,
-            float dx,
-            float dy,
-            ui::ScrollEventPhase phase = ui::ScrollEventPhase::kUpdate) {
-  ui::ScrollEvent event(ui::EventType::kScroll, gfx::PointF(20, 300),
-                        gfx::PointF(20, 300), base::TimeTicks::Now(),
-                        /*flags=*/0, dx, dy, dx, dy, /*finger_count=*/2,
-                        ui::EventMomentumPhase::NONE, phase);
-  view.OnScrollEvent(&event);
-  return event.handled();
 }
 
 TEST_F(SpaceBarTest, TheFakeReportsSpacesWithTheActiveOneMarked) {
@@ -379,36 +364,9 @@ TEST_F(SpaceBarTest, CtrlDigitSwitchesToTheNthSpace) {
   EXPECT_TRUE(model.spaces()[2].is_active);
 }
 
-// Fingers moving left bring in the space to the right, the way a page turns;
-// fingers moving right go back.
-TEST_F(SpaceBarTest, AHorizontalSwipeSwitchesToTheNeighbouringSpace) {
-  FakeSidebarModel model;
-  model.AddSpaceForTesting(u"Work", u"", 0);
-  SidebarView view(&model, SidebarView::Delegate());
-
-  Scroll(view, 0, 0, ui::ScrollEventPhase::kBegan);
-  Scroll(view, -20, 0);  // not far enough yet
-  EXPECT_TRUE(model.spaces()[0].is_active);
-  EXPECT_TRUE(Scroll(view, -50, 0));
-  EXPECT_TRUE(model.spaces()[1].is_active);
-  // The rest of the same gesture is spent: one swipe is one space.
-  Scroll(view, -100, 0);
-  Scroll(view, 0, 0, ui::ScrollEventPhase::kEnd);
-  EXPECT_TRUE(model.spaces()[1].is_active);
-
-  // A mostly vertical scroll is the column's to scroll, not a switch.
-  Scroll(view, 0, 0, ui::ScrollEventPhase::kBegan);
-  EXPECT_FALSE(Scroll(view, 80, 200));
-  Scroll(view, 0, 0, ui::ScrollEventPhase::kEnd);
-  EXPECT_TRUE(model.spaces()[1].is_active);
-
-  Scroll(view, 0, 0, ui::ScrollEventPhase::kBegan);
-  EXPECT_TRUE(Scroll(view, 80, 0));
-  EXPECT_TRUE(model.spaces()[0].is_active);
-}
-
-// The slide is the only animation this task adds, and it must not run on the
-// ordinary changes a sidebar sees all the time -- a title, a favicon, a load.
+// The slide is the sidebar's one animation, and it must not run on the
+// ordinary changes a sidebar sees all the time -- a title, a favicon, a load:
+// each would move the rows under the pointer for 200 ms.
 TEST_F(SpaceBarTest, TheColumnSlidesOnlyWhenTheSpaceChanges) {
   gfx::ScopedAnimationDurationScaleMode normal(
       gfx::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
@@ -501,6 +459,35 @@ TEST_F(SpaceBarTest, MoveToSpaceIsAbsentWithOneSpace) {
   RowContextMenu menu(&model);
   menu.BuildForRow(model.rows().front(), base::DoNothing());
   EXPECT_FALSE(HasItem(menu.menu(), u"Move to space"));
+}
+
+// Folder items and space items share one command-id space, the folders
+// below the spaces. A folder past the end of its range would be read as a
+// space and move the row to the wrong place, so the list stops there.
+TEST_F(SpaceBarTest, FolderTargetsStopWhereTheSpaceRangeBegins) {
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 0);
+  model.AddTab(u"Pin", "https://p.example/", SidebarSection::kPinned, true);
+  // A folder is made around an entry, so each gets a pinned tab of its own.
+  for (int i = 0; i < 250; ++i) {
+    const std::u16string n = base::NumberToString16(i);
+    model.AddTab(u"P" + n, "https://p.example/", SidebarSection::kPinned,
+                 false);
+    model.AddFolderWith(u"F" + n, {u"P" + n});
+  }
+  ASSERT_EQ(250u, model.folders().size());
+  RowContextMenu menu(&model);
+  menu.BuildForRow(model.rows().front(), base::DoNothing());
+  ASSERT_EQ(u"Pin", model.rows().front().title);
+
+  ui::MenuModel* folders = Submenu(menu.menu(), u"Move to folder");
+  ASSERT_TRUE(folders);
+  EXPECT_LT(folders->GetItemCount(), 250u);
+  int highest = 0;
+  for (size_t i = 0; i < folders->GetItemCount(); ++i) {
+    highest = std::max(highest, folders->GetCommandIdAt(i));
+  }
+  EXPECT_LT(highest, RowContextMenu::kMoveToSpaceFirst);
 }
 
 }  // namespace

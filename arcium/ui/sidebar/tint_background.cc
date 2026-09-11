@@ -4,43 +4,18 @@
 
 #include "arcium/ui/sidebar/tint_background.h"
 
-#include <optional>
-
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/space_gradients.h"
 #include "cc/paint/paint_flags.h"
 #include "third_party/skia/include/core/SkPoint.h"
 #include "third_party/skia/include/core/SkTileMode.h"
 #include "ui/color/color_provider.h"
-#include "ui/color/color_provider_key.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/native_theme/native_theme.h"
 #include "ui/views/view.h"
-#include "ui/views/widget/widget.h"
 
 namespace arcium {
-
-namespace {
-
-// Light or dark by the same rule Widget::GetColorProviderKey applies, which
-// is what the colour mixer is handed, so a preset never pairs a dark tint
-// with the row text the mixer chose for a light sidebar. The key itself is
-// protected, so the rule is followed through the public parts: the nearest
-// widget that overrides the mode decides it, and otherwise the native theme.
-bool UsesDarkColors(const views::View& view) {
-  for (const views::Widget* widget = view.GetWidget(); widget;
-       widget = widget->parent()) {
-    if (const std::optional<ui::ColorProviderKey::ColorMode> mode =
-            widget->color_mode_override()) {
-      return *mode == ui::ColorProviderKey::ColorMode::kDark;
-    }
-  }
-  return view.GetNativeTheme()->GetColorProviderKey(nullptr).color_mode ==
-         ui::ColorProviderKey::ColorMode::kDark;
-}
-
-}  // namespace
 
 TintBackground::TintBackground() = default;
 TintBackground::~TintBackground() = default;
@@ -57,13 +32,19 @@ void TintBackground::SetPreset(int preset) {
 }
 
 TintBackground::Stops TintBackground::StopsFor(const views::View& view) const {
+  const ui::ColorProvider* cp = view.GetColorProvider();
+  const SkColor mixer_bottom =
+      cp->GetColor(kColorArciumSidebarBackgroundBottom);
   if (preset_ == 0) {
-    const ui::ColorProvider* cp = view.GetColorProvider();
-    return {cp->GetColor(kColorArciumSidebarBackgroundTop),
-            cp->GetColor(kColorArciumSidebarBackgroundBottom)};
+    return {cp->GetColor(kColorArciumSidebarBackgroundTop), mixer_bottom};
   }
+  // Light or dark as the colour mixer chose, read off the colour it chose for
+  // this same surface. The mode reaches the mixer by routes the view cannot
+  // see -- off the record is always dark, and the browser's own appearance
+  // setting overrides the OS -- and the row text was mixed for that mode, so
+  // a preset painted in the other one would put dark text on a dark tint.
   const SpaceGradient& gradient = SpaceGradients()[preset_];
-  return UsesDarkColors(view)
+  return color_utils::IsDark(mixer_bottom)
              ? Stops{gradient.dark_top, gradient.dark_bottom}
              : Stops{gradient.light_top, gradient.light_bottom};
 }
