@@ -7,6 +7,7 @@ test("arcium_unittests") {
     "arcium_features_unittest.cc",
     "arcium_model_unittest.cc",
     "arcium_profile_state_unittest.cc",
+    "clear_data_warning_unittest.cc",
     "cold_favicon_cache_unittest.cc",
     "folder_tree_unittest.cc",
     "home_boundary_throttle_unittest.cc",
@@ -14,11 +15,17 @@ test("arcium_unittests") {
     "model_migration_unittest.cc",
     "model_serializer_unittest.cc",
     "model_store_unittest.cc",
+    "new_tab_storage_unittest.cc",
+    "profile_data_unittest.cc",
+    "profile_menu_unittest.cc",
+    "profile_partition_unittest.cc",
+    "profile_reopen_unittest.cc",
     "reorder_index_unittest.cc",
     "restored_tab_loading_unittest.cc",
     "session_tab_entry_unittest.cc",
     "sidebar_drag_unittest.cc",
     "sidebar_folders_unittest.cc",
+    "sidebar_profiles_unittest.cc",
     "sidebar_tab_model_unittest.cc",
     "sidebar_views_unittest.cc",
     "space_bar_unittest.cc",
@@ -58,6 +65,7 @@ test("arcium_unittests") {
     "//chrome/browser/ui",
     "//chrome/test:test_support",
     "//chrome/test:test_support_unit",
+    "//components/browsing_data/core",
     "//components/os_crypt/async/browser:test_support",
     "//components/segmentation_platform/public",
     "//components/sessions",
@@ -70,4 +78,44 @@ test("arcium_unittests") {
     "//ui/compositor",
     "//ui/views:test_support",
   ]
+}
+
+# In-process browser tests: a real browser with the sidebar, real storage
+# partitions and real navigations. The automated isolation check of the
+# profiles spec (A3b.1) lives here, because a partition that leaks shows
+# nothing on screen.
+test("arcium_browsertests") {
+  sources = [
+    "browser/profile_browsertest_base.cc",
+    "browser/profile_browsertest_base.h",
+    "browser/profile_isolation_browsertest.cc",
+    "browser/profile_lifecycle_browsertest.cc",
+    "browser/profile_restore_browsertest.cc",
+  ]
+
+  # As browser_tests and sync_performance_tests set it.
+  defines = [ "HAS_OUT_OF_PROC_TEST_RUNNER" ]
+
+  deps = [
+    "//arcium/browser",
+    "//arcium/browser/model",
+    "//arcium/ui/browser",
+    "//base/test:test_support",
+    "//chrome/browser/ui",
+    "//chrome/test:browser_tests_runner",
+    "//chrome/test:test_support",
+    "//chrome/test:test_support_ui",
+    "//components/browsing_data/core",
+    "//content/test:test_support",
+    "//net:test_support",
+    "//testing/gtest",
+  ]
+
+  data_deps = [ "//chrome:packed_resources" ]
+
+  if (is_mac) {
+    # Browser tests do not run on macOS without it; see
+    # sync_performance_tests in chrome/test/BUILD.gn.
+    ldflags = [ "-Wl,-ObjC" ]
+  }
 }

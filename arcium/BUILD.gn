@@ -4,6 +4,7 @@
 group("all") {
   testonly = true
   deps = [
+    "//arcium/test:arcium_browsertests",
     "//arcium/test:arcium_unittests",
     "//arcium/ui/playground:arcium_playground",
   ]

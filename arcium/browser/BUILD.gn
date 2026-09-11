@@ -10,6 +10,10 @@ source_set("browser") {
     "entry_claim.h",
     "model_store.cc",
     "model_store.h",
+    "profile_data.cc",
+    "profile_data.h",
+    "profile_partition.cc",
+    "profile_partition.h",
     "restored_tab_loading.cc",
     "restored_tab_loading.h",
     "session_tab_entry.cc",
@@ -38,6 +42,10 @@ source_set("browser") {
 
     # BrowserContext and WebContentsUserData. No //chrome deps.
     "//content/public/browser",
+
+    # url_constants.h, for the browser-page schemes profile_partition.cc
+    # sorts into shared storage.
+    "//content/public/common",
 
     # ContentFaviconDriver, for the favicon a restored tab asks for without
     # loading. //components, not //chrome.

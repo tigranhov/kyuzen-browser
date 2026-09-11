@@ -83,6 +83,21 @@ target `//arcium/browser`.
 |---|---|---|
 | `0170-session-restore-defer-loads.patch` | `SessionRestoreDelegate::RestoreTabs` in `chrome/browser/sessions/session_restore_delegate.cc`, at its call to `ScheduleLoadForRestoredTabs` | `arcium::DeferRestoredTabLoads` |
 
+Stage 3b, profiles. An Arcium profile is a storage partition inside the one Chromium profile. The
+hooks create every new, restored and recreated tab in its space's profile, turn prerendering off
+for those tabs, register the guard that reopens a page landing in the wrong storage, keep the
+partitions safe from Chrome's own cleanup, keep their session cookies, and put a warning in front
+of Chrome's Clear browsing data. Five of the hooked files build in targets that reach Arcium only
+privately, so each has a GN wiring patch numbered just before its hook.
+
+| Patch | Seam | Delegates to |
+|---|---|---|
+| `0180-gn-navigator-arcium.patch` | `chrome/browser/ui/navigator/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0181 |
+| `0183-gn-resource-coordinator-arcium.patch` | `chrome/browser/resource_coordinator/BUILD.gn`, `impl` | nothing: GN wiring for 0184 |
+| `0187-gn-web-applications-arcium.patch` | `chrome/browser/web_applications/BUILD.gn`, `source_set("web_applications")` | nothing: GN wiring for 0188 |
+| `0189-gn-net-arcium.patch` | `chrome/browser/net/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0190 |
+| `0191-gn-settings-arcium.patch` | `chrome/browser/ui/webui/settings/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0192 |
+
 ## Monthly rebase routine
 
 1. Find the new stable tag on https://chromiumdash.appspot.com/releases?platform=Mac

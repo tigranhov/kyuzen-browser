@@ -8,11 +8,21 @@ source_set("browser") {
     "archive_service.h",
     "browser_sidebar_controller.cc",
     "browser_sidebar_controller.h",
+    "clear_data_warning.cc",
+    "clear_data_warning.h",
     "cold_favicon_cache.cc",
     "cold_favicon_cache.h",
     "color_ids_check.cc",
     "home_boundary_throttle.cc",
     "home_boundary_throttle.h",
+    "new_tab_storage.cc",
+    "new_tab_storage.h",
+    "partition_guard_throttle.cc",
+    "partition_guard_throttle.h",
+    "profile_actions.cc",
+    "profile_actions.h",
+    "profile_reopen.cc",
+    "profile_reopen.h",
     "quick_entry_bubble.cc",
     "quick_entry_bubble.h",
     "session_rebuild_nudge.cc",
@@ -20,6 +30,7 @@ source_set("browser") {
     "sidebar_tab_model.cc",
     "sidebar_tab_model.h",
     "sidebar_tab_model_entries.cc",
+    "sidebar_tab_model_profiles.cc",
     "sidebar_tab_model_spaces.cc",
     "space_switcher.cc",
     "space_switcher.h",
@@ -59,6 +70,16 @@ source_set("browser") {
     # is not part of that cycle.
     "//chrome/browser/sessions",
     "//chrome/browser/ui/color:color_headers",
+
+    # prefs::kShouldGarbageCollectStoragePartitions, which a profile's
+    # deletion sets when its partition is still in use.
+    "//chrome/common:constants",
+
+    # TimePeriod and its begin and end times, for the clear-data warning.
+    "//components/browsing_data/core",
+
+    # ShowWebModal, for the clear-data warning over the settings page.
+    "//components/constrained_window",
     "//components/favicon/core",
     "//components/favicon_base",
     "//components/keyed_service/core",

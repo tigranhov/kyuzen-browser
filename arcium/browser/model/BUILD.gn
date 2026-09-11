@@ -4,6 +4,7 @@ source_set("model") {
   sources = [
     "arcium_model.cc",
     "arcium_model.h",
+    "arcium_profile.h",
     "entry_id.h",
     "folder.h",
     "home_boundary.cc",

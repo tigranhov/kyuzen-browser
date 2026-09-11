@@ -1,0 +1,25 @@
+Seam: chrome/browser/web_applications/BUILD.gn, source_set("web_applications")
+      -- the target garbage_collect_storage_partitions_command.cc builds in.
+Why: GN wiring for patch 0188. The hook includes an //arcium/browser header,
+     and this target has no dep, direct or transitive, on any Arcium target
+     or on //chrome/browser/ui, so `gn check` rejects the include outright.
+
+     No cycle: //arcium/browser depends on nothing under //chrome, so
+     `gn gen` accepts the graph with this dep added.
+Delegates to: nothing. GN wiring carries no call.
+
+diff --git a/chrome/browser/web_applications/BUILD.gn b/chrome/browser/web_applications/BUILD.gn
+index 7c38771364..80fe442d78 100644
+--- a/chrome/browser/web_applications/BUILD.gn
++++ b/chrome/browser/web_applications/BUILD.gn
+@@ -547,6 +547,10 @@ source_set("web_applications") {
+ 
+   deps = [
+     ":features",
++
++    # Arcium: garbage_collect_storage_partitions_command.cc calls
++    # arcium/browser/profile_data.h.
++    "//arcium/browser",
+     "//base",
+     "//build:branding_buildflags",
+     "//chrome/app/resources:platform_locale_settings",

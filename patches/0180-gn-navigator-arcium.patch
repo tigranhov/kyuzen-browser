@@ -1,0 +1,26 @@
+Seam: chrome/browser/ui/navigator/BUILD.gn, source_set("impl") -- the target
+      browser_navigator.cc builds in.
+Why: GN wiring for patch 0181. The hook includes an //arcium/ui/browser
+     header, and this target reaches Arcium only through //chrome/browser/ui,
+     whose dep on //arcium/ui/browser is private (patch 0010), so `gn check`
+     rejects the include even though ninja accepts it.
+
+     No cycle: //arcium/ui/browser depends on nothing that reaches back into
+     this target (`gn path` finds no path from it), which is also why
+     `gn gen` accepts the graph.
+Delegates to: nothing. GN wiring carries no call.
+
+diff --git a/chrome/browser/ui/navigator/BUILD.gn b/chrome/browser/ui/navigator/BUILD.gn
+index d23e37f606..2a2a040d7d 100644
+--- a/chrome/browser/ui/navigator/BUILD.gn
++++ b/chrome/browser/ui/navigator/BUILD.gn
+@@ -45,6 +45,9 @@ source_set("impl") {
+ 
+   deps = [
+     ":navigator",
++
++    # Arcium: browser_navigator.cc calls arcium/ui/browser/new_tab_storage.h.
++    "//arcium/ui/browser",
+     "//base",
+     "//chrome/browser:browser_about_handler",
+     "//chrome/browser:browser_public_dependencies",

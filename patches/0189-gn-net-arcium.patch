@@ -1,0 +1,25 @@
+Seam: chrome/browser/net/BUILD.gn, source_set("impl") -- the target
+      profile_network_context_service.cc builds in.
+Why: GN wiring for patch 0190. The hook includes an //arcium/browser header,
+     and this target has no dep, direct or transitive, on any Arcium target
+     or on //chrome/browser/ui, so `gn check` rejects the include outright.
+
+     No cycle: //arcium/browser depends on nothing under //chrome, so
+     `gn gen` accepts the graph with this dep added.
+Delegates to: nothing. GN wiring carries no call.
+
+diff --git a/chrome/browser/net/BUILD.gn b/chrome/browser/net/BUILD.gn
+index 8714075472..c20af2edb3 100644
+--- a/chrome/browser/net/BUILD.gn
++++ b/chrome/browser/net/BUILD.gn
+@@ -159,6 +159,10 @@ source_set("impl") {
+ 
+   deps = [
+     ":key_pinning_proto",
++
++    # Arcium: profile_network_context_service.cc calls
++    # arcium/browser/profile_partition.h.
++    "//arcium/browser",
+     "//base:build_time",
+     "//chrome/browser:browser_features",
+     "//chrome/browser:browser_process",

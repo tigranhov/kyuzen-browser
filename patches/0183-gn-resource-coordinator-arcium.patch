@@ -1,0 +1,25 @@
+Seam: chrome/browser/resource_coordinator/BUILD.gn, source_set("impl") -- the
+      target tab_lifecycle_unit.cc builds in, inside the `if (!is_android)`
+      block that also lists the file itself.
+Why: GN wiring for patch 0184. The hook includes an //arcium/browser header,
+     and this target reaches Arcium only through //chrome/browser/ui, whose
+     dep on //arcium/ui/browser is private (patch 0010), so `gn check`
+     rejects the include even though ninja accepts it.
+
+     No cycle: //arcium/browser depends on nothing under //chrome, so
+     `gn gen` accepts the graph with this dep added.
+Delegates to: nothing. GN wiring carries no call.
+
+diff --git a/chrome/browser/resource_coordinator/BUILD.gn b/chrome/browser/resource_coordinator/BUILD.gn
+index d9f3077b82..2cb0cd5d44 100644
+--- a/chrome/browser/resource_coordinator/BUILD.gn
++++ b/chrome/browser/resource_coordinator/BUILD.gn
+@@ -126,6 +126,8 @@ source_set("impl") {
+     ]
+ 
+     deps += [
++      # Arcium: tab_lifecycle_unit.cc calls arcium/browser/profile_partition.h.
++      "//arcium/browser",
+       "//chrome/browser/devtools",
+       "//chrome/browser/memory",
+       "//chrome/browser/permissions",
