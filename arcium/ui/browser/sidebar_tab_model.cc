@@ -165,6 +165,8 @@ SidebarRow SidebarTabModel::RowForTab(int index,
   SidebarRow row;
   row.tab_index = index;
   row.section = SidebarSection::kToday;
+  // The space this window is drawing, the only one rows() builds a row for.
+  row.space = active_space();
   // A custom name, when the user has given this tab one, in place of the
   // page's own title -- the same precedence a pinned entry's custom title has.
   const auto named = today_titles_.find(tab->GetHandle());

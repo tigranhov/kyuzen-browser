@@ -42,10 +42,10 @@ struct SidebarRow {
   bool can_return_to_pinned_url = false;
   // Set on rows inside a folder, so TabListView can indent and hide them.
   std::optional<FolderId> folder_id;
-  // Which space this row belongs to. The real model never sets it: a window
-  // only ever builds rows() for its own space, so there is nothing here for
-  // it to disagree about. The fake, which draws one list over several
-  // spaces' worth of seeded rows, is what reads and writes this.
+  // Which space this row belongs to. Every implementation fills it: the real
+  // model with the space it is drawing, the only one it builds rows for, and
+  // the fake with the space each of its rows was seeded, opened or moved
+  // into.
   SpaceId space;
 };
 
@@ -230,15 +230,21 @@ class SidebarModel {
   // bar itself: see SidebarSpace for why a dot's counts cannot be a scan over
   // the strip.
   virtual std::vector<SidebarSpace> spaces() const = 0;
-  // Switches the window to `id`. Named apart from the switcher's own
-  // SwitchTo so a call site never reads as the wrong one: this is a command
-  // a view issues, that is what a window's own switcher performs.
+  // Shows `id` in this window, which is what clicking its dot asks for.
+  // Named apart from SpaceSwitcher::SwitchTo, which carries it out, so a call
+  // site says which of the two it is calling.
   virtual void SwitchToSpace(SpaceId id) = 0;
   // Makes a new space and switches to it -- a space is somewhere you are put,
   // not just a dot that appears while you stay where you were.
   virtual void AddSpace(const std::u16string& name) = 0;
+  // What the dot's rename field commits. The name belongs to the space, not
+  // to the dot, so it goes to the model and every window showing it follows.
   virtual void RenameSpace(SpaceId id, const std::u16string& name) = 0;
+  // One emoji for the dot, or empty to go back to the name's first letter --
+  // the same empty-means-letter rule SidebarSpace::icon is drawn by.
   virtual void SetSpaceIcon(SpaceId id, const std::u16string& icon) = 0;
+  // An index into the fixed palette, not a colour: the space stores the
+  // choice and the sidebar owns what each choice looks like.
   virtual void SetSpaceGradient(SpaceId id, int gradient) = 0;
   // Reorders the space bar itself -- the same shape MoveTab gives the tab
   // list.

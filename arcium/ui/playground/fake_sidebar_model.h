@@ -161,6 +161,13 @@ class FakeSidebarModel : public SidebarModel {
 
   void Notify();
   void Reindex();
+  // AddTab with the space named: AddTab seeds the first space, and NewTab
+  // opens its tab in the one on screen.
+  void InsertTab(const std::u16string& title,
+                 const std::string& url,
+                 SidebarSection section,
+                 bool active,
+                 SpaceId space);
   // Renumbers folders_ to 0..n-1 in position order, the way
   // ArciumModel::NormalisePositions does after RemoveFolder. Without this,
   // CreateFolderWithEntry's "next free position" — folders_.size() — can

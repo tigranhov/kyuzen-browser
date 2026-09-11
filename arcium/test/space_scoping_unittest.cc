@@ -395,5 +395,72 @@ TEST_F(SpaceScopingTest, TheSidebarModelReportsAndSwitchesSpaces) {
   EXPECT_TRUE(sidebar_->spaces()[1].is_active);
 }
 
+// A row says which space it is drawn in, the way the fake's rows do, so a
+// view that reads it gets the same answer in the browser as in a view test.
+// Both kinds of row are here: a Today tab and a pinned entry.
+TEST_F(SpaceScopingTest, EveryRowCarriesTheSpaceItIsDrawnIn) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  AddTabInSpace(GURL("https://w1.example/"), work);
+  model_.AddEntry(first, EntryKind::kPinned, GURL("https://a2.example/"),
+                  u"A2");
+  model_.AddEntry(work, EntryKind::kPinned, GURL("https://w2.example/"), u"W2");
+
+  std::vector<SidebarRow> rows = sidebar_->rows();
+  ASSERT_EQ(2u, rows.size());
+  for (const SidebarRow& row : rows) {
+    EXPECT_EQ(first, row.space) << row.url;
+  }
+
+  sidebar_->SwitchToSpace(work);
+  rows = sidebar_->rows();
+  ASSERT_EQ(2u, rows.size());
+  for (const SidebarRow& row : rows) {
+    EXPECT_EQ(work, row.space) << row.url;
+  }
+}
+
+// A new space is somewhere you are put, not a dot that appears while you stay
+// where you were. It has no tab of its own, so the switch lands on a blank one
+// opened in it.
+TEST_F(SpaceScopingTest, AddingASpaceSwitchesIntoItOntoABlankTab) {
+  AddTabInSpace(GURL("https://a1.example/"), model_.default_space_id());
+
+  sidebar_->AddSpace(u"New");
+
+  const std::vector<SidebarSpace> spaces = sidebar_->spaces();
+  ASSERT_EQ(2u, spaces.size());
+  const SpaceId added = spaces[1].id;
+  EXPECT_EQ(u"New", spaces[1].name);
+  EXPECT_TRUE(spaces[1].is_active);
+  EXPECT_EQ(added, switcher_->active_space());
+  ASSERT_EQ(2, strip()->count());
+  const int active = strip()->active_index();
+  EXPECT_EQ(1, active);
+  EXPECT_EQ(added, switcher_->SpaceOfTabAt(active));
+  EXPECT_TRUE(strip()->GetWebContentsAt(active)->GetVisibleURL().is_empty());
+}
+
+// With no switcher -- the playground's wiring, and a window built without a
+// sidebar -- there is no screen for the move to follow, so moving an entry is
+// the model change and nothing else.
+TEST_F(SpaceScopingTest, MovingAnEntryWithoutASwitcherMovesItInTheModel) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  const EntryId id = model_.AddEntry(first, EntryKind::kPinned,
+                                     GURL("https://p1.example/"), u"P1");
+  SidebarTabModel plain(strip(), &model_, &binding_);
+
+  plain.MoveEntryToSpace(id, work);
+
+  ASSERT_TRUE(model_.GetEntry(id));
+  EXPECT_EQ(work, model_.GetEntry(id)->space_id);
+  const std::vector<SidebarSpace> spaces = plain.spaces();
+  ASSERT_EQ(2u, spaces.size());
+  EXPECT_EQ(0, spaces[0].entry_count);
+  EXPECT_EQ(1, spaces[1].entry_count);
+}
+
 }  // namespace
 }  // namespace arcium

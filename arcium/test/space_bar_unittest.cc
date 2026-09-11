@@ -115,5 +115,22 @@ TEST_F(SpaceBarTest, MovingTheFakesEntryMovesItsCounts) {
   EXPECT_EQ(u"F1", model.rows()[0].title);
 }
 
+// A new tab opens in the space on screen. Tagged with any other space it
+// would be the active row of a list that does not draw it.
+TEST_F(SpaceBarTest, TheFakesNewTabOpensInTheActiveSpace) {
+  FakeSidebarModel model;
+  model.AddTab(u"A1", "https://a1.example/", SidebarSection::kToday,
+               /*active=*/true);
+  const SpaceId work = model.AddSpaceForTesting(u"Work", u"", 0);
+  model.SwitchToSpace(work);
+
+  model.NewTab();
+
+  ASSERT_EQ(1u, model.rows().size());
+  EXPECT_EQ(work, model.rows()[0].space);
+  EXPECT_TRUE(model.rows()[0].is_active);
+  EXPECT_EQ(1, model.spaces()[1].open_tab_count);
+}
+
 }  // namespace
 }  // namespace arcium

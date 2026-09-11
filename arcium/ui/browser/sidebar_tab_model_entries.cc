@@ -145,6 +145,9 @@ SidebarRow SidebarTabModel::RowForEntry(const TabEntry& entry) const {
   row.entry_id = entry.id;
   row.section = SectionForKind(entry.kind);
   row.folder_id = entry.folder_id;
+  // The space this window is drawing: rows() asks for that space's entries
+  // and no other's.
+  row.space = active_space();
 
   tabs::TabInterface* tab = LiveTabForEntry(entry.id);
   if (!tab) {

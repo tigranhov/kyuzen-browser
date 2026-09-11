@@ -73,16 +73,24 @@ void FakeSidebarModel::AddTab(const std::u16string& title,
                               const std::string& url,
                               SidebarSection section,
                               bool active) {
+  // The first space, not necessarily the active one: every test and
+  // playground scene that seeds rows this way was written before spaces and
+  // means the first space by it. NewTab, which opens in the space on screen,
+  // names that space instead.
+  InsertTab(title, url, section, active, spaces_.front().id);
+}
+
+void FakeSidebarModel::InsertTab(const std::u16string& title,
+                                 const std::string& url,
+                                 SidebarSection section,
+                                 bool active,
+                                 SpaceId space) {
   SidebarRow row;
   row.title = title;
   row.url = GURL(url);
   row.section = section;
   row.favicon = SwatchFor(url);
-  // The first space, not necessarily the active one: this predates spaces
-  // and every caller of it still means "wherever a row with no space of its
-  // own belongs", which is what every existing test and playground scene
-  // already gets.
-  row.space = spaces_.front().id;
+  row.space = space;
   // Everything outside Today is an entry in the real model, so the fake gives
   // those rows an id too.
   if (section != SidebarSection::kToday) {
@@ -223,7 +231,10 @@ void FakeSidebarModel::MoveTab(int from_index, int to_index) {
 }
 
 void FakeSidebarModel::NewTab() {
-  AddTab(u"New Tab", "about:blank", SidebarSection::kToday, /*active=*/true);
+  // In the space on screen, as the real model's new tab is. Tagged with any
+  // other space it would be the active row of a list that does not draw it.
+  InsertTab(u"New Tab", "about:blank", SidebarSection::kToday,
+            /*active=*/true, ActiveSpaceId());
 }
 
 void FakeSidebarModel::ClearToday() {
