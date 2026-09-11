@@ -28,6 +28,8 @@ source_set("browser") {
     "tab_commands.h",
     "tab_search_service.cc",
     "tab_search_service.h",
+    "tab_selection.cc",
+    "tab_selection.h",
   ]
 
   # Public: this target's own headers include tab_binding.h, archive_store.h

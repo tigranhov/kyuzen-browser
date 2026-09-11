@@ -1,0 +1,122 @@
+Seam: TabStripModel::DetermineNewSelectedIndex's two call sites in
+      chrome/browser/ui/tabs/tab_strip_model.cc, through a new
+      TabStripModelDelegate method.
+Why: closing the active tab must not activate a tab from another space.
+     DetermineNewSelectedIndex is the single choke point behind both close
+     paths, but it returns from six places, so the hook sits at the two
+     call sites instead: one statement each, no control flow moved. The
+     single-tab site removes one tab; the collection site removes a whole
+     block, so it passes the block's length.
+
+     The delegate indirection is forced by the build graph, not chosen.
+     tab_strip_model.cc builds in //chrome/browser/ui/tabs:tab_strip_impl,
+     which is below //chrome/browser/ui, and only //chrome/browser/ui
+     reaches arcium/ (patch 0010). The tab-strip half can only ask the
+     question; BrowserTabStripModelDelegate, which is in //chrome/browser/ui,
+     answers it. The new method is not pure and returns what it was handed,
+     so every other delegate, and every unit test with a stub one, behaves
+     exactly as before. Its default body sits in tab_strip_model_delegate.cc
+     beside GlicUnpinTabsFromAllConversations', the one other method there
+     with a default.
+Delegates to: arcium::NextSelectedIndexInSpace
+
+diff --git a/chrome/browser/ui/browser_tab_strip_model_delegate.cc b/chrome/browser/ui/browser_tab_strip_model_delegate.cc
+index efde295ad4..d8912c49dc 100644
+--- a/chrome/browser/ui/browser_tab_strip_model_delegate.cc
++++ b/chrome/browser/ui/browser_tab_strip_model_delegate.cc
+@@ -55,6 +55,7 @@
+ #include "content/public/browser/web_contents_delegate.h"
+ #include "ui/base/mojom/window_show_state.mojom.h"
+ #include "ui/gfx/range/range.h"
++#include "arcium/ui/browser/tab_selection.h"
+ 
+ namespace chrome {
+ 
+@@ -397,6 +398,15 @@ void BrowserTabStripModelDelegate::OnRemovingAllTabsFromGroups(
+           std::move(callback)));
+ }
+ 
++std::optional<int> BrowserTabStripModelDelegate::AdjustNewSelectedIndex(
++    std::optional<int> chromium_choice,
++    int removed_index,
++    int removed_count) {
++  return arcium::NextSelectedIndexInSpace(browser_->tab_strip_model(),
++                                          chromium_choice, removed_index,
++                                          removed_count);
++}
++
+ ////////////////////////////////////////////////////////////////////////////////
+ // BrowserTabStripModelDelegate, private:
+ 
+diff --git a/chrome/browser/ui/browser_tab_strip_model_delegate.h b/chrome/browser/ui/browser_tab_strip_model_delegate.h
+index 5e3ed31cb0..730008c88f 100644
+--- a/chrome/browser/ui/browser_tab_strip_model_delegate.h
++++ b/chrome/browser/ui/browser_tab_strip_model_delegate.h
+@@ -91,6 +91,9 @@ class BrowserTabStripModelDelegate : public TabStripModelDelegate {
+       base::OnceCallback<void()> callback) override;
+   void GlicUnpinTabsFromAllConversations(
+       base::span<const tabs::TabHandle> tab_handles) override;
++  std::optional<int> AdjustNewSelectedIndex(std::optional<int> chromium_choice,
++                                            int removed_index,
++                                            int removed_count) override;
+ 
+   void CloseFrame();
+ 
+diff --git a/chrome/browser/ui/tabs/tab_strip_model.cc b/chrome/browser/ui/tabs/tab_strip_model.cc
+index 5807c30e14..9fcbaa19a2 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model.cc
+@@ -801,6 +801,9 @@ std::unique_ptr<tabs::TabCollection> TabStripModel::DetachTabCollectionImpl(
+                  collection_start_index + tabs_in_collection.size());
+   std::optional<int> next_selected_index =
+       DetermineNewSelectedIndex(collection);
++  next_selected_index = delegate_->AdjustNewSelectedIndex(
++      next_selected_index, collection_start_index,
++      static_cast<int>(tabs_in_collection.size()));
+ 
+   tabs::TabModel* active_tab_model = GetActiveTabModel();
+   tabs::TabStripModelSelectionState old_selection_model = selection_model_;
+@@ -4563,6 +4566,8 @@ std::unique_ptr<tabs::TabModel> TabStripModel::RemoveTabFromIndexImpl(
+       tab_to_remove->GetGroup();
+   std::optional<int> next_selected_index =
+       DetermineNewSelectedIndex(tab_to_remove);
++  next_selected_index =
++      delegate_->AdjustNewSelectedIndex(next_selected_index, index, 1);
+   const bool removed_tab_is_split = tab_to_remove->IsSplit();
+   if (removed_tab_is_split) {
+     next_selected_index = GetIndexOfTab(
+diff --git a/chrome/browser/ui/tabs/tab_strip_model_delegate.cc b/chrome/browser/ui/tabs/tab_strip_model_delegate.cc
+index 4a285c8493..e3ba5ffebe 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model_delegate.cc
++++ b/chrome/browser/ui/tabs/tab_strip_model_delegate.cc
+@@ -13,3 +13,10 @@ TabStripModelDelegate::NewStripContents::NewStripContents(NewStripContents&&) =
+ 
+ void TabStripModelDelegate::GlicUnpinTabsFromAllConversations(
+     base::span<const tabs::TabHandle> tab_handles) {}
++
++std::optional<int> TabStripModelDelegate::AdjustNewSelectedIndex(
++    std::optional<int> chromium_choice,
++    int removed_index,
++    int removed_count) {
++  return chromium_choice;
++}
+diff --git a/chrome/browser/ui/tabs/tab_strip_model_delegate.h b/chrome/browser/ui/tabs/tab_strip_model_delegate.h
+index 3b7b18efc0..d97e654d50 100644
+--- a/chrome/browser/ui/tabs/tab_strip_model_delegate.h
++++ b/chrome/browser/ui/tabs/tab_strip_model_delegate.h
+@@ -236,6 +236,15 @@ class TabStripModelDelegate {
+   // Unpins the specified tabs from all Glic conversations.
+   virtual void GlicUnpinTabsFromAllConversations(
+       base::span<const tabs::TabHandle> tab_handles);
++
++  // Arcium: may replace the tab the strip activates when the active tab, or
++  // the block of `removed_count` tabs at `removed_index` holding it, leaves.
++  // `chromium_choice` and the answer are post-removal indices. The default
++  // returns `chromium_choice` unchanged.
++  virtual std::optional<int> AdjustNewSelectedIndex(
++      std::optional<int> chromium_choice,
++      int removed_index,
++      int removed_count);
+ };
+ 
+ #endif  // CHROME_BROWSER_UI_TABS_TAB_STRIP_MODEL_DELEGATE_H_
