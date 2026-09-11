@@ -32,6 +32,7 @@ source_set("browser") {
     "//url",
   ]
   deps = [
+    "//arcium/common",
     "//base",
     "//base:i18n",
 
