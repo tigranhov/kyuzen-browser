@@ -84,7 +84,7 @@ TEST_F(SpaceSwitcherTest, ANewTabJoinsTheActiveSpace) {
   EXPECT_EQ(work, switcher->SpaceOfTabAt(0));
 }
 
-// The controller's finding on this branch: TabStripModel sets a new tab's
+// TabStripModel sets a new tab's
 // opener to the active tab automatically for a foreground link-style insert,
 // so this cannot be built by adding a tab in the foreground after switching
 // -- SwitchTo has already made a `work` tab active by then. AddTabWithOpener
@@ -131,12 +131,11 @@ TEST_F(SpaceSwitcherTest, SwitchingRecordsWhereYouWereAndLandsWhereYouLeft) {
 // Isolates SwitchTo's own RecordActiveTab call from the strip observer's:
 // the tab here is appended (and auto-activated, being the only tab) before
 // the switcher exists, so no OnTabStripModelChanged notification for its
-// activation was ever seen. Only SwitchTo's own call can record it, which is
-// what the mutation check in the stage-3a ledger asks for -- the sibling
-// test above cannot show it, because every activation there flows through
-// strip()->ActivateTabAt while the switcher is already observing, and the
-// observer's own recording (ruling A2) satisfies that test's assertions
-// whether or not SwitchTo records anything itself.
+// activation was ever seen, and only SwitchTo's own call can record it. The
+// sibling test above cannot show that, because every activation there flows
+// through strip()->ActivateTabAt while the switcher is already observing,
+// and the observer's own recording satisfies that test's assertions whether
+// or not SwitchTo records anything itself.
 TEST_F(SpaceSwitcherTest, SwitchingRecordsATabTheObserverNeverSawActivated) {
   const SpaceId first = model_.default_space_id();
   const SpaceId work = model_.AddSpace(u"Work");
@@ -203,7 +202,7 @@ TEST_F(SpaceSwitcherTest, MovingATabToAnotherSpaceRetagsItAndFollowsIt) {
   EXPECT_EQ(work, switcher->active_space());
 }
 
-// Review finding, Important 2: MoveTabToSpace used to call SwitchTo on the
+// MoveTabToSpace used to call SwitchTo on the
 // target, which lands on whatever that space already remembers as its last
 // active tab -- a different tab than the one that just moved, so the page
 // the user was looking at would disappear behind it. Moving the active tab
@@ -233,7 +232,7 @@ TEST_F(SpaceSwitcherTest,
   EXPECT_EQ(KeyOf(a1->GetContents()), model_.GetSpace(work)->last_active_tab);
 }
 
-// Review finding, Important 1 (chained adoption): activating another
+// Chained adoption: activating another
 // space's tab adopts that space without recording which tab was adopted, so
 // if the window then adopts a third space before the user ever switches
 // back, the second space's remembered tab is stale -- SwitchTo lands on
@@ -268,7 +267,7 @@ TEST_F(SpaceSwitcherTest, ChainedAdoptionKeepsEachSpacesPlace) {
   EXPECT_EQ(strip()->GetIndexOfTab(b1), strip()->active_index());
 }
 
-// Review finding, Important 1 (stale landing): SwitchTo's own landing
+// A stale landing: SwitchTo's own landing
 // activation used to be suppressed by `switching_`, so the tab a switch
 // lands on -- an existing open tab or a freshly opened blank one -- was
 // never recorded as the space's last active tab.
@@ -298,8 +297,8 @@ TEST_F(SpaceSwitcherTest, SwitchingIntoAnEmptySpaceRecordsTheBlankTab) {
             model_.GetSpace(work)->last_active_tab);
 }
 
-// Ruling A4 in the stage-3a ledger: the fallback in OnArciumModelChanged is
-// posted rather than run inline, because RecordActiveTab can mutate the
+// The fallback in OnArciumModelChanged is posted rather than run inline,
+// because RecordActiveTab can mutate the
 // model from inside a strip observer callback and a synchronous SwitchTo
 // there would re-enter the strip while its own ReentrancyCheck is held.
 // Right after the space vanishes the switcher still names it -- the posted
@@ -365,7 +364,7 @@ TEST_F(SpaceSwitcherTest, ATabThatSurvivesTheDeleteJoinsTheLandingSpace) {
   EXPECT_EQ(work, switcher->SpaceOfTabAt(strip()->GetIndexOfTab(d1)));
 }
 
-// Review finding, Minor 2: DeleteSpace's close loop and its re-tag loop used
+// DeleteSpace's close loop and its re-tag loop used
 // to pick tabs two different ways -- the close loop by SpaceOfTabAt, which
 // reads a claimed entry's space first, the re-tag loop by the tab's raw tag.
 // A pinned tab whose entry has moved into the doomed space while the tab's
@@ -380,9 +379,9 @@ TEST_F(SpaceSwitcherTest,
   const SpaceId doomed = model_.AddSpace(u"Doomed");
   auto switcher = MakeSwitcher();
   AddTabInSpace(GURL("https://a1.example/"), first);
-  // Tagged `stale`, but its entry (bound below) claims `doomed` -- the
-  // mismatch a pin carried into another space would leave behind, since
-  // moving a pin retags the entry and not the tab itself.
+  // Tagged `stale`, but its entry (bound below) claims `doomed`: a tab's own
+  // tag and its entry's space are separate facts, and the delete goes by the
+  // entry.
   tabs::TabInterface* pinned =
       AddTabInSpace(GURL("https://pin.example/"), stale);
   const EntryId entry = model_.AddEntry(doomed, EntryKind::kPinned,

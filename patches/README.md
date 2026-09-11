@@ -55,7 +55,8 @@ GN wiring with no call of its own, following the wiring-before-target order `012
 Stage 3a. `0155` hooks the strip-wide tab commands in the same function `0090` hooks for
 `IDC_NEW_TAB`, in hunks of its own: none of its lines, the include among them, sits inside
 `0090`'s context, so both already-applied checks hold on every `scripts/sync` run.
-`0160` hooks the tab the strip activates after its active tab closes. It asks through the
+`0160` hooks the tab the strip activates when its active tab is removed, by a close or by a group
+or split being detached. It asks through the
 delegate because `tab_strip_model.cc` builds below the only target that reaches `arcium/`; the
 new method returns what it is handed, so every other delegate behaves as before.
 

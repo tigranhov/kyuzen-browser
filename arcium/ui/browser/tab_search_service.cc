@@ -111,12 +111,14 @@ int StoreFetchLimit(int limit,
 // Live tabs first, then favourites, then pinned entries. That order is the
 // stable-sort tie-break within one score, and it is the sidebar's own order.
 //
-// `reachable`, when non-null, collects every URL the user can already reach in
-// this window — matching or not — so the archive half can drop rows that would
-// only offer to reopen something already in front of them. It is built from
-// all live tabs and all entries rather than from the matches, because a tab
-// that misses this query is still a tab the user has;
-// ANonMatchingTabOrEntrySuppressesItsArchivedRow is what says so.
+// `reachable`, when non-null, collects every URL the user can already reach
+// from this window, in any space — matching or not — so the archive half can
+// drop rows that would only offer to reopen something already there. It is
+// built from every tab in the strip and every entry of every space rather than
+// from the matches, because a tab that misses this query is still a tab the
+// user has; ANonMatchingTabOrEntrySuppressesItsArchivedRow is what says so. An
+// archived row whose URL matches another space's entry is dropped the same
+// way: search finds that entry itself.
 //
 // Only the archive half reads it, so SearchLocal — the synchronous,
 // per-keystroke path — passes null and pays neither the GURL copy nor the tree

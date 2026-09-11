@@ -252,10 +252,10 @@ class SidebarModel {
   // Destroys the space. What happens to its open tabs and entries is
   // SpaceSwitcher's rule, not this interface's.
   virtual void DeleteSpace(SpaceId id) = 0;
-  // Drags a tab onto another space's dot.
+  // Moves a tab to another space: the row menu's "Move to space".
   virtual void MoveTabToSpace(int tab_index, SpaceId space_id) = 0;
-  // Drags a favourite or pinned entry onto another space's dot. Moving the
-  // one you are looking at takes you with it, as Zen does.
+  // Moves a favourite or pinned entry to another space, from the same menu.
+  // Moving the one you are looking at takes you with it, as Zen does.
   virtual void MoveEntryToSpace(EntryId id, SpaceId space_id) = 0;
 
   // How long a Today tab in the active space may sit idle before it is

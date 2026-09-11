@@ -2,11 +2,13 @@ Seam: TabStripModel::DetermineNewSelectedIndex's two call sites in
       chrome/browser/ui/tabs/tab_strip_model.cc, through a new
       TabStripModelDelegate method.
 Why: closing the active tab must not activate a tab from another space.
-     DetermineNewSelectedIndex is the single choke point behind both close
-     paths, but it returns from six places, so the hook sits at the two
-     call sites instead: one statement each, no control flow moved. The
-     single-tab site removes one tab; the collection site removes a whole
-     block, so it passes the block's length.
+     DetermineNewSelectedIndex is the single choke point behind both of
+     the strip's removals -- the single-tab one every close goes through,
+     and the block one DetachTabGroupForInsertion and
+     DetachSplitTabForInsertion use to move a group or a split -- but it
+     returns from six places, so the hook sits at the two call sites
+     instead: one statement each, no control flow moved. The block site
+     passes the block's length.
 
      The delegate indirection is forced by the build graph, not chosen.
      tab_strip_model.cc builds in //chrome/browser/ui/tabs:tab_strip_impl,

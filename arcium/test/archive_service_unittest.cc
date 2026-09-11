@@ -514,7 +514,7 @@ TEST_F(ArchiveServiceTest, ARowParkedByClearIsWrittenWhenTheTabActuallyGoes) {
   EXPECT_EQ(0u, service_->pending_archive_count_for_testing());
 }
 
-// Review finding, Important 1. A row Clear parks stays keyed to the space it
+// A row Clear parks stays keyed to the space it
 // was read for, and used to be written wherever it sat once the held close
 // eventually completed -- even if that space had been deleted in the
 // meantime, through RemoveSpaceRows, while the close was still waiting on

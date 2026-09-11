@@ -25,7 +25,7 @@
 #include "ui/base/page_transition_types.h"
 #include "url/gurl.h"
 
-// Shared across Task 4's own test and later ones (5, 8, 9): kept general and
+// Shared by every test that needs tabs in known spaces: kept general and
 // header-only so nobody re-derives BrowserWithTestWindowTest::AddTab's
 // append-at-index-0-in-the-foreground quirk on their own.
 //

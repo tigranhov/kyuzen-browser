@@ -117,8 +117,8 @@ void SpaceSwitcher::DeleteSpace(SpaceId id) {
   // beforeunload prompt. The handles asked to close are remembered by
   // identity, not by tag: a tab bound to one of this space's entries is
   // chosen here through SpaceOfTabAt, which reads the entry's space first,
-  // and a pinned tab can carry a stale tag of its own naming a different,
-  // still-surviving space (moving a pin retags the entry, never the tab) --
+  // and a pinned tab's own tag need not name that space -- the entry decides
+  // where the tab is drawn, and the tag is only what an unpin falls back on --
   // the re-tag loop below has to catch exactly the tabs this loop tried to
   // close, not whichever ones still wear the deleted space's raw tag.
   std::vector<tabs::TabHandle> asked_to_close;

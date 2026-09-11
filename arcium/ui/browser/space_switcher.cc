@@ -155,7 +155,7 @@ void SpaceSwitcher::SwitchTo(SpaceId id) {
 
   // The tab to land on: the one left behind, then the space's first open
   // tab, then a new blank one. A space is never left showing another
-  // space's page, which is the whole of §4.3's rule.
+  // space's page, which is the whole of §4.4's rule.
   //
   // The activation below re-enters OnTabStripModelChanged, but active_space_
   // already names `id` by then, so the landing tab -- one of `id`'s own open
