@@ -18,6 +18,7 @@
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
 #include "arcium/ui/sidebar/section_divider_view.h"
+#include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
@@ -46,9 +47,13 @@
 #include "ui/gfx/codec/png_codec.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/image/image_skia_rep.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/image_view.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/fill_layout.h"
@@ -65,6 +70,16 @@
 
 namespace arcium {
 namespace {
+
+// The alpha channel at a favicon image's centre, which is where the fake
+// model's swatch favicon paints solid regardless of which colour the URL
+// hashed to. Dimming a cold row lowers exactly this, so comparing it is
+// asking the view what it painted rather than reimplementing the blend to
+// check it against itself.
+SkAlpha FaviconCenterAlpha(const gfx::ImageSkia& image) {
+  const SkBitmap& bitmap = image.GetRepresentation(1.0f).GetBitmap();
+  return SkColorGetA(bitmap.getColor(bitmap.width() / 2, bitmap.height() / 2));
+}
 
 // Keeps whatever RowContextMenu a right-click builds, instead of letting it
 // spin a nested native menu loop that a unit test can never get out of. What
@@ -983,6 +998,29 @@ TEST_F(SidebarViewsTest, TheMenuForAFavouriteTile) {
             MenuLabels(capture.menu()->menu()));
 }
 
+// A favourite carries no title of its own, so its icon is the only place a
+// cold entry can be told apart from a loaded one -- the same reduced-opacity
+// rule TabRowView's favicon follows. Same URL on both rows for the same
+// reason as AColdRowsFaviconIsNotTheSameImageAsALoadedRows: it isolates
+// is_cold as the only thing that can make the two tiles differ.
+TEST_F(SidebarViewsTest, AFavouriteTileForAColdEntryIsDimmed) {
+  model_.AddTab(u"Warm", "https://shared.example/", SidebarSection::kFavorites,
+                false);
+  model_.AddColdEntry(u"Cold", "https://shared.example/",
+                      SidebarSection::kFavorites);
+  auto* grid =
+      contents_->AddChildView(std::make_unique<FavoritesGridView>(&model_));
+  grid->SetRows(model_.rows());
+  ASSERT_EQ(2u, grid->children().size());
+
+  const SkAlpha warm_alpha = FaviconCenterAlpha(
+      grid->tile_at_for_testing(0)->GetImage(views::Button::STATE_NORMAL));
+  const SkAlpha cold_alpha = FaviconCenterAlpha(
+      grid->tile_at_for_testing(1)->GetImage(views::Button::STATE_NORMAL));
+  EXPECT_EQ(SK_AlphaOPAQUE, warm_alpha);
+  EXPECT_LT(cold_alpha, warm_alpha);
+}
+
 // The field goes up bounded to the tile's row, not the tile: the grid is
 // its own context menu controller, so the closure the menu's Rename item runs
 // has to find the right tile by the index it was built for.
@@ -1358,6 +1396,57 @@ TEST_F(SidebarViewsTest, CloseTabFromAPinnedRowsMenuLeavesTheEntry) {
   EXPECT_TRUE(Choose(capture.menu()->menu(), u"Close tab"));
   ASSERT_EQ(1u, model_.rows().size());
   EXPECT_TRUE(model_.rows()[0].is_cold);
+}
+
+// A cold row -- one with no open tab -- draws its title in a colour a loaded
+// row's never uses, so the two are tellable apart without relying on
+// background state like hover or being active.
+TEST_F(SidebarViewsTest, AColdRowsTitleIsDimmedAndALoadedRowsIsNot) {
+  model_.AddTab(u"Warm", "https://one.example/", SidebarSection::kPinned,
+                false);
+  model_.AddColdEntry(u"Cold", "https://two.example/", SidebarSection::kPinned);
+  MakeList(SidebarSection::kPinned);
+  Refresh();
+
+  TabRowView* warm = views::AsViewClass<TabRowView>(list_->children()[0]);
+  TabRowView* cold = views::AsViewClass<TabRowView>(list_->children()[1]);
+  ASSERT_TRUE(warm);
+  ASSERT_TRUE(cold);
+  ASSERT_FALSE(warm->row().is_cold);
+  ASSERT_TRUE(cold->row().is_cold);
+
+  ASSERT_TRUE(warm->title_for_testing()->GetRequestedEnabledColor());
+  ASSERT_TRUE(cold->title_for_testing()->GetRequestedEnabledColor());
+  EXPECT_EQ(*warm->title_for_testing()->GetRequestedEnabledColor(),
+            kColorArciumRowText);
+  EXPECT_EQ(*cold->title_for_testing()->GetRequestedEnabledColor(),
+            kColorArciumRowTextCold);
+}
+
+// The favicon half of the same rule. Both rows are seeded from the same URL
+// on purpose -- the fake's swatch favicon is a hash of it -- so is_cold is
+// the only thing left that can make what each row paints differ.
+TEST_F(SidebarViewsTest, AColdRowsFaviconIsNotTheSameImageAsALoadedRows) {
+  model_.AddTab(u"Warm", "https://shared.example/", SidebarSection::kPinned,
+                false);
+  model_.AddColdEntry(u"Cold", "https://shared.example/",
+                      SidebarSection::kPinned);
+  MakeList(SidebarSection::kPinned);
+  Refresh();
+
+  TabRowView* warm = views::AsViewClass<TabRowView>(list_->children()[0]);
+  TabRowView* cold = views::AsViewClass<TabRowView>(list_->children()[1]);
+  ASSERT_TRUE(warm);
+  ASSERT_TRUE(cold);
+
+  const SkAlpha warm_alpha =
+      FaviconCenterAlpha(warm->favicon_for_testing()->GetImage());
+  const SkAlpha cold_alpha =
+      FaviconCenterAlpha(cold->favicon_for_testing()->GetImage());
+  // Opaque before dimming, so anything less on the cold row is the reduction
+  // itself, not a difference in what the two rows happened to be seeded with.
+  EXPECT_EQ(SK_AlphaOPAQUE, warm_alpha);
+  EXPECT_LT(cold_alpha, warm_alpha);
 }
 
 TEST_F(SidebarViewsTest, UnpinFromAPinnedRowsMenu) {

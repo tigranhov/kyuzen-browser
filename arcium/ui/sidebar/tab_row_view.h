@@ -88,6 +88,12 @@ class TabRowView : public views::Button,
   // The entry the open edit belongs to; invalid when nothing is being renamed.
   EntryId renaming_entry_id() const { return renaming_entry_id_; }
 
+  // What UpdateVisuals last set the title's colour and the favicon's image
+  // to, so a test can check the cold-row dimming without a mock standing in
+  // for either.
+  views::Label* title_for_testing() { return title_; }
+  views::ImageView* favicon_for_testing() { return favicon_; }
+
   // views::Button / View:
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;

@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "arcium/browser/model/reorder_index.h"
+#include "arcium/ui/sidebar/cold_row_dimming.h"
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
@@ -91,7 +92,11 @@ void FavoritesGridView::SetRows(const std::vector<SidebarRow>& rows) {
   for (size_t i = 0; i < mine.size(); ++i) {
     const SidebarRow& row = *mine[i];
     rows_.push_back(row);
-    tiles_[i]->SetImageModel(views::Button::STATE_NORMAL, row.favicon);
+    // Favourites carry no title of their own, so the icon is the only place a
+    // cold one can be told apart from a loaded one at a glance.
+    tiles_[i]->SetImageModel(
+        views::Button::STATE_NORMAL,
+        row.is_cold ? DimColdFavicon(row.favicon) : row.favicon);
     tiles_[i]->SetTooltipText(row.title);
     tiles_[i]->GetViewAccessibility().SetName(row.title);
     tiles_[i]->SetCallback(base::BindRepeating(

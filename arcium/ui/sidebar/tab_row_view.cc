@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "arcium/ui/sidebar/cold_row_dimming.h"
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/row_drag_image.h"
@@ -137,7 +138,8 @@ void TabRowView::SetRow(const SidebarRow& row) {
 }
 
 void TabRowView::UpdateVisuals() {
-  favicon_->SetImage(row_.favicon);
+  favicon_->SetImage(row_.is_cold ? DimColdFavicon(row_.favicon)
+                                  : row_.favicon);
   favicon_->SetVisible(!row_.is_loading);
   throbber_->SetVisible(row_.is_loading);
   if (row_.is_loading) {
@@ -146,7 +148,11 @@ void TabRowView::UpdateVisuals() {
     throbber_->Stop();
   }
   title_->SetText(row_.title);
+  // is_active and is_cold never both hold -- an entry with a focused tab is
+  // never one with no tab at all -- but the active check still goes first, so
+  // that invariant is never load-bearing here.
   title_->SetEnabledColor(row_.is_active ? kColorArciumRowTextActive
+                          : row_.is_cold ? kColorArciumRowTextCold
                                          : kColorArciumRowText);
   if (row_.is_audible || row_.is_muted) {
     audio_->SetImage(

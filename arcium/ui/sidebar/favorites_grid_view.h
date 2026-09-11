@@ -63,6 +63,11 @@ class FavoritesGridView : public views::View,
   // Where the gap indicator sits, or nothing when no drag is over the grid.
   // An index into the tiles; tile count means "after the last one".
   std::optional<size_t> drop_index_for_testing() const { return drop_index_; }
+  // The tile drawn for `rows()[index]`, so a test can ask what it painted --
+  // the same reason TabRowView exposes its own children this way.
+  views::ImageButton* tile_at_for_testing(size_t index) {
+    return tiles_[index];
+  }
 
   // views::View:
   void Layout(PassKey) override;
