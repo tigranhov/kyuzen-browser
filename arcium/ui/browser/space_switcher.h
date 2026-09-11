@@ -9,6 +9,7 @@
 
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/entry_id.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -55,12 +56,21 @@ class SpaceSwitcher : public TabStripModelObserver,
   void SwitchTo(SpaceId id);
   SpaceId SpaceOfTabAt(int index) const;
   bool IsInActiveSpace(int index) const;
+  // Whether a pinned or favourite entry claims the tab at `index`. Such a
+  // tab's place is its entry's, not the strip's, so strip-wide commands that
+  // move or sweep Today tabs leave it alone.
+  bool IsClaimedByEntryAt(int index) const;
   // Open tabs of `space`, in the order the sidebar draws them: favourites,
   // then pinned entries by position, then the tabs no entry claims in strip
   // order. Cold entries have no tab and are not here.
   std::vector<int> OpenTabsInSidebarOrder(SpaceId space) const;
   // A blank foreground tab in the active space. The strip index it landed at.
+  // Runs the blank-tab callback, if one is set, once the tab is on screen.
   int OpenBlankTab();
+  // What to offer over a blank tab once OpenBlankTab has put it on screen --
+  // a switch to an empty space, or a close of a space's last tab, both land
+  // there. May be left unset, and then a blank tab is simply blank.
+  void SetBlankTabCallback(base::RepeatingClosure callback);
   void MoveTabToSpace(int index, SpaceId space);
   // Moves the persistent entry to `space` and re-tags its own tab, if it has
   // one, so the tab's tag agrees with its entry after a later unpin falls
@@ -126,6 +136,7 @@ class SpaceSwitcher : public TabStripModelObserver,
   // every fixture that does not set one. See SetArchiveService.
   raw_ptr<ArchiveService> archive_service_ = nullptr;
   SpaceId active_space_;
+  base::RepeatingClosure blank_tab_callback_;
   base::ObserverList<Observer> observers_;
   // Last: anything posted through this must run after every other member is
   // already constructed.

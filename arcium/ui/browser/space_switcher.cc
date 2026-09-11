@@ -76,6 +76,14 @@ bool SpaceSwitcher::IsInActiveSpace(int index) const {
   return SpaceOfTabAt(index) == active_space_;
 }
 
+bool SpaceSwitcher::IsClaimedByEntryAt(int index) const {
+  if (!tab_strip_model_ || index < 0 || index >= tab_strip_model_->count()) {
+    return false;
+  }
+  return IsClaimedByEntry(*model_, *binding_,
+                          tab_strip_model_->GetTabAtIndex(index)->GetHandle());
+}
+
 std::vector<int> SpaceSwitcher::OpenTabsInSidebarOrder(SpaceId space) const {
   std::vector<int> result;
   if (!tab_strip_model_) {
@@ -197,7 +205,18 @@ int SpaceSwitcher::OpenBlankTab() {
   // being left, not the one this blank tab is meant for.
   SetSpaceTag(contents.get(), active_space_);
   tab_strip_model_->AppendWebContents(std::move(contents), /*foreground=*/true);
-  return tab_strip_model_->active_index();
+  const int index = tab_strip_model_->active_index();
+  // After the append has finished rather than from the strip's observer
+  // callback: whatever the callback shows sits over a tab that is already
+  // on screen.
+  if (blank_tab_callback_) {
+    blank_tab_callback_.Run();
+  }
+  return index;
+}
+
+void SpaceSwitcher::SetBlankTabCallback(base::RepeatingClosure callback) {
+  blank_tab_callback_ = std::move(callback);
 }
 
 void SpaceSwitcher::MoveTabToSpace(int index, SpaceId space) {

@@ -52,6 +52,14 @@ GN wiring with no call of its own, following the wiring-before-target order `012
 | `0145-gn-navigation-throttles-arcium.patch` | `chrome/browser/BUILD.gn` `source_set("core")` — that target only | nothing — GN wiring for 0150 |
 | `0150-navigation-throttle-home-boundary.patch` | `CreateAndAddChromeThrottlesForNavigation` in `chrome/browser/chrome_content_browser_client_navigation_throttles.cc`, beside `web_app::TabbedWebAppNavigationThrottle` | `arcium::HomeBoundaryThrottle::MaybeCreateAndAdd` |
 
+Stage 3a. `0155` hooks the strip-wide tab commands in the same function `0090` hooks for
+`IDC_NEW_TAB`, in hunks of its own: none of its lines, the include among them, sits inside
+`0090`'s context, so both already-applied checks hold on every `scripts/sync` run.
+
+| Patch | Seam | Delegates to |
+|---|---|---|
+| `0155-tab-commands-space.patch` | `BrowserCommandController::HandleCommandWithDisposition` in `chrome/browser/ui/browser_command_controller.cc`: next and previous, the Ctrl+Tab cycle, Cmd+1..9, move, close, close-others and close-to-the-right | `arcium::HandleTabCommand` |
+
 ## Monthly rebase routine
 
 1. Find the new stable tag on https://chromiumdash.appspot.com/releases?platform=Mac
