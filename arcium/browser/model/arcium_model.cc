@@ -505,6 +505,12 @@ void ArciumModel::ReplaceAll(std::vector<Space> spaces,
   std::sort(spaces_.begin(), spaces_.end(), [](const Space& a, const Space& b) {
     return a.position < b.position;
   });
+  // Renumbered too: a gap a hand-edited file left would let a later
+  // AddSpace, which takes position size(), sort ahead of a loaded space on
+  // the next load.
+  for (size_t i = 0; i < spaces_.size(); ++i) {
+    spaces_[i].position = static_cast<int>(i);
+  }
   if (!GetSpace(last_active_space_)) {
     last_active_space_ = SpaceId();
   }

@@ -349,6 +349,25 @@ TEST_F(ArciumModelTest, GetSpaceFindsASpaceAndRefusesAnUnknownId) {
   EXPECT_FALSE(model_.GetSpace(SpaceId()));
 }
 
+// A hand-edited file can leave gaps between positions. ReplaceAll closes
+// them, so a space added afterwards, which takes position size(), cannot sort
+// ahead of a loaded one on the next load.
+TEST_F(ArciumModelTest, ReplaceAllRenumbersTheLoadedSpaces) {
+  Space low;
+  low.id = SpaceId::Generate();
+  low.position = 0;
+  Space high;
+  high.id = SpaceId::Generate();
+  high.position = 5;
+  model_.ReplaceAll({high, low}, {}, {});
+
+  ASSERT_EQ(2u, model_.spaces().size());
+  EXPECT_EQ(low.id, model_.spaces()[0].id);
+  EXPECT_EQ(0, model_.spaces()[0].position);
+  EXPECT_EQ(high.id, model_.spaces()[1].id);
+  EXPECT_EQ(1, model_.spaces()[1].position);
+}
+
 TEST_F(ArciumModelTest, ReplaceAllWithNoSpacesStillLeavesOneUsableSpace) {
   model_.ReplaceAll({}, {}, {});
   EXPECT_EQ(1u, model_.spaces().size());
