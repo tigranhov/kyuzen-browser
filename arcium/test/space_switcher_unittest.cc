@@ -48,19 +48,17 @@ class SpaceSwitcherTest : public BrowserWithTestWindowTest {
         strip(), profile(), GURL("https://opened.example/"), opener);
   }
 
-  // Installs a handler that declines the next close it is asked about, so a
-  // tab DeleteSpace tries to close stays open exactly as a page behind an
-  // unanswered beforeunload dialog would. `tab` names the tab this is meant
-  // to hold open, but the handler itself is asked about whichever contents
-  // is actually closing -- every test here only ever asks DeleteSpace to
-  // close the tabs of the one space being deleted, so that is always `tab`.
-  // The real dialog cannot run in this fixture (PerformanceManager CHECK);
-  // DecliningUnloadHandler stands in for it. The caller must call
-  // set_intercept(false) on the return value once it is done asserting, so
-  // TearDown can close what is left.
-  arcium::test::DecliningUnloadHandler* HoldTabOpen(
-      [[maybe_unused]] tabs::TabInterface* tab) {
+  // Installs a handler that declines closes of `tab` only, so a tab
+  // DeleteSpace tries to close stays open exactly as a page behind an
+  // unanswered beforeunload dialog would, while any other tab DeleteSpace
+  // closes in the same call goes normally. The real dialog cannot run in
+  // this fixture (PerformanceManager CHECK); DecliningUnloadHandler stands
+  // in for it. The caller must declare a
+  // arcium::test::ScopedUnloadHandlerRelease on the return value once it is
+  // done asserting, so TearDown can close what is left.
+  arcium::test::DecliningUnloadHandler* HoldTabOpen(tabs::TabInterface* tab) {
     auto handler = std::make_unique<arcium::test::DecliningUnloadHandler>();
+    handler->set_target(tab->GetContents());
     arcium::test::DecliningUnloadHandler* handler_ptr = handler.get();
     UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
     return handler_ptr;
@@ -360,10 +358,43 @@ TEST_F(SpaceSwitcherTest, ATabThatSurvivesTheDeleteJoinsTheLandingSpace) {
   switcher->SwitchTo(work);
 
   arcium::test::DecliningUnloadHandler* handler = HoldTabOpen(d1);
+  arcium::test::ScopedUnloadHandlerRelease release(handler);
   switcher->DeleteSpace(doomed);
   ASSERT_EQ(3, strip()->count());  // d1 refused to close.
   EXPECT_EQ(work, switcher->SpaceOfTabAt(strip()->GetIndexOfTab(d1)));
-  handler->set_intercept(false);
+}
+
+// Review finding, Minor 2: DeleteSpace's close loop and its re-tag loop used
+// to pick tabs two different ways -- the close loop by SpaceOfTabAt, which
+// reads a claimed entry's space first, the re-tag loop by the tab's raw tag.
+// A pinned tab whose entry has moved into the doomed space while the tab's
+// own tag still names a different, surviving space is picked up by the close
+// loop and was missed by the old re-tag loop, so a declined close for it fell
+// back to its stale tag's space -- `stale` here -- rather than the space the
+// window actually landed on.
+TEST_F(SpaceSwitcherTest,
+       ASurvivingPinnedTabWithAStaleTagJoinsTheLandingSpace) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId stale = model_.AddSpace(u"Stale");
+  const SpaceId doomed = model_.AddSpace(u"Doomed");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  // Tagged `stale`, but its entry (bound below) claims `doomed` -- the
+  // mismatch a pin carried into another space would leave behind, since
+  // moving a pin retags the entry and not the tab itself.
+  tabs::TabInterface* pinned =
+      AddTabInSpace(GURL("https://pin.example/"), stale);
+  const EntryId entry = model_.AddEntry(doomed, EntryKind::kPinned,
+                                        GURL("https://pin.example/"), u"P");
+  binding_.Bind(entry, pinned->GetHandle());
+  ASSERT_EQ(first, switcher->active_space());
+  ASSERT_EQ(doomed, switcher->SpaceOfTabAt(strip()->GetIndexOfTab(pinned)));
+
+  arcium::test::DecliningUnloadHandler* handler = HoldTabOpen(pinned);
+  arcium::test::ScopedUnloadHandlerRelease release(handler);
+  switcher->DeleteSpace(doomed);
+  ASSERT_EQ(2, strip()->count());  // pinned refused to close.
+  EXPECT_EQ(first, switcher->SpaceOfTabAt(strip()->GetIndexOfTab(pinned)));
 }
 
 TEST_F(SpaceSwitcherTest, TheLastSpaceCannotBeDeleted) {
@@ -402,10 +433,10 @@ TEST_F(SpaceSwitcherTest, DeletingTheActiveSpaceMovesToItsNeighbourFirst) {
   switcher->SwitchTo(doomed);
 
   arcium::test::DecliningUnloadHandler* handler = HoldTabOpen(d1);
+  arcium::test::ScopedUnloadHandlerRelease release(handler);
   switcher->DeleteSpace(doomed);
   EXPECT_EQ(third, switcher->active_space());
   EXPECT_EQ(third, switcher->SpaceOfTabAt(strip()->GetIndexOfTab(d1)));
-  handler->set_intercept(false);
 }
 
 }  // namespace

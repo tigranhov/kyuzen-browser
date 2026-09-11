@@ -46,8 +46,8 @@
 namespace arcium {
 namespace {
 
-// Moved to arcium/test/space_test_util.h, which SpaceSwitcherTest's own
-// HoldTabOpen also needs: the production seam a close can be declined at.
+// The production seam a close can be declined at, shared with
+// SpaceSwitcherTest's own HoldTabOpen.
 using arcium::test::DecliningUnloadHandler;
 
 // BrowserWithTestWindowTest::AddTab inserts at index 0 and activates, so the
@@ -448,6 +448,7 @@ TEST_F(ArchiveServiceTest, AClearTheUserDoesNotConfirmWritesNoRow) {
   auto handler = std::make_unique<DecliningUnloadHandler>();
   DecliningUnloadHandler* handler_ptr = handler.get();
   UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  arcium::test::ScopedUnloadHandlerRelease release(handler_ptr);
   AddTab(browser(), GURL("https://today.example/"));
 
   service_->ArchiveAllToday();
@@ -464,9 +465,6 @@ TEST_F(ArchiveServiceTest, AClearTheUserDoesNotConfirmWritesNoRow) {
   ASSERT_EQ(1, strip()->count());
   EXPECT_TRUE(archive_.ListRecent(model_.default_space_id(), 10).empty());
   EXPECT_EQ(1u, service_->pending_archive_count_for_testing());
-
-  // TearDown closes every tab; let them go.
-  handler_ptr->set_intercept(false);
 }
 
 // I2, the other half — the regression round 1 introduced. ArchiveAndClose
@@ -487,6 +485,7 @@ TEST_F(ArchiveServiceTest, ARowParkedByClearIsWrittenWhenTheTabActuallyGoes) {
   auto handler = std::make_unique<DecliningUnloadHandler>();
   DecliningUnloadHandler* handler_ptr = handler.get();
   UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  arcium::test::ScopedUnloadHandlerRelease release(handler_ptr);
   // A pinned tab keeps the strip from emptying when the Today tab goes;
   // pinned tabs are not Today tabs, so Clear leaves it alone.
   AddTab(browser(), GURL("https://today.example/"));
@@ -515,6 +514,53 @@ TEST_F(ArchiveServiceTest, ARowParkedByClearIsWrittenWhenTheTabActuallyGoes) {
   EXPECT_EQ(0u, service_->pending_archive_count_for_testing());
 }
 
+// Review finding, Important 1. A row Clear parks stays keyed to the space it
+// was read for, and used to be written wherever it sat once the held close
+// eventually completed -- even if that space had been deleted in the
+// meantime, through RemoveSpaceRows, while the close was still waiting on
+// this very handler. Deleting a space must forget any row still parked for
+// it, before the store's own rows for that space are dropped, or the row
+// comes back the moment the user answers the dialog. Called directly on
+// `service_` rather than through SpaceSwitcher::DeleteSpace: this fixture
+// builds no SpaceSwitcher, and what is under test is ArchiveService's own
+// bookkeeping (a parked row is not one of the store's rows and needs its own
+// forgetting), not SpaceSwitcher's close-and-retag loop, which
+// SpaceSwitcherTest already covers.
+TEST_F(ArchiveServiceTest, DeletingASpaceForgetsARowStillParkedForIt) {
+  auto handler = std::make_unique<DecliningUnloadHandler>();
+  DecliningUnloadHandler* handler_ptr = handler.get();
+  UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  arcium::test::ScopedUnloadHandlerRelease release(handler_ptr);
+  // A pinned tab keeps the strip from emptying when the Today tab goes;
+  // pinned tabs are not Today tabs, so Clear leaves it alone.
+  AddTab(browser(), GURL("https://today.example/"));
+  AddTab(browser(), GURL("https://pinned.example/"));
+  sidebar_model_->PinTab(0);
+  ASSERT_EQ(2, strip()->count());
+
+  service_->ArchiveAllToday();
+  task_environment()->RunUntilIdle();
+  ASSERT_EQ(2, strip()->count());  // Held: nothing has closed yet.
+  ASSERT_EQ(1u, service_->pending_archive_count_for_testing());
+
+  // The space is deleted while the close is still held -- what
+  // SpaceSwitcher::DeleteSpace does before any tab it could not close has
+  // even been re-tagged.
+  service_->RemoveSpaceRows(model_.default_space_id());
+  EXPECT_EQ(0u, service_->pending_archive_count_for_testing());
+
+  // The user answers the dialog and the close completes, arbitrarily later
+  // than the delete above.
+  handler_ptr->set_intercept(false);
+  const int today_index = strip()->GetIndexOfTab(HandleAt(1).Get());
+  ASSERT_NE(TabStripModel::kNoTab, today_index);
+  strip()->CloseWebContentsAt(today_index, TabCloseTypes::CLOSE_USER_GESTURE);
+  task_environment()->RunUntilIdle();
+
+  ASSERT_EQ(1, strip()->count());
+  EXPECT_TRUE(archive_.ListRecent(model_.default_space_id(), 10).empty());
+}
+
 // I2, the third half. A parked row used to wait against its tab for the rest
 // of that tab's life, so a Clear the user declined would be honoured hours
 // later by a close that had nothing to do with it: the user cancels the
@@ -526,6 +572,7 @@ TEST_F(ArchiveServiceTest, AClearTheUserDeclinesDoesNotFollowTheTabAround) {
   auto handler = std::make_unique<DecliningUnloadHandler>();
   DecliningUnloadHandler* handler_ptr = handler.get();
   UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  arcium::test::ScopedUnloadHandlerRelease release(handler_ptr);
   // The coalesced UI update is what carries a navigation to TabChangedAt, and
   // this test asserts on what that delivers rather than on the wall clock.
   browser()->set_update_ui_immediately_for_testing();
@@ -569,6 +616,7 @@ TEST_F(ArchiveServiceTest, AParkedRowIsStampedWhenTheTabActuallyGoes) {
   auto handler = std::make_unique<DecliningUnloadHandler>();
   DecliningUnloadHandler* handler_ptr = handler.get();
   UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  arcium::test::ScopedUnloadHandlerRelease release(handler_ptr);
   AddTab(browser(), GURL("https://today.example/"));
   AddTab(browser(), GURL("https://pinned.example/"));
   sidebar_model_->PinTab(0);
@@ -609,6 +657,7 @@ TEST_F(ArchiveServiceTest, ClearIsAUserGestureWithOrWithoutAnArchive) {
   auto handler = std::make_unique<DecliningUnloadHandler>();
   DecliningUnloadHandler* handler_ptr = handler.get();
   UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  arcium::test::ScopedUnloadHandlerRelease release(handler_ptr);
   AddTab(browser(), GURL("https://today.example/"));
 
   // No archive: SidebarTabModel closes the Today tabs itself.
@@ -631,8 +680,6 @@ TEST_F(ArchiveServiceTest, ClearIsAUserGestureWithOrWithoutAnArchive) {
   task_environment()->RunUntilIdle();
   ASSERT_EQ(1, strip()->count());
   EXPECT_TRUE(strip()->GetWebContentsAt(0)->GetClosedByUserGesture());
-
-  handler_ptr->set_intercept(false);
 }
 
 // And the sweep, which is the case the flag is genuinely wrong for: no
@@ -641,6 +688,7 @@ TEST_F(ArchiveServiceTest, TheIdleSweepIsNotAUserGesture) {
   auto handler = std::make_unique<DecliningUnloadHandler>();
   DecliningUnloadHandler* handler_ptr = handler.get();
   UnloadController::From(browser())->AddTabUnloadHandler(std::move(handler));
+  arcium::test::ScopedUnloadHandlerRelease release(handler_ptr);
   AddTab(browser(), GURL("https://idle.example/"));
   AddTab(browser(), GURL("https://active.example/"));  // active, never swept
 
@@ -649,8 +697,6 @@ TEST_F(ArchiveServiceTest, TheIdleSweepIsNotAUserGesture) {
   const int idle_index = strip()->GetIndexOfTab(HandleAt(1).Get());
   ASSERT_NE(TabStripModel::kNoTab, idle_index);
   EXPECT_FALSE(strip()->GetWebContentsAt(idle_index)->GetClosedByUserGesture());
-
-  handler_ptr->set_intercept(false);
 }
 
 // The archive list's read path, end to end and through the real store: the

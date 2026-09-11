@@ -200,6 +200,16 @@ void ArchiveService::RemoveArchived(const GURL& url, base::Time archived_at) {
 }
 
 void ArchiveService::RemoveSpaceRows(SpaceId space_id) {
+  // A row Clear (or the sweep) parked for this space can still be waiting on
+  // a declined close when the space is deleted. Left in pending_archive_, it
+  // would be written the moment that close finally completes -- by the
+  // kRemoved branch of OnTabStripModelChanged, which knows nothing about the
+  // space having been deleted in between -- bringing an archived tab back
+  // for a space that no longer exists (search covers every space). Dropped
+  // here, before the store's own rows for the space are even asked to go.
+  std::erase_if(pending_archive_, [space_id](const auto& entry) {
+    return entry.second.space_id == space_id;
+  });
   if (!store_ || !store_runner_) {
     return;
   }

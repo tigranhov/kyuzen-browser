@@ -265,23 +265,31 @@ void SpaceSwitcher::DeleteSpace(SpaceId id) {
   const SpaceId landing = active_space_;
 
   // Chromium's own close, so a page with unsaved work still gets its
-  // beforeunload prompt.
+  // beforeunload prompt. The handles asked to close are remembered by
+  // identity, not by tag: a tab bound to one of this space's entries is
+  // chosen here through SpaceOfTabAt, which reads the entry's space first,
+  // and a pinned tab can carry a stale tag of its own naming a different,
+  // still-surviving space (moving a pin retags the entry, never the tab) --
+  // the re-tag loop below has to catch exactly the tabs this loop tried to
+  // close, not whichever ones still wear the deleted space's raw tag.
+  std::vector<tabs::TabHandle> asked_to_close;
   for (int index = tab_strip_model_->count() - 1; index >= 0; --index) {
     if (SpaceOfTabAt(index) == id) {
+      asked_to_close.push_back(
+          tab_strip_model_->GetTabAtIndex(index)->GetHandle());
       tab_strip_model_->CloseWebContentsAt(index, kUserCloseTypes);
     }
   }
   model_->RemoveSpace(id);
   // A tab still here refused to close -- a beforeunload dialog the user has
   // not answered -- and Chromium offers no signal for that at this seam.
-  // Rather than leaving it tagged with a space that is gone, where
-  // SpaceOfTab would silently move it to the first space, it joins the
-  // space the window moved to, where the user can see it.
-  for (int index = 0; index < tab_strip_model_->count(); ++index) {
-    content::WebContents* contents =
-        tab_strip_model_->GetTabAtIndex(index)->GetContents();
-    if (SpaceTagOf(contents) == id) {
-      SetSpaceTag(contents, landing);
+  // Rather than leaving it tagged with a space that is gone, or with a tag
+  // that was already stale, it joins the space the window moved to, where
+  // the user can see it.
+  for (const tabs::TabHandle& handle : asked_to_close) {
+    tabs::TabInterface* tab = handle.Get();
+    if (tab) {
+      SetSpaceTag(tab->GetContents(), landing);
     }
   }
   if (archive_service_) {

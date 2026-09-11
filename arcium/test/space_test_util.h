@@ -11,6 +11,7 @@
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/tab_space.h"
 #include "base/functional/callback.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_model.h"
@@ -88,6 +89,15 @@ inline tabs::TabInterface* AddTabWithOpener(TabStripModel* strip,
 // here. Shared by ArchiveServiceTest's own Clear tests and by
 // SpaceSwitcherTest's HoldTabOpen, which both need a close to be declined
 // without a real renderer to decline it.
+//
+// A handler is registered once per test and asked about every close
+// UnloadController runs through, on every tab, not only the one the test
+// means to hold -- so with no target set it declines all of them, which is
+// what every ArchiveServiceTest holder wants: those tests each hold exactly
+// one close in flight and never see this handler asked about a second tab.
+// SpaceSwitcherTest's DeleteSpace can ask about several tabs in the same
+// call, so its HoldTabOpen sets a target and only that tab's close is held.
+//
 // Out-of-line definitions below: a header-declared class with virtual
 // methods defined inline in the class body is exactly what the Chromium
 // style plugin's header-hygiene check exists to catch, since every
@@ -99,6 +109,9 @@ class DecliningUnloadHandler : public UnloadController::TabUnloadHandler {
   ~DecliningUnloadHandler() override;
 
   void set_intercept(bool intercept) { intercept_ = intercept; }
+  // Restricts interception to closes of `target`; every other tab's close is
+  // let through untouched. Null (the default) means every tab.
+  void set_target(content::WebContents* target) { target_ = target; }
 
   bool ShouldSkipBeforeUnload(content::WebContents* contents) override;
   bool ShouldShowCustomConfirmation(content::WebContents* contents) override;
@@ -107,12 +120,20 @@ class DecliningUnloadHandler : public UnloadController::TabUnloadHandler {
       base::OnceCallback<void(bool)> on_closed) override;
 
  private:
+  bool Intercepts(content::WebContents* contents) const;
+
   bool intercept_ = true;
+  raw_ptr<content::WebContents> target_ = nullptr;
   base::OnceCallback<void(bool)> on_closed_;
 };
 
 inline DecliningUnloadHandler::DecliningUnloadHandler() = default;
 inline DecliningUnloadHandler::~DecliningUnloadHandler() = default;
+
+inline bool DecliningUnloadHandler::Intercepts(
+    content::WebContents* contents) const {
+  return intercept_ && (!target_ || target_ == contents);
+}
 
 inline bool DecliningUnloadHandler::ShouldSkipBeforeUnload(
     content::WebContents* contents) {
@@ -121,19 +142,41 @@ inline bool DecliningUnloadHandler::ShouldSkipBeforeUnload(
 
 inline bool DecliningUnloadHandler::ShouldShowCustomConfirmation(
     content::WebContents* contents) {
-  return intercept_;
+  return Intercepts(contents);
 }
 
 inline bool DecliningUnloadHandler::ShowCustomConfirmation(
     content::WebContents* contents,
     base::OnceCallback<void(bool)> on_closed) {
-  if (!intercept_) {
+  if (!Intercepts(contents)) {
     return false;
   }
   // Held, not answered. The tab stays until something runs this.
   on_closed_ = std::move(on_closed);
   return true;
 }
+
+// Guarantees a DecliningUnloadHandler stops intercepting once the object
+// holding it goes out of scope -- including when an ASSERT inside the test
+// body returns early while a close is still held. Declare it inside the
+// test body, never as a fixture member: gtest destroys a test body's own
+// locals before it calls TearDown, and TearDown is what tries to close
+// whatever the handler is still holding open. Setting intercept off is
+// enough on its own -- the confirmation this stands in for is never
+// answered by anything in these fixtures, only reconsidered on the next
+// close attempt, which is what TearDown's own close is.
+class ScopedUnloadHandlerRelease {
+ public:
+  explicit ScopedUnloadHandlerRelease(DecliningUnloadHandler* handler)
+      : handler_(handler) {}
+  ScopedUnloadHandlerRelease(const ScopedUnloadHandlerRelease&) = delete;
+  ScopedUnloadHandlerRelease& operator=(const ScopedUnloadHandlerRelease&) =
+      delete;
+  ~ScopedUnloadHandlerRelease() { handler_->set_intercept(false); }
+
+ private:
+  raw_ptr<DecliningUnloadHandler> handler_;
+};
 
 // content exposes no public way to give a test page a beforeunload handler:
 // the only seam is the mojo call a live renderer makes, which lands on
