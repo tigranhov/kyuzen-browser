@@ -124,6 +124,9 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   // does not.
   SpaceId shown_space_;
   size_t shown_space_index_ = 0;
+  // Whether the space shown before the last rebuild is still in the model,
+  // read in the same pass over spaces() rather than a second one.
+  bool shown_space_was_kept_ = false;
   // The current trackpad gesture: which way it goes, its sideways travel so
   // far, whether it has already switched, and whether the fingers are still
   // down, which is what tells its momentum from a new gesture.

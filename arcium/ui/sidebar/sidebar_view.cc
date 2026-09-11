@@ -228,7 +228,11 @@ void SidebarView::OnSidebarModelChanged() {
   Rebuild();
   // Only a switch slides. Everything else this hears -- a title, a favicon,
   // a load -- rebuilds in place, and most of what it hears is that.
-  if (was_shown.is_valid() && shown_space_ != was_shown) {
+  // A space that is gone has no place in the bar to slide from: the
+  // placeholder the window starts on before the model file is read, or the
+  // space a delete just removed.
+  if (was_shown.is_valid() && shown_space_ != was_shown &&
+      shown_space_was_kept_) {
     SlideColumnIn(/*from_trailing=*/shown_space_index_ > was_index);
   }
 }
@@ -416,12 +420,18 @@ void SidebarView::Rebuild() {
   // is how OnSidebarModelChanged tells a switch from any other change.
   int preset = 0;
   const std::vector<SidebarSpace> spaces = model_->spaces();
+  const SpaceId was_shown = shown_space_;
+  shown_space_was_kept_ = false;
+  bool found_active = false;
   for (size_t i = 0; i < spaces.size(); ++i) {
-    if (spaces[i].is_active) {
+    if (spaces[i].id == was_shown) {
+      shown_space_was_kept_ = true;
+    }
+    if (spaces[i].is_active && !found_active) {
+      found_active = true;
       preset = spaces[i].gradient;
       shown_space_ = spaces[i].id;
       shown_space_index_ = i;
-      break;
     }
   }
   const int painted = tint_->preset();

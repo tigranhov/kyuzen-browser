@@ -387,6 +387,28 @@ TEST_F(SpaceBarTest, TheColumnSlidesOnlyWhenTheSpaceChanges) {
   EXPECT_EQ(gfx::Transform(), layer->GetTargetTransform());
 }
 
+// A space that is gone has no place in the bar to slide from. At launch the
+// window starts on the placeholder model's space, which the loaded file
+// replaces, and deleting the space on screen takes it away in the same
+// change that moves the window off it.
+TEST_F(SpaceBarTest, NothingSlidesWhenTheSpaceOnScreenIsGone) {
+  gfx::ScopedAnimationDurationScaleMode normal(
+      gfx::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
+  FakeSidebarModel model;
+  const SpaceId work = model.AddSpaceForTesting(u"Work", u"", 0);
+  model.SwitchToSpace(work);
+  std::unique_ptr<views::Widget> widget = MakeWidget();
+  SidebarView* view = widget->SetContentsView(
+      std::make_unique<SidebarView>(&model, SidebarView::Delegate()));
+  ui::Layer* layer = view->column_for_testing()->layer();
+  ASSERT_TRUE(layer);
+  ASSERT_FALSE(layer->GetAnimator()->is_animating());
+
+  model.DeleteSpace(work);
+  ASSERT_TRUE(model.spaces()[0].is_active);
+  EXPECT_FALSE(layer->GetAnimator()->is_animating());
+}
+
 TEST_F(SpaceBarTest, MoveToSpaceIsOfferedOnEveryRowSection) {
   FakeSidebarModel model;
   model.AddSpaceForTesting(u"Work", u"", 0);

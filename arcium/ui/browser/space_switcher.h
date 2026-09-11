@@ -146,8 +146,9 @@ class SpaceSwitcher : public TabStripModelObserver,
   SpaceId NeighbourOf(SpaceId id) const;
   void NotifyActiveSpaceChanged();
   // Posted from OnArciumModelChanged rather than run inline: see the comment
-  // there. Re-checks that the active space is still gone before switching,
-  // because the model can change again before this task runs.
+  // there. Re-checks that the active space is still gone, because the model
+  // can change again before this task runs, then adopts last_active_space()
+  // when the tab on screen is already in it and switches there otherwise.
   void ApplyFallbackSwitch();
 
   raw_ptr<TabStripModel> tab_strip_model_;

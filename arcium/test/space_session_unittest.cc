@@ -188,5 +188,36 @@ TEST_F(SpaceSessionTest, ReactivatingATabThatHasAKeyAsksForNothing) {
   EXPECT_EQ(0, requests_);
 }
 
+// The launch order. The first window's switcher is built on the placeholder
+// model, because the model file is still being read; session restore then
+// inserts its tabs and selects one; only then does the file replace the
+// placeholder -- ReplaceAll, then the space that was active at quit, exactly
+// as the serializer does it. Restore's selection is where the user was at
+// quit, so the fallback that follows keeps it rather than switching, which
+// would land on whatever the space remembers -- here nothing, as in a
+// profile's first launch after the upgrade, so its first open tab.
+TEST_F(SpaceSessionTest, ALaunchKeepsTheTabSessionRestoreSelected) {
+  auto switcher = MakeSwitcher();
+  Space first;
+  first.id = SpaceId::Generate();
+  first.name = u"First";
+  first.position = 0;
+  Space work;
+  work.id = SpaceId::Generate();
+  work.name = u"Work";
+  work.position = 1;
+  AddTabInSpace(GURL("https://w1.example/"), work.id);
+  AddTabInSpace(GURL("https://w2.example/"), work.id);
+  strip()->ActivateTabAt(1);
+
+  model_.ReplaceAll({first, work}, {}, {});
+  model_.SetLastActiveSpace(work.id);
+  task_environment()->RunUntilIdle();
+
+  EXPECT_EQ(work.id, switcher->active_space());
+  EXPECT_EQ(2, strip()->count());
+  EXPECT_EQ(1, strip()->active_index());
+}
+
 }  // namespace
 }  // namespace arcium

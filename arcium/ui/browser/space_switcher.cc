@@ -387,9 +387,21 @@ void SpaceSwitcher::ApplyFallbackSwitch() {
   // Re-checked because the model may have changed again -- another space
   // deletion, or a fresh AddSpace -- in the run-loop turns between the post
   // and this task running.
-  if (!model_->GetSpace(active_space_)) {
-    SwitchTo(model_->last_active_space());
+  if (model_->GetSpace(active_space_) || !tab_strip_model_) {
+    return;
   }
+  const SpaceId target = model_->last_active_space();
+  // At launch the tab on screen is the one session restore selected, which
+  // is where the user was at quit. When it is already in the space that was
+  // active then, the window only has to take that space: SwitchTo would land
+  // on whatever the space recorded, or on its first open tab, and throw the
+  // restored selection away.
+  const int active = tab_strip_model_->active_index();
+  if (active != TabStripModel::kNoTab && SpaceOfTabAt(active) == target) {
+    AdoptSpace(target);
+    return;
+  }
+  SwitchTo(target);
 }
 
 }  // namespace arcium
