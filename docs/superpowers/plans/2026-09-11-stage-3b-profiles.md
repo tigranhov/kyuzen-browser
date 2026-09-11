@@ -4769,9 +4769,10 @@ TEST_F(ClearDataWarningTest, TheSecondCallIsTheRemovalItselfAndIsNotAsked) {
 And a browser test, appended to `arcium/test/browser/profile_lifecycle_browsertest.cc`:
 
 ```cpp
-// The point of the warning: "clear everything" really does reach a space's
+// The point of the warning's wider answer: it really does reach a space's
 // own logins, which Chrome's own removal never touches.
-IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest, ClearingEveryProfileReachesThemAll) {
+IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest,
+                       ClearingEveryProfileReachesTheSpacesOwnLogins) {
   const GURL url = PageUrl("a.test", "one");
   ui_test_utils::NavigateToURLWithDisposition(
       browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
@@ -4788,26 +4789,23 @@ IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest, ClearingEveryProfileReachesThemAll)
   SetCookie(work_tab, "work");
 
   SetClearDataWarningAnswerForTesting(true);
-  content::WebContents* settings =
-      ui_test_utils::NavigateToURLWithDisposition(
-          browser(), GURL("chrome://settings/clearBrowserData"),
-          WindowOpenDisposition::NEW_FOREGROUND_TAB,
-          ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP),
-      active();
-  ASSERT_TRUE(content::ExecJs(
-      settings,
-      "document.querySelector('settings-ui').shadowRoot"
-      ".querySelector('settings-main')"));
-  ClearBrowsingDataFromSettings(settings);
+  bool removal_resumed = false;
+  ASSERT_TRUE(AskWhichProfilesToClear(
+      default_tab, base::BindLambdaForTesting([&] {
+        removal_resumed = true;
+      })));
+  EXPECT_TRUE(removal_resumed);
 
-  EXPECT_TRUE(base::test::RunUntil([&] {
-    return ReadCookie(work_tab).empty() && ReadCookie(default_tab).empty();
-  }));
+  EXPECT_TRUE(
+      base::test::RunUntil([&] { return ReadCookie(work_tab).empty(); }));
+  // Default is Chrome's own removal's job, and that is what resumes here
+  // rather than running inside this test.
+  EXPECT_EQ("who=default", ReadCookie(default_tab));
   SetClearDataWarningAnswerForTesting(std::nullopt);
 }
 ```
 
-`ClearBrowsingDataFromSettings` is a helper on the harness from Task 3; if driving the settings page from a test turns out to need more than a `content::ExecJs` of the dialog's confirm button, replace the browser test with a direct call of the handler's message (`content::WebUIMessageHandler` is reachable through `content::WebContents::GetWebUI()->ProcessWebUIMessage`) and say in the report which of the two you used.
+The settings page is not driven from the test. Clicking through its own script would be checking Chrome's dialog rather than Arcium's answer, and the two halves are checked together by hand in the acceptance pass; that the handler asks before it removes anything is covered by the unit tests above.
 
 - [ ] **Step 2: Run them to see them fail, then write the warning**
 
@@ -5044,7 +5042,7 @@ ARCIUM_JOBS=4 scripts/build dev arcium_browsertests
 | `Answer` never runs `resume` | `TheRemovalWaitsForTheAnswerAndThenRuns` |
 | `AlreadyAsked::TakeFrom` leaves the mark in place | `TheSecondCallIsTheRemovalItselfAndIsNotAsked` (second half) |
 | `Answer` skips `CreateForWebContents` | `TheSecondCallIsTheRemovalItselfAndIsNotAsked` (first half: the removal asks again forever) |
-| `Answer` skips the per-profile loop | `ClearingEveryProfileReachesThemAll` |
+| `Answer` skips the per-profile loop | `ClearingEveryProfileReachesTheSpacesOwnLogins` |
 
 In `patches/README.md`:
 
