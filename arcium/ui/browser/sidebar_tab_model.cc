@@ -188,9 +188,14 @@ void SidebarTabModel::ActivateTab(int tab_index) {
 }
 
 void SidebarTabModel::CloseTab(int tab_index) {
-  if (tab_index >= 0 && tab_index < tab_strip_model_->count()) {
-    tab_strip_model_->CloseWebContentsAt(tab_index, kUserCloseTypes);
+  if (tab_index < 0 || tab_index >= tab_strip_model_->count()) {
+    return;
   }
+  // The space's last open tab leaves its blank tab behind, as Cmd+W does.
+  if (switcher_) {
+    switcher_->OpenBlankTabBeforeClosing({tab_index});
+  }
+  tab_strip_model_->CloseWebContentsAt(tab_index, kUserCloseTypes);
 }
 
 void SidebarTabModel::MoveTab(int from_index, int to_index) {
@@ -220,12 +225,21 @@ void SidebarTabModel::ClearToday() {
   // Chromium thinks of its pinned state, and a tab of another space is not
   // this window's Today to clear.
   const SpaceId space = active_space();
+  std::vector<int> closing;
   for (int i = tab_strip_model_->count() - 1; i >= 0; --i) {
     tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(i);
     if (!IsClaimedByEntry(tab) &&
         SpaceOfTab(*arcium_model_, *binding_, tab->GetHandle()) == space) {
-      tab_strip_model_->CloseWebContentsAt(i, kUserCloseTypes);
+      closing.push_back(i);
     }
+  }
+  // Clearing the space's last open tabs leaves its blank tab behind, as
+  // Cmd+W does. It is appended, so the indices above stay good.
+  if (switcher_) {
+    switcher_->OpenBlankTabBeforeClosing(closing);
+  }
+  for (int i : closing) {
+    tab_strip_model_->CloseWebContentsAt(i, kUserCloseTypes);
   }
 }
 

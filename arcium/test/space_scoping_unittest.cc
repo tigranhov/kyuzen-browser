@@ -208,8 +208,11 @@ TEST_F(SpaceScopingTest, ClearTodayLeavesOtherSpacesAlone) {
   AddTabInSpace(GURL("https://w1.example/"), work);
   sidebar_->ClearToday();
   task_environment()->RunUntilIdle();
-  ASSERT_EQ(1, strip()->count());
+  // a1 was its space's last open tab, so the space's blank tab took its
+  // place; w1 is the tab that stayed.
+  ASSERT_EQ(2, strip()->count());
   EXPECT_EQ(work, switcher_->SpaceOfTabAt(0));
+  EXPECT_EQ(first, switcher_->active_space());
 }
 
 // The other path: no archive service, which is SidebarTabModel's own loop —
@@ -223,8 +226,11 @@ TEST_F(SpaceScopingTest, ClearTodayLeavesOtherSpacesAloneWithoutAService) {
   sidebar_->SetArchiveService(nullptr);
   sidebar_->ClearToday();
   task_environment()->RunUntilIdle();
-  ASSERT_EQ(1, strip()->count());
+  // a1 was its space's last open tab, so the space's blank tab took its
+  // place; w1 is the tab that stayed.
+  ASSERT_EQ(2, strip()->count());
   EXPECT_EQ(work, switcher_->SpaceOfTabAt(0));
+  EXPECT_EQ(first, switcher_->active_space());
 }
 
 // D2-2 extended: a background space's landing tab is not archivable, or a

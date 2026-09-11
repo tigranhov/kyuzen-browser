@@ -27,6 +27,7 @@ test("arcium_unittests") {
     "space_session_unittest.cc",
     "space_switcher_unittest.cc",
     "space_test_util.h",
+    "space_wiring_unittest.cc",
     "tab_binding_unittest.cc",
     "tab_commands_unittest.cc",
     "tab_search_service_unittest.cc",

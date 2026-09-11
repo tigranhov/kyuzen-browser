@@ -132,13 +132,20 @@ void ArchiveService::ArchiveAllToday() {
   // clear. This is a button the user pressed, not the automatic sweep.
   const SpaceId space = active_space();
   std::vector<tabs::TabHandle> today;
+  std::vector<int> indices;
   for (int i = 0; i < tab_strip_model_->count(); ++i) {
     const tabs::TabHandle handle =
         tab_strip_model_->GetTabAtIndex(i)->GetHandle();
     if (!IsClaimedByEntry(*model_, *binding_, handle) &&
         SpaceOfTab(*model_, *binding_, handle) == space) {
       today.push_back(handle);
+      indices.push_back(i);
     }
+  }
+  // Clearing the space's last open tabs leaves its blank tab behind, as
+  // Cmd+W does, rather than the window landing in another space.
+  if (switcher_) {
+    switcher_->OpenBlankTabBeforeClosing(indices);
   }
   for (const tabs::TabHandle& handle : today) {
     ArchiveAndClose(handle, kUserCloseTypes);

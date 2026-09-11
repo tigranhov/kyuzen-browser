@@ -67,6 +67,13 @@ class SpaceSwitcher : public TabStripModelObserver,
   // A blank foreground tab in the active space. The strip index it landed at.
   // Runs the blank-tab callback, if one is set, once the tab is on screen.
   int OpenBlankTab();
+  // Every close Arcium makes itself asks this first. When `closing` -- strip
+  // indices about to close -- holds the active tab and every other open tab
+  // of the active space, opens the space's blank tab, as OpenBlankTab does,
+  // and answers true; otherwise does nothing and answers false. The blank tab
+  // is appended, so each index in `closing` still names the same tab after.
+  // Never from a strip callback: it inserts.
+  bool OpenBlankTabBeforeClosing(const std::vector<int>& closing);
   // What to offer over a blank tab once OpenBlankTab has put it on screen --
   // a switch to an empty space, or a close of a space's last tab, both land
   // there. A switch runs it only after its observers have heard of the

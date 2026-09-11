@@ -81,21 +81,19 @@ bool MoveTodayTab(TabStripModel* strip,
   return true;
 }
 
-// Chromium's own close is right whenever the space keeps another open tab,
-// because the switcher adopts whatever Chromium activates next only when it
-// is foreign, and an own tab is not. It is wrong for the space's last one:
-// Chromium would activate a neighbour from another space, or close the
-// window outright. That case opens the space's blank tab first, then closes
-// the old one, so the window never shows a page from somewhere else.
-bool CloseActiveTab(TabStripModel* strip,
-                    SpaceSwitcher& switcher,
-                    const std::vector<int>& order) {
+// Chromium's own close whenever the space keeps another open tab; the
+// space's last one gets its blank tab first, then closes. The rule itself is
+// SpaceSwitcher::OpenBlankTabBeforeClosing, shared with every close the
+// sidebar makes.
+bool CloseActiveTab(TabStripModel* strip, SpaceSwitcher& switcher) {
   const int active = strip->active_index();
-  if (order.size() != 1 || order.front() != active) {
+  if (active == TabStripModel::kNoTab) {
     return false;
   }
   tabs::TabInterface* closing = strip->GetTabAtIndex(active);
-  switcher.OpenBlankTab();
+  if (!switcher.OpenBlankTabBeforeClosing({active})) {
+    return false;
+  }
   const int index = strip->GetIndexOfTab(closing);
   if (index != TabStripModel::kNoTab) {
     // A page that asks before unloading can be kept by the user. The space
@@ -184,7 +182,7 @@ bool HandleTabCommand(Browser* browser, int command_id) {
     case IDC_MOVE_TAB_PREVIOUS:
       return MoveTodayTab(strip, *switcher, -1);
     case IDC_CLOSE_TAB:
-      return CloseActiveTab(strip, *switcher, order);
+      return CloseActiveTab(strip, *switcher);
     case IDC_WINDOW_CLOSE_OTHER_TABS:
       return CloseTodayTabs(strip, *switcher, order,
                             /*only_to_the_right=*/false);

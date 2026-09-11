@@ -281,9 +281,14 @@ void SidebarTabModel::CloseEntryTab(EntryId id) {
   if (!tab) {
     return;
   }
-  // The entry stays; only the tab goes, and the row turns cold.
-  tab_strip_model_->CloseWebContentsAt(tab_strip_model_->GetIndexOfTab(tab),
-                                       kUserCloseTypes);
+  // The entry stays; only the tab goes, and the row turns cold. When it was
+  // the space's last open tab, the space's blank tab takes its place first,
+  // as Cmd+W does.
+  const int index = tab_strip_model_->GetIndexOfTab(tab);
+  if (switcher_) {
+    switcher_->OpenBlankTabBeforeClosing({index});
+  }
+  tab_strip_model_->CloseWebContentsAt(index, kUserCloseTypes);
 }
 
 void SidebarTabModel::SetEntryTitle(EntryId id, const std::u16string& title) {

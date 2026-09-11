@@ -4,6 +4,7 @@
 
 #include "arcium/ui/browser/space_switcher.h"
 
+#include <algorithm>
 #include <map>
 
 #include "arcium/browser/entry_claim.h"
@@ -232,6 +233,30 @@ int SpaceSwitcher::OpenBlankTab() {
     blank_tab_callback_.Run();
   }
   return index;
+}
+
+bool SpaceSwitcher::OpenBlankTabBeforeClosing(const std::vector<int>& closing) {
+  if (!tab_strip_model_) {
+    return false;
+  }
+  const int active = tab_strip_model_->active_index();
+  if (active == TabStripModel::kNoTab || !IsInActiveSpace(active) ||
+      std::ranges::find(closing, active) == closing.end()) {
+    return false;
+  }
+  // Chromium's own pick is right whenever the space keeps another open tab,
+  // because NextSelectedIndexInSpace hands it that one. It is wrong for the
+  // space's last: Chromium would activate a tab from another space, or close
+  // the window outright. So that case opens the blank tab before anything
+  // closes, and the window never shows a page from somewhere else.
+  for (int index = 0; index < tab_strip_model_->count(); ++index) {
+    if (IsInActiveSpace(index) &&
+        std::ranges::find(closing, index) == closing.end()) {
+      return false;
+    }
+  }
+  OpenBlankTab();
+  return true;
 }
 
 int SpaceSwitcher::InsertBlankTab() {
