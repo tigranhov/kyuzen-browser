@@ -27,6 +27,7 @@ void SpaceSwitcher::MoveTabToSpace(int index, SpaceId space) {
     return;
   }
   SetSpaceTag(tab_strip_model_->GetTabAtIndex(index)->GetContents(), space);
+  AskForSessionRebuild();
   // Moving the tab you are looking at takes you with it, as Zen does --
   // adopted, not switched to: SwitchTo would land on whatever `space`
   // already remembers as its last active tab, which can be a different tab
@@ -54,6 +55,7 @@ void SpaceSwitcher::MoveEntryToSpace(EntryId id, SpaceId space) {
   // back to whatever the tab itself carries, and that has to agree with
   // where the entry just went.
   SetSpaceTag(tab->GetContents(), space);
+  AskForSessionRebuild();
   const int index = tab_strip_model_->GetIndexOfTab(tab);
   if (index != TabStripModel::kNoTab &&
       index == tab_strip_model_->active_index()) {
@@ -133,11 +135,16 @@ void SpaceSwitcher::DeleteSpace(SpaceId id) {
   // Rather than leaving it tagged with a space that is gone, or with a tag
   // that was already stale, it joins the space the window moved to, where
   // the user can see it.
+  bool retagged = false;
   for (const tabs::TabHandle& handle : asked_to_close) {
     tabs::TabInterface* tab = handle.Get();
     if (tab) {
       SetSpaceTag(tab->GetContents(), landing);
+      retagged = true;
     }
+  }
+  if (retagged) {
+    AskForSessionRebuild();
   }
   if (archive_service_) {
     archive_service_->RemoveSpaceRows(id);

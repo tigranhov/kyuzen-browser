@@ -10,6 +10,7 @@
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/browser/tab_space.h"
+#include "arcium/ui/browser/session_rebuild_nudge.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/no_destructor.h"
@@ -45,6 +46,14 @@ SpaceSwitcher::SpaceSwitcher(TabStripModel* tab_strip_model,
   Registry().emplace(tab_strip_model_.get(), this);
   tab_strip_model_->AddObserver(this);
   model_->AddObserver(this);
+  // Through this window's own strip, so whoever builds the switcher has
+  // nothing more to wire. Off the record there is no session file to keep in
+  // step, and asking must not be what creates a SessionService for one.
+  Profile* profile = tab_strip_model_->profile();
+  if (profile && !profile->IsOffTheRecord()) {
+    session_rebuild_request_ =
+        base::BindRepeating(&RequestSessionRebuild, base::Unretained(profile));
+  }
 }
 
 SpaceSwitcher::~SpaceSwitcher() {
@@ -176,9 +185,30 @@ void SpaceSwitcher::RecordActiveTab() {
   if (index == TabStripModel::kNoTab || !IsInActiveSpace(index)) {
     return;
   }
-  model_->SetLastActiveTab(
-      active_space_,
-      KeyOf(tab_strip_model_->GetTabAtIndex(index)->GetContents()));
+  content::WebContents* contents =
+      tab_strip_model_->GetTabAtIndex(index)->GetContents();
+  // Asked before KeyOf generates one: a key the tab already had was written
+  // by whichever rebuild followed its generation, and asking again on every
+  // activation would rebuild the session on every tab click.
+  const bool generated = !ExistingKeyOf(contents).is_valid();
+  model_->SetLastActiveTab(active_space_, KeyOf(contents));
+  if (generated) {
+    AskForSessionRebuild();
+  }
+}
+
+void SpaceSwitcher::AskForSessionRebuild() {
+  // Posted and coalesced by the nudge, so a burst -- twenty tabs restored,
+  // a delete re-tagging several -- costs one rebuild. The rebuild itself is
+  // not free: ScheduleResetCommands walks every tab of every window once. That
+  // is the trade the pin nudge already makes (InstallSessionRebuildNudge),
+  // accepted for the same reason: without it a tab's space and the key a
+  // space lands on reach the file only when something unrelated happens to
+  // rebuild it, so a quit a minute after opening tabs in a space brings them
+  // back in the first one.
+  if (session_rebuild_request_) {
+    session_rebuild_request_.Run();
+  }
 }
 
 void SpaceSwitcher::AdoptSpace(SpaceId id) {
@@ -258,9 +288,17 @@ void SpaceSwitcher::TagInsertedTabs(const TabStripModelChange::Insert& insert) {
     // none and joins the space on screen.
     tabs::TabInterface* opener =
         tab_strip_model_->GetOpenerOfTabAt(inserted.index);
-    SetSpaceTag(contents,
-                opener ? SpaceOfTab(*model_, *binding_, opener->GetHandle())
-                       : active_space_);
+    const SpaceId space =
+        opener ? SpaceOfTab(*model_, *binding_, opener->GetHandle())
+               : active_space_;
+    SetSpaceTag(contents, space);
+    // A tab no rebuild has written yet restores into the first space anyway,
+    // so a new tab tagged with the first space leaves nothing to write. Only
+    // a new tab: one moved into the first space may have been written as
+    // another, and MoveTabToSpace asks whatever the target.
+    if (space != model_->default_space_id()) {
+      AskForSessionRebuild();
+    }
   }
 }
 

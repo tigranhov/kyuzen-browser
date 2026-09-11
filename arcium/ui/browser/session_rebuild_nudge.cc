@@ -66,9 +66,9 @@ class SessionRebuildNudge : public base::SupportsUserData::Data {
   base::WeakPtrFactory<SessionRebuildNudge> weak_factory_{this};
 };
 
-}  // namespace
-
-void InstallSessionRebuildNudge(Profile* profile, TabBinding* binding) {
+// The profile's one nudge, made on first use by whichever caller gets there
+// first.
+SessionRebuildNudge* NudgeFor(Profile* profile) {
   auto* nudge = static_cast<SessionRebuildNudge*>(
       profile->GetUserData(kSessionRebuildNudgeKey));
   if (!nudge) {
@@ -76,10 +76,21 @@ void InstallSessionRebuildNudge(Profile* profile, TabBinding* binding) {
     nudge = owned.get();
     profile->SetUserData(kSessionRebuildNudgeKey, std::move(owned));
   }
+  return nudge;
+}
+
+}  // namespace
+
+void InstallSessionRebuildNudge(Profile* profile, TabBinding* binding) {
+  SessionRebuildNudge* nudge = NudgeFor(profile);
   // A weak pointer, because the nudge and the binding are both user data on
   // the same profile and nothing orders their destruction.
   binding->SetChangedCallback(
       base::BindRepeating(&SessionRebuildNudge::Request, nudge->GetWeakPtr()));
+}
+
+void RequestSessionRebuild(Profile* profile) {
+  NudgeFor(profile)->Request();
 }
 
 }  // namespace arcium

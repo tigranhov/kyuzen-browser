@@ -101,6 +101,13 @@ class SpaceSwitcher : public TabStripModelObserver,
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
+  // Replaces how this switcher asks for a session rebuild -- by default the
+  // profile's coalesced nudge, see AskForSessionRebuild -- so a test can count
+  // the requests instead of reaching a SessionService.
+  void SetSessionRebuildRequestForTesting(base::RepeatingClosure request) {
+    session_rebuild_request_ = std::move(request);
+  }
+
   // TabStripModelObserver:
   void OnTabStripModelChanged(
       TabStripModel* tab_strip_model,
@@ -117,6 +124,9 @@ class SpaceSwitcher : public TabStripModelObserver,
   // this and runs the callback itself, once it has notified its observers.
   int InsertBlankTab();
   void RecordActiveTab();
+  // A tab's space tag and key reach the session file only on a command
+  // rebuild, so every change to either on a live tab asks for one.
+  void AskForSessionRebuild();
   // Puts the window in `id` without touching the strip: sets the active
   // space, records whatever tab is already on screen as `id`'s place, and
   // notifies. Shared by the foreign-activation branch of
@@ -141,6 +151,8 @@ class SpaceSwitcher : public TabStripModelObserver,
   raw_ptr<ArchiveService> archive_service_ = nullptr;
   SpaceId active_space_;
   base::RepeatingClosure blank_tab_callback_;
+  // Null off the record, where there is no session file to keep in step.
+  base::RepeatingClosure session_rebuild_request_;
   base::ObserverList<Observer> observers_;
   // Last: anything posted through this must run after every other member is
   // already constructed.

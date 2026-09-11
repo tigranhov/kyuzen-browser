@@ -35,6 +35,13 @@ class TabBinding;
 // because it is bound to that object rather than to a controller.
 void InstallSessionRebuildNudge(Profile* profile, TabBinding* binding);
 
+// Asks `profile`'s SessionService for the same posted, coalesced rebuild, for
+// a fact the binding does not see change: a tab's space tag, or a tab key
+// generated for the first time. Shares the one per-profile object with
+// InstallSessionRebuildNudge, so a pin and a space move in the same turn still
+// cost one rebuild.
+void RequestSessionRebuild(Profile* profile);
+
 }  // namespace arcium
 
 #endif  // ARCIUM_UI_BROWSER_SESSION_REBUILD_NUDGE_H_
