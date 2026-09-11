@@ -38,6 +38,16 @@ struct SidebarRow {
   // An entry with no live tab. It draws from last_title and the entry's URL,
   // and clicking it opens that URL.
   bool is_cold = false;
+  // A tab exists but its page is not in memory: restored and not yet loaded,
+  // or discarded to save memory. Clicking it loads the page it was left on.
+  // Never set on a cold row, which has no tab, or on the active row.
+  bool is_unloaded = false;
+
+  // Whether clicking this row has to load a page first: a cold entry opens
+  // its URL, an unloaded tab reloads its page. The one question the views
+  // ask before dimming.
+  bool needs_load() const { return is_cold || is_unloaded; }
+
   // A warm pinned entry whose tab has navigated away from the pinned URL.
   bool can_return_to_pinned_url = false;
   // Set on rows inside a folder, so TabListView can indent and hide them.

@@ -22,6 +22,7 @@
 
 #include "arcium/browser/model/folder.h"
 #include "arcium/browser/model/tab_entry.h"
+#include "arcium/browser/restored_tab_loading.h"
 #include "arcium/ui/sidebar/folder_tree.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
@@ -175,6 +176,7 @@ SidebarRow SidebarTabModel::RowForEntry(const TabEntry& entry) const {
   row.title = entry.custom_title.empty() ? data.title : entry.custom_title;
   row.favicon = data.favicon;
   row.is_active = row.tab_index == tab_strip_model_->active_index();
+  row.is_unloaded = !row.is_active && IsTabUnloaded(tab->GetContents());
   row.is_loading = data.network_state != tabs::TabNetworkState::kNone &&
                    !data.should_hide_throbber;
   row.is_audible = data.alert_state == tabs::TabAlert::kAudioPlaying;

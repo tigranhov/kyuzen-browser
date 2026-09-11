@@ -16,6 +16,7 @@
 #include "arcium/browser/entry_claim.h"
 #include "arcium/browser/model/reorder_index.h"
 #include "arcium/browser/model/tab_entry.h"
+#include "arcium/browser/restored_tab_loading.h"
 #include "arcium/browser/tab_space.h"
 #include "arcium/ui/browser/archive_service.h"
 #include "arcium/ui/browser/tab_close_types.h"
@@ -173,6 +174,7 @@ SidebarRow SidebarTabModel::RowForTab(int index,
   row.title = named != today_titles_.end() ? named->second : data.title;
   row.favicon = data.favicon;
   row.is_active = index == tab_strip_model_->active_index();
+  row.is_unloaded = !row.is_active && IsTabUnloaded(tab->GetContents());
   row.is_loading = data.network_state != tabs::TabNetworkState::kNone &&
                    !data.should_hide_throbber;
   row.is_audible = data.alert_state == tabs::TabAlert::kAudioPlaying;
