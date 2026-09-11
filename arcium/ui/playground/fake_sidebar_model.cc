@@ -59,7 +59,14 @@ ui::ImageModel SwatchFor(const std::string& url) {
 
 }  // namespace
 
-FakeSidebarModel::FakeSidebarModel() = default;
+FakeSidebarModel::FakeSidebarModel() {
+  // One space, marked active, exactly what every test and playground scene
+  // written before spaces existed already assumes.
+  SidebarSpace first;
+  first.id = SpaceId::Generate();
+  first.is_active = true;
+  spaces_.push_back(std::move(first));
+}
 FakeSidebarModel::~FakeSidebarModel() = default;
 
 void FakeSidebarModel::AddTab(const std::u16string& title,
@@ -71,6 +78,11 @@ void FakeSidebarModel::AddTab(const std::u16string& title,
   row.url = GURL(url);
   row.section = section;
   row.favicon = SwatchFor(url);
+  // The first space, not necessarily the active one: this predates spaces
+  // and every caller of it still means "wherever a row with no space of its
+  // own belongs", which is what every existing test and playground scene
+  // already gets.
+  row.space = spaces_.front().id;
   // Everything outside Today is an entry in the real model, so the fake gives
   // those rows an id too.
   if (section != SidebarSection::kToday) {
@@ -102,6 +114,7 @@ void FakeSidebarModel::AddColdEntry(const std::u16string& title,
   row.entry_id = EntryId::Generate();
   row.is_cold = true;
   row.tab_index = -1;
+  row.space = spaces_.front().id;
   auto pos = std::find_if(rows_.begin(), rows_.end(), [&](const SidebarRow& r) {
     return static_cast<int>(r.section) > static_cast<int>(section);
   });
@@ -160,7 +173,16 @@ void FakeSidebarModel::SetFolderPosition(FolderId id, int position) {
 }
 
 std::vector<SidebarRow> FakeSidebarModel::rows() const {
-  return rows_;
+  // Only the space on screen: the real model's rows() is scoped the same
+  // way, filtering at the tab strip before a row is ever built.
+  const SpaceId active = ActiveSpaceId();
+  std::vector<SidebarRow> result;
+  for (const SidebarRow& row : rows_) {
+    if (row.space == active) {
+      result.push_back(row);
+    }
+  }
+  return result;
 }
 
 void FakeSidebarModel::ActivateTab(int tab_index) {

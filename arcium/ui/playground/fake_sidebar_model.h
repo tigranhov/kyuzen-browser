@@ -44,6 +44,19 @@ class FakeSidebarModel : public SidebarModel {
   // trip. `titles` name pinned rows already added.
   FolderId AddFolderWith(const std::u16string& name,
                          const std::vector<std::u16string>& titles);
+  // Seeds a space with the icon and gradient a real one would carry, without
+  // switching to it -- AddSpace, the SidebarModel command, does switch;
+  // seeding a test's spaces should never move the mark a preceding
+  // EXPECT_TRUE(spaces()[0].is_active) is about to check.
+  SpaceId AddSpaceForTesting(const std::u16string& name,
+                             const std::u16string& icon,
+                             int gradient);
+  // Seeds a Today row tagged into `space`, not active: AddTab puts every row
+  // in the first space, so this is how a test fills another one without
+  // switching to it.
+  void AddTabInSpaceForTesting(const std::u16string& title,
+                               const std::string& url,
+                               SpaceId space);
   // Folders come back in `position` order, exactly as they do from the real
   // model. Nothing in the UI reorders folders yet, so this is how a test puts
   // them in an order that disagrees with the order they were made in.
@@ -115,6 +128,16 @@ class FakeSidebarModel : public SidebarModel {
                        std::optional<FolderId> parent_id) const override;
   void SetFolderName(FolderId id, const std::u16string& name) override;
   void DeleteFolder(FolderId id) override;
+  std::vector<SidebarSpace> spaces() const override;
+  void SwitchToSpace(SpaceId id) override;
+  void AddSpace(const std::u16string& name) override;
+  void RenameSpace(SpaceId id, const std::u16string& name) override;
+  void SetSpaceIcon(SpaceId id, const std::u16string& icon) override;
+  void SetSpaceGradient(SpaceId id, int gradient) override;
+  void MoveSpace(SpaceId id, int position) override;
+  void DeleteSpace(SpaceId id) override;
+  void MoveTabToSpace(int tab_index, SpaceId space_id) override;
+  void MoveEntryToSpace(EntryId id, SpaceId space_id) override;
   void SetArchiveTimeout(ArchiveTimeout timeout) override;
   ArchiveTimeout archive_timeout() const override;
   bool has_archive() const override;
@@ -162,7 +185,17 @@ class FakeSidebarModel : public SidebarModel {
   // The rows `limit` would answer with, applying the readable flag.
   std::vector<ArchivedRow> RowsFor(int limit) const;
 
+  // The id of whichever space is currently marked active, or the first
+  // space's when somehow none is -- the same fallback the real model's
+  // default_space_id() gives a caller with no window to ask.
+  SpaceId ActiveSpaceId() const;
+  SidebarSpace* FindSpace(SpaceId id);
+  // Marks `id` as the one space on screen. What SwitchToSpace does, and what
+  // a move of the active row does in place of the real switcher's adoption.
+  void MarkActiveSpace(SpaceId id);
+
   std::vector<SidebarRow> rows_;
+  std::vector<SidebarSpace> spaces_;
   std::vector<FakeFolder> folders_;
   ArchiveTimeout archive_timeout_ = ArchiveTimeout::kTwelveHours;
   // The real archive is SQLite behind a posted read; this is a vector behind

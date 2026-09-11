@@ -62,6 +62,12 @@ class SpaceSwitcher : public TabStripModelObserver,
   // A blank foreground tab in the active space. The strip index it landed at.
   int OpenBlankTab();
   void MoveTabToSpace(int index, SpaceId space);
+  // Moves the persistent entry to `space` and re-tags its own tab, if it has
+  // one, so the tab's tag agrees with its entry after a later unpin falls
+  // back on it. When that tab is the one on screen, follows it there --
+  // adopting the target rather than switching, which would land on whatever
+  // `space` already remembers as its own place, not on the tab that moved.
+  void MoveEntryToSpace(EntryId id, SpaceId space);
 
   // Optional, and may be reset to null: the playground and fixtures that
   // build no ArchiveService never call this, and DeleteSpace simply skips

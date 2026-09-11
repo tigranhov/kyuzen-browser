@@ -11,6 +11,7 @@
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
+#include "arcium/browser/tab_space.h"
 #include "arcium/test/space_test_util.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -437,6 +438,62 @@ TEST_F(SpaceSwitcherTest, DeletingTheActiveSpaceMovesToItsNeighbourFirst) {
   switcher->DeleteSpace(doomed);
   EXPECT_EQ(third, switcher->active_space());
   EXPECT_EQ(third, switcher->SpaceOfTabAt(strip()->GetIndexOfTab(d1)));
+}
+
+// Dragging a favourite or pinned entry onto another space's dot.
+// Moving the entry behind the tab you are looking at has to take you with
+// it, the same as moving the tab itself does -- landing on the moved tab
+// rather than on whatever `work` already remembers as its last active tab.
+TEST_F(SpaceSwitcherTest, MovingTheActiveEntrysTabFollowsItToTheTargetSpace) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  auto switcher = MakeSwitcher();
+  tabs::TabInterface* a1 = AddTabInSpace(GURL("https://a1.example/"), first);
+  tabs::TabInterface* w1 = AddTabInSpace(GURL("https://w1.example/"), work);
+  const EntryId pin = model_.AddEntry(first, EntryKind::kPinned,
+                                      GURL("https://a1.example/"), u"A1");
+  binding_.Bind(pin, a1->GetHandle());
+
+  // Work already remembers w1 as where the user left it, so a switch would
+  // land there and the moved page would disappear behind it.
+  strip()->ActivateTabAt(strip()->GetIndexOfTab(w1));
+  ASSERT_EQ(work, switcher->active_space());
+  strip()->ActivateTabAt(strip()->GetIndexOfTab(a1));
+  ASSERT_EQ(first, switcher->active_space());
+  ASSERT_EQ(KeyOf(w1->GetContents()), model_.GetSpace(work)->last_active_tab);
+
+  switcher->MoveEntryToSpace(pin, work);
+
+  EXPECT_EQ(work, switcher->active_space());
+  EXPECT_EQ(strip()->GetIndexOfTab(a1), strip()->active_index());
+  EXPECT_EQ(KeyOf(a1->GetContents()), model_.GetSpace(work)->last_active_tab);
+  EXPECT_EQ(work, SpaceTagOf(a1->GetContents()));
+}
+
+// The other half: moving an entry whose tab is not the one on screen just
+// re-tags it and leaves the window where it was -- there is nothing on
+// screen to follow.
+TEST_F(SpaceSwitcherTest,
+       MovingANonActiveEntrysTabRetagsItAndLeavesTheActiveSpaceAlone) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  auto switcher = MakeSwitcher();
+  tabs::TabInterface* a1 = AddTabInSpace(GURL("https://a1.example/"), first);
+  tabs::TabInterface* a2 = AddTabInSpace(GURL("https://a2.example/"), first);
+  const EntryId pin = model_.AddEntry(first, EntryKind::kPinned,
+                                      GURL("https://a2.example/"), u"A2");
+  binding_.Bind(pin, a2->GetHandle());
+  strip()->ActivateTabAt(strip()->GetIndexOfTab(a1));
+  ASSERT_EQ(first, switcher->active_space());
+
+  switcher->MoveEntryToSpace(pin, work);
+
+  EXPECT_EQ(first, switcher->active_space());
+  EXPECT_EQ(work, switcher->SpaceOfTabAt(strip()->GetIndexOfTab(a2)));
+  // The tab's own tag, not just what SpaceOfTabAt answers: that reads the
+  // entry first, so it would say `work` even if the tab still wore `first`,
+  // and an unpin would then drop the tab back into the wrong space.
+  EXPECT_EQ(work, SpaceTagOf(a2->GetContents()));
 }
 
 }  // namespace

@@ -216,6 +216,32 @@ void SpaceSwitcher::MoveTabToSpace(int index, SpaceId space) {
   }
 }
 
+void SpaceSwitcher::MoveEntryToSpace(EntryId id, SpaceId space) {
+  model_->MoveEntryToSpace(id, space);
+  const TabEntry* entry = model_->GetEntry(id);
+  if (!entry || entry->space_id != space || !tab_strip_model_) {
+    // Either the move did not happen -- an unknown entry or space -- or
+    // there is no strip to follow it through.
+    return;
+  }
+  std::optional<tabs::TabHandle> handle = binding_->TabForEntry(id);
+  tabs::TabInterface* tab = handle ? handle->Get() : nullptr;
+  if (!tab) {
+    return;
+  }
+  // The entry's own tab is re-tagged too: an unpin drops the entry and falls
+  // back to whatever the tab itself carries, and that has to agree with
+  // where the entry just went.
+  SetSpaceTag(tab->GetContents(), space);
+  const int index = tab_strip_model_->GetIndexOfTab(tab);
+  if (index != TabStripModel::kNoTab &&
+      index == tab_strip_model_->active_index()) {
+    // Moving the entry behind the tab you are looking at takes you with it,
+    // the same as moving the tab itself does.
+    AdoptSpace(space);
+  }
+}
+
 void SpaceSwitcher::SetArchiveService(ArchiveService* archive_service) {
   archive_service_ = archive_service;
 }

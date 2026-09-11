@@ -366,5 +366,34 @@ TEST_F(SpaceScopingTest, SearchTieBreaksTowardTheActiveSpace) {
   EXPECT_EQ(GURL("https://a1.example/"), results[1].url);
 }
 
+// The sidebar model's own half of the space bar -- reporting every
+// space with its counts already totalled, and switching between them.
+// AddTabInSpace's first call lands in the empty strip and is auto-activated
+// (tab_strip_model.cc's own rule for an empty strip's first insert), so `a1`
+// goes into the first space before `work` gets any tabs -- otherwise `work`'s
+// first tab would be the one auto-activated, and spaces[0].is_active would
+// not hold before the switch below.
+TEST_F(SpaceScopingTest, TheSidebarModelReportsAndSwitchesSpaces) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  AddTabInSpace(GURL("https://w1.example/"), work);
+  AddTabInSpace(GURL("https://w2.example/"), work);
+  model_.AddEntry(work, EntryKind::kPinned, GURL("https://w3.example/"), u"W3");
+
+  const std::vector<SidebarSpace> spaces = sidebar_->spaces();
+  ASSERT_EQ(2u, spaces.size());
+  EXPECT_TRUE(spaces[0].is_active);
+  EXPECT_FALSE(spaces[1].is_active);
+  EXPECT_EQ(work, spaces[1].id);
+  EXPECT_EQ(2, spaces[1].open_tab_count);
+  EXPECT_EQ(1, spaces[1].entry_count);
+
+  sidebar_->SwitchToSpace(work);
+  EXPECT_EQ(work, switcher_->active_space());
+  EXPECT_FALSE(sidebar_->spaces()[0].is_active);
+  EXPECT_TRUE(sidebar_->spaces()[1].is_active);
+}
+
 }  // namespace
 }  // namespace arcium

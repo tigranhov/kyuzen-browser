@@ -114,6 +114,16 @@ class SidebarTabModel : public SidebarModel,
                        std::optional<FolderId> parent_id) const override;
   void SetFolderName(FolderId id, const std::u16string& name) override;
   void DeleteFolder(FolderId id) override;
+  std::vector<SidebarSpace> spaces() const override;
+  void SwitchToSpace(SpaceId id) override;
+  void AddSpace(const std::u16string& name) override;
+  void RenameSpace(SpaceId id, const std::u16string& name) override;
+  void SetSpaceIcon(SpaceId id, const std::u16string& icon) override;
+  void SetSpaceGradient(SpaceId id, int gradient) override;
+  void MoveSpace(SpaceId id, int position) override;
+  void DeleteSpace(SpaceId id) override;
+  void MoveTabToSpace(int tab_index, SpaceId space_id) override;
+  void MoveEntryToSpace(EntryId id, SpaceId space_id) override;
   void SetArchiveTimeout(ArchiveTimeout timeout) override;
   ArchiveTimeout archive_timeout() const override;
   bool has_archive() const override;
