@@ -23,6 +23,7 @@ source_set("browser") {
     "sidebar_tab_model_spaces.cc",
     "space_switcher.cc",
     "space_switcher.h",
+    "space_switcher_spaces.cc",
     "tab_close_types.h",
     "tab_commands.cc",
     "tab_commands.h",
