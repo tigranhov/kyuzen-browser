@@ -70,6 +70,16 @@ foreground tab's first paint or when the tabs they watch go away, not on
 background loads, so they are unaffected. The plan confirms this against
 `session_restore_stats_collector.cc` before relying on it.
 
+One notification does stop firing. `ScheduleLoadForRestoredTabs` is the only
+caller of `SessionRestore::OnTabLoaderFinishedLoadingTabs`, so with the rule
+on, `OnSessionRestoreFinishedLoadingTabs` never fires and session restore
+stays "in progress" for the life of the process. Nothing on macOS listens:
+the one observer is ChromeOS's ARC throttle, `TabManager` declares the method
+without defining or registering it, and the startup-in-progress reference is
+taken only under `kImprovedStartupBestEffortDelay`, which is off by default
+and expires on its own after three minutes. Recorded here so a later rebase
+does not have to rediscover it.
+
 ```cpp
   // Arcium: restored tabs load when the user asks for them (arcium/browser/
   // restored_tab_loading.h), not four to twenty at a time in the background.
@@ -103,8 +113,11 @@ the favicon database; it does not load the page.
 
 The rule is on when both `kArciumSidebar` and a new `kArciumNoLoadAtLaunch`
 (enabled by default) are on, both declared in
-`arcium/common/arcium_features.h`. With either off, the window behaves as
-stock Chromium does, which is what a comparison run needs.
+`arcium/common/arcium_features.h`. With either off, restored tabs load the
+way stock Chromium loads them, which is what a comparison run needs. The
+dimming is not gated: a row still dims while its page is out of memory, so a
+comparison run shows tabs the loader has not reached yet as dimmed, and
+discarded tabs keep dimming whatever the restore rule is set to.
 `--disable-features=ArciumNoLoadAtLaunch` is the switch for it.
 
 `//arcium/browser` gains two deps in Arcium's own `BUILD.gn`:
@@ -244,8 +257,8 @@ All executed by hand.
    added; `is_unloaded` is computed when a row is built.
 3. **Startup:** less work after first paint. The favicon lookups happen as
    before; nothing is added before first paint.
-4. **UI thread:** one `NeedsReload()` read per live row when the sidebar
-   rebuilds, which is a field read.
+4. **UI thread:** two field reads per live row when the sidebar rebuilds,
+   `NeedsReload()` and `WasDiscarded()`.
 
 ## 10. Out of scope
 
