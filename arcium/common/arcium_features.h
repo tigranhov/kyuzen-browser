@@ -20,6 +20,12 @@ BASE_DECLARE_FEATURE(kArciumSidebar);
 // a side-by-side comparison against plain Chromium behaviour.
 BASE_DECLARE_FEATURE(kArciumHomeBoundary);
 
+// After a restart only the tab on screen loads; every other restored tab
+// waits for a click (R3.9). Enabled by default;
+// --disable-features=ArciumNoLoadAtLaunch brings back Chromium's own
+// background loading for a side-by-side comparison.
+BASE_DECLARE_FEATURE(kArciumNoLoadAtLaunch);
+
 // Command line switch that turns the sidebar off for one run, for debugging.
 inline constexpr char kNoSidebarSwitch[] = "arcium-no-sidebar";
 
@@ -75,6 +81,10 @@ bool IsSidebarEnabled();
 
 // True when a link click that leaves an entry's home should open a new tab.
 bool IsHomeBoundaryEnabled();
+
+// True when restored tabs should wait for a click. Off whenever the sidebar
+// is, because a window without it is stock Chromium, restore included.
+bool IsNoLoadAtLaunchEnabled();
 
 // macOS immersive fullscreen moves top chrome into a separate overlay window.
 // Arcium hides the tab strip and toolbar, so that overlay would be zero-sized,

@@ -16,6 +16,8 @@ BASE_FEATURE(kArciumSidebar, base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kArciumHomeBoundary, base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kArciumNoLoadAtLaunch, base::FEATURE_ENABLED_BY_DEFAULT);
+
 base::TimeDelta FakeClockOffset() {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
@@ -53,6 +55,11 @@ bool UsesImmersiveFullscreen() {
 
 bool IsHomeBoundaryEnabled() {
   return base::FeatureList::IsEnabled(kArciumHomeBoundary);
+}
+
+bool IsNoLoadAtLaunchEnabled() {
+  return IsSidebarEnabled() &&
+         base::FeatureList::IsEnabled(kArciumNoLoadAtLaunch);
 }
 
 }  // namespace arcium::features
