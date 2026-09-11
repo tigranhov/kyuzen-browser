@@ -5,6 +5,7 @@
 #include "arcium/ui/browser/tab_commands.h"
 
 #include <algorithm>
+#include <functional>
 #include <vector>
 
 #include "arcium/ui/browser/space_switcher.h"
@@ -97,28 +98,48 @@ bool CloseActiveTab(TabStripModel* strip,
   switcher.OpenBlankTab();
   const int index = strip->GetIndexOfTab(closing);
   if (index != TabStripModel::kNoTab) {
+    // A page that asks before unloading can be kept by the user. The space
+    // then has both the old tab and the blank one, and both are its own, so
+    // the window still shows nothing from another space.
     strip->CloseWebContentsAt(index, kUserCloseTypes);
   }
   return true;
 }
 
 // Closes the active space's Today tabs other than the active one, and for
-// close-to-the-right only those after it. Other spaces' tabs are not on
-// screen, and an entry's tab is spared the way Chromium spares a pinned tab.
-// Walks backwards, so a close never shifts an index still to be visited.
+// close-to-the-right only those after it in `order`, the sidebar's order --
+// what the user sees, where every Today tab sits below the pinned and
+// favourite entries. The strip's order would be wrong: a pinned tab keeps
+// whatever slot it had when it was pinned, among the Today tabs, so from an
+// entry's tab close-to-the-right means every Today tab of the space. Other
+// spaces' tabs are not on screen, and an entry's tab is spared the way
+// Chromium spares a pinned tab.
 bool CloseTodayTabs(TabStripModel* strip,
                     const SpaceSwitcher& switcher,
+                    const std::vector<int>& order,
                     bool only_to_the_right) {
   const int active = strip->active_index();
   if (active == TabStripModel::kNoTab) {
     return true;
   }
-  const int stop = only_to_the_right ? active : -1;
-  for (int index = strip->count() - 1; index > stop; --index) {
-    if (index == active || !switcher.IsInActiveSpace(index) ||
-        switcher.IsClaimedByEntryAt(index)) {
-      continue;
+  auto first = order.begin();
+  if (only_to_the_right) {
+    // An active tab that is not the space's own has none of it to its right.
+    first = std::ranges::find(order, active);
+    if (first != order.end()) {
+      ++first;
     }
+  }
+  std::vector<int> closing;
+  for (auto it = first; it != order.end(); ++it) {
+    if (*it != active && !switcher.IsClaimedByEntryAt(*it)) {
+      closing.push_back(*it);
+    }
+  }
+  // Backwards by strip index, so a close never shifts an index still to be
+  // closed.
+  std::ranges::sort(closing, std::greater<>());
+  for (int index : closing) {
     strip->CloseWebContentsAt(index, kUserCloseTypes);
   }
   return true;
@@ -165,9 +186,11 @@ bool HandleTabCommand(Browser* browser, int command_id) {
     case IDC_CLOSE_TAB:
       return CloseActiveTab(strip, *switcher, order);
     case IDC_WINDOW_CLOSE_OTHER_TABS:
-      return CloseTodayTabs(strip, *switcher, /*only_to_the_right=*/false);
+      return CloseTodayTabs(strip, *switcher, order,
+                            /*only_to_the_right=*/false);
     case IDC_WINDOW_CLOSE_TABS_TO_RIGHT:
-      return CloseTodayTabs(strip, *switcher, /*only_to_the_right=*/true);
+      return CloseTodayTabs(strip, *switcher, order,
+                            /*only_to_the_right=*/true);
     default:
       return false;
   }

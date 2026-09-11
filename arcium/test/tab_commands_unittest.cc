@@ -5,6 +5,7 @@
 #include "arcium/ui/browser/tab_commands.h"
 
 #include <memory>
+#include <vector>
 
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/entry_id.h"
@@ -97,6 +98,7 @@ TEST_F(TabCommandsTest, CommandDigitsCountTheSpacesOwnTabs) {
 
   EXPECT_TRUE(HandleTabCommand(browser(), IDC_SELECT_TAB_1));
   EXPECT_EQ(2, strip()->active_index());
+  strip()->ActivateTabAt(0);
   EXPECT_TRUE(HandleTabCommand(browser(), IDC_SELECT_LAST_TAB));
   EXPECT_EQ(2, strip()->active_index());
   // A digit past the space's last tab does nothing rather than reaching
@@ -118,6 +120,54 @@ TEST_F(TabCommandsTest, MovingATodayTabSkipsOtherSpacesTabs) {
   EXPECT_EQ(2, strip()->active_index());
   EXPECT_EQ(GURL("https://a1.example/"),
             strip()->GetTabAtIndex(2)->GetContents()->GetVisibleURL());
+}
+
+TEST_F(TabCommandsTest, MovingATodayTabBackSkipsOtherSpacesTabs) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), first);  // 0
+  AddTabInSpace(GURL("https://w1.example/"), work);   // 1
+  AddTabInSpace(GURL("https://a2.example/"), first);  // 2
+  strip()->ActivateTabAt(2);
+  EXPECT_TRUE(HandleTabCommand(browser(), IDC_MOVE_TAB_PREVIOUS));
+  // Past the foreign tab and ahead of a1, not merely into w1's place, which
+  // would leave a2 still below a1 in the sidebar.
+  EXPECT_EQ(0, strip()->active_index());
+  EXPECT_EQ(GURL("https://a2.example/"), UrlAt(0));
+  EXPECT_EQ(GURL("https://a1.example/"), UrlAt(1));
+  EXPECT_EQ(GURL("https://w1.example/"), UrlAt(2));
+}
+
+// The switcher adopts another space's tab the moment it is activated, so a
+// window is only still showing one when a command arrives if its switcher did
+// not see the activation; the test builds the switcher after it. Either
+// direction lands on the space's first open tab in sidebar order -- here the
+// pinned tab, which is not the space's first by strip index.
+TEST_F(TabCommandsTest, NextAndPreviousFromAnotherSpacesTabLandOnTheFirst) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  AddTabInSpace(GURL("https://a1.example/"), first);  // 0
+  AddTabInSpace(GURL("https://w1.example/"), work);   // 1
+  tabs::TabInterface* pinned =
+      AddTabInSpace(GURL("https://pin.example/"), first);  // 2
+  AddTabInSpace(GURL("https://w2.example/"), work);        // 3
+  const EntryId pin = model_.AddEntry(first, EntryKind::kPinned,
+                                      GURL("https://pin.example/"), u"P");
+  binding_.Bind(pin, pinned->GetHandle());
+
+  strip()->ActivateTabAt(1);
+  auto switcher = MakeSwitcher();
+  ASSERT_EQ(first, switcher->active_space());
+  EXPECT_TRUE(HandleTabCommand(browser(), IDC_SELECT_NEXT_TAB));
+  EXPECT_EQ(2, strip()->active_index());
+
+  switcher.reset();
+  strip()->ActivateTabAt(3);
+  switcher = MakeSwitcher();
+  ASSERT_EQ(first, switcher->active_space());
+  EXPECT_TRUE(HandleTabCommand(browser(), IDC_SELECT_PREVIOUS_TAB));
+  EXPECT_EQ(2, strip()->active_index());
 }
 
 // A pinned or favourite tab's place is its entry's, which the strip does not
@@ -177,6 +227,41 @@ TEST_F(TabCommandsTest, TheBlankTabACloseLeavesRunsTheBlankTabCallback) {
   EXPECT_EQ(1, runs);
 }
 
+class SpaceChangeCounter : public SpaceSwitcher::Observer {
+ public:
+  void OnActiveSpaceChanged() override { ++changes; }
+  int changes = 0;
+};
+
+// Whatever the callback shows over the blank tab asks which space the window
+// is in, so everything watching the switcher has to have heard of the switch
+// by the time it runs -- whether the switch was asked for or came from
+// deleting the space on screen.
+TEST_F(TabCommandsTest, TheBlankTabCallbackRunsAfterObserversHearOfTheSwitch) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  model_.AddSpace(u"Home");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), first);
+  SpaceChangeCounter observer;
+  switcher->AddObserver(&observer);
+  // How many changes the observer had heard each time the callback ran.
+  std::vector<int> heard;
+  switcher->SetBlankTabCallback(
+      base::BindLambdaForTesting([&] { heard.push_back(observer.changes); }));
+
+  switcher->SwitchTo(work);
+  ASSERT_EQ(1u, heard.size());
+  EXPECT_EQ(1, heard[0]);
+
+  // Work holds only its blank tab, and its neighbour is the empty Home.
+  const int before_delete = observer.changes;
+  switcher->DeleteSpace(work);
+  ASSERT_EQ(2u, heard.size());
+  EXPECT_EQ(before_delete + 1, heard[1]);
+  switcher->RemoveObserver(&observer);
+}
+
 TEST_F(TabCommandsTest, ClosingWhenTheSpaceHasOthersIsChromiumsOwnClose) {
   const SpaceId work = model_.AddSpace(u"Work");
   auto switcher = MakeSwitcher();
@@ -201,6 +286,34 @@ TEST_F(TabCommandsTest, CloseOthersAndCloseToTheRightSpareOtherSpaces) {
   EXPECT_TRUE(HandleTabCommand(browser(), IDC_WINDOW_CLOSE_TABS_TO_RIGHT));
   ASSERT_EQ(2, strip()->count());
   EXPECT_EQ(first, switcher->SpaceOfTabAt(1));
+}
+
+// A pinned tab keeps whatever strip slot it had when it was pinned, which can
+// sit among the Today tabs, while the sidebar draws it above every one of
+// them. To the right means below it in the sidebar, so from a pinned tab
+// that is every Today tab of the space, whichever side of its slot they are.
+TEST_F(TabCommandsTest, CloseToTheRightOfAPinnedTabClosesEveryTodayTab) {
+  const SpaceId first = model_.default_space_id();
+  const SpaceId work = model_.AddSpace(u"Work");
+  auto switcher = MakeSwitcher();
+  AddTabInSpace(GURL("https://a1.example/"), first);  // 0
+  AddTabInSpace(GURL("https://w1.example/"), work);   // 1
+  tabs::TabInterface* pinned =
+      AddTabInSpace(GURL("https://pin.example/"), first);  // 2
+  AddTabInSpace(GURL("https://a2.example/"), first);       // 3
+  AddTabInSpace(GURL("https://w2.example/"), work);        // 4
+  const EntryId pin = model_.AddEntry(first, EntryKind::kPinned,
+                                      GURL("https://pin.example/"), u"P");
+  binding_.Bind(pin, pinned->GetHandle());
+  strip()->ActivateTabAt(2);
+  ASSERT_EQ(first, switcher->active_space());
+
+  EXPECT_TRUE(HandleTabCommand(browser(), IDC_WINDOW_CLOSE_TABS_TO_RIGHT));
+  ASSERT_EQ(3, strip()->count());
+  EXPECT_EQ(GURL("https://w1.example/"), UrlAt(0));
+  EXPECT_EQ(GURL("https://pin.example/"), UrlAt(1));
+  EXPECT_EQ(GURL("https://w2.example/"), UrlAt(2));
+  EXPECT_EQ(1, strip()->active_index());
 }
 
 // Close-others reaches both sides of the active tab, where close-to-the-right

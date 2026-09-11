@@ -69,7 +69,8 @@ class SpaceSwitcher : public TabStripModelObserver,
   int OpenBlankTab();
   // What to offer over a blank tab once OpenBlankTab has put it on screen --
   // a switch to an empty space, or a close of a space's last tab, both land
-  // there. May be left unset, and then a blank tab is simply blank.
+  // there. A switch runs it only after its observers have heard of the
+  // switch. May be left unset, and then a blank tab is simply blank.
   void SetBlankTabCallback(base::RepeatingClosure callback);
   void MoveTabToSpace(int index, SpaceId space);
   // Moves the persistent entry to `space` and re-tags its own tab, if it has
@@ -112,6 +113,9 @@ class SpaceSwitcher : public TabStripModelObserver,
 
  private:
   void TagInsertedTabs(const TabStripModelChange::Insert& insert);
+  // OpenBlankTab without the blank-tab callback. SwitchTo inserts through
+  // this and runs the callback itself, once it has notified its observers.
+  int InsertBlankTab();
   void RecordActiveTab();
   // Puts the window in `id` without touching the strip: sets the active
   // space, records whatever tab is already on screen as `id`'s place, and

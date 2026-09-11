@@ -136,7 +136,7 @@ void SpaceSwitcher::SwitchTo(SpaceId id) {
   //
   // The activation below re-enters OnTabStripModelChanged, but active_space_
   // already names `id` by then, so the landing tab -- one of `id`'s own open
-  // tabs, or the blank tab OpenBlankTab tags into `id` before inserting it --
+  // tabs, or the blank tab InsertBlankTab tags into `id` before inserting it --
   // reads as in-space there. That runs RecordActiveTab instead of the
   // foreign-tab branch, which is exactly what should record this space's new
   // place; nothing here needs to suppress it.
@@ -158,12 +158,19 @@ void SpaceSwitcher::SwitchTo(SpaceId id) {
   if (landing == -1 && !open.empty()) {
     landing = open.front();
   }
-  if (landing == -1) {
-    OpenBlankTab();
+  const bool lands_on_blank = landing == -1;
+  if (lands_on_blank) {
+    InsertBlankTab();
   } else {
     tab_strip_model_->ActivateTabAt(landing);
   }
   NotifyActiveSpaceChanged();
+  // After the notification rather than from inside the insert: whatever the
+  // callback shows over the blank tab asks which space the window is in, and
+  // every observer has to have heard of the switch by then.
+  if (lands_on_blank && blank_tab_callback_) {
+    blank_tab_callback_.Run();
+  }
 }
 
 void SpaceSwitcher::RecordActiveTab() {
@@ -189,6 +196,17 @@ void SpaceSwitcher::AdoptSpace(SpaceId id) {
 }
 
 int SpaceSwitcher::OpenBlankTab() {
+  const int index = InsertBlankTab();
+  // After the append has finished rather than from the strip's observer
+  // callback: whatever the callback shows sits over a tab that is already
+  // on screen.
+  if (index != TabStripModel::kNoTab && blank_tab_callback_) {
+    blank_tab_callback_.Run();
+  }
+  return index;
+}
+
+int SpaceSwitcher::InsertBlankTab() {
   if (!tab_strip_model_) {
     return TabStripModel::kNoTab;
   }
@@ -205,14 +223,7 @@ int SpaceSwitcher::OpenBlankTab() {
   // being left, not the one this blank tab is meant for.
   SetSpaceTag(contents.get(), active_space_);
   tab_strip_model_->AppendWebContents(std::move(contents), /*foreground=*/true);
-  const int index = tab_strip_model_->active_index();
-  // After the append has finished rather than from the strip's observer
-  // callback: whatever the callback shows sits over a tab that is already
-  // on screen.
-  if (blank_tab_callback_) {
-    blank_tab_callback_.Run();
-  }
-  return index;
+  return tab_strip_model_->active_index();
 }
 
 void SpaceSwitcher::SetBlankTabCallback(base::RepeatingClosure callback) {
