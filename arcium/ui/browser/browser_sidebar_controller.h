@@ -35,6 +35,7 @@ namespace arcium {
 
 class QuickEntryBubble;
 class SidebarView;
+class SpaceSwitcher;
 
 // Owns the sidebar inside one BrowserView and answers the layout hooks.
 // Created by BrowserView::InitViews when the sidebar feature is on.
@@ -87,6 +88,12 @@ class BrowserSidebarController : public SidebarModel::Observer {
   void DestroyQuickEntry();
 
   raw_ptr<BrowserView> browser_view_;
+  // Which space this window shows. Declared before `model_` and
+  // `archive_service_` so it is destroyed after both: each holds a bare
+  // pointer to it and removes itself from it in its own destructor. The
+  // sidebar view reaches it only through `model_`, and ~BrowserView removes
+  // its child views before it destroys this controller.
+  std::unique_ptr<SpaceSwitcher> space_switcher_;
   std::unique_ptr<SidebarTabModel> model_;
   // What --arcium-fake-clock-offset offsets, and the only thing it does: the
   // clock the archive sweep asks whether a tab has been idle long enough.

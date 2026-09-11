@@ -11,6 +11,7 @@
 #include "arcium/common/arcium_features.h"
 #include "arcium/ui/browser/quick_entry_bubble.h"
 #include "arcium/ui/browser/session_rebuild_nudge.h"
+#include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
@@ -70,9 +71,16 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   // where the profile and the binding first meet on the //chrome side; it is
   // per profile and idempotent, so a second window re-installs the same thing.
   InstallSessionRebuildNudge(browser_view->GetProfile(), state->binding());
+  // Before the model and the service, both of which hold a bare pointer to
+  // it, and before the sidebar view, which draws whatever space it names.
+  space_switcher_ = std::make_unique<SpaceSwitcher>(
+      browser_view_->browser()->tab_strip_model(), state->model(),
+      state->binding());
+  space_switcher_->SetBlankTabCallback(base::BindRepeating(
+      &BrowserSidebarController::ShowQuickEntry, weak_factory_.GetWeakPtr()));
   model_ = std::make_unique<SidebarTabModel>(
       browser_view->browser()->tab_strip_model(), state->model(),
-      state->binding());
+      state->binding(), space_switcher_.get());
   // One archive per profile (it is one SQLite file), one service per window
   // (a tab is in exactly one strip). Off the record there is neither: see
   // ArciumProfileState::archive().
@@ -80,7 +88,7 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
     archive_service_ = std::make_unique<ArchiveService>(
         browser_view->browser()->tab_strip_model(), state->model(),
         state->binding(), state->archive(), state->archive_runner(),
-        &archive_clock_);
+        &archive_clock_, space_switcher_.get());
     model_->SetArchiveService(archive_service_.get());
   }
   SidebarView::Delegate delegate;
