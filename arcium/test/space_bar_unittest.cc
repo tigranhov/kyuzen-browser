@@ -225,6 +225,7 @@ TEST_F(SpaceBarTest, OneChipPerSpaceWithTheActiveOneMarked) {
   SpaceBarView bar(&model);
   EXPECT_EQ(2u, bar.chips_for_testing().size());
   EXPECT_TRUE(bar.chips_for_testing()[0]->is_active());
+  EXPECT_FALSE(bar.chips_for_testing()[1]->is_active());
   EXPECT_EQ(u"💼", bar.chips_for_testing()[1]->GetText());
 }
 
@@ -286,6 +287,28 @@ TEST_F(SpaceBarTest, DeleteAsksFirstAndSaysWhatGoes) {
   EXPECT_EQ(1u, model.spaces().size());
 }
 
+// The one delete that does not come back has to count what goes in a way
+// that cannot be misread: one entry is one thing, whichever kind it is, and
+// "1 pin and favourite" reads as two.
+TEST_F(SpaceBarTest, TheDeleteConfirmationCountsEntriesUnambiguously) {
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 0);
+  model.AddColdEntry(u"Pin", "https://p.example/", SidebarSection::kPinned);
+  SpaceBarView bar(&model);
+  bar.BuildMenuForTesting(model.spaces()[0].id);
+
+  bar.ExecuteCommand(SpaceBarView::kDelete, 0);
+  EXPECT_NE(std::u16string::npos,
+            bar.confirm_text_for_testing().find(u"1 pin or favourite"));
+  bar.ConfirmDeleteForTesting(/*accept=*/false);
+
+  model.AddColdEntry(u"Fav", "https://f.example/", SidebarSection::kFavorites);
+  bar.ExecuteCommand(SpaceBarView::kDelete, 0);
+  EXPECT_NE(std::u16string::npos,
+            bar.confirm_text_for_testing().find(u"2 pins and favourites"));
+  bar.ConfirmDeleteForTesting(/*accept=*/false);
+}
+
 TEST_F(SpaceBarTest, DecliningTheConfirmationKeepsTheSpace) {
   FakeSidebarModel model;
   model.AddSpaceForTesting(u"Work", u"", 0);
@@ -305,8 +328,7 @@ TEST_F(SpaceBarTest, TheArchiveTimeoutStillReadsTheActiveSpace) {
   EXPECT_EQ(ArchiveTimeout::kSevenDays, model.archive_timeout());
 }
 
-// R2.3 names four archive timeouts, and the space bar's menu is where they are
-// chosen.
+// The four archive timeouts are chosen from the space bar's menu.
 TEST_F(SpaceBarTest, TheSpaceMenuChoosesTheArchiveTimeout) {
   FakeSidebarModel model;
   SpaceBarView bar(&model);

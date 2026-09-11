@@ -208,7 +208,7 @@ void SpaceBarView::ShowContextMenuForViewImpl(
   if (!chip) {
     return;
   }
-  BuildMenuForTesting(chip->space_id());
+  SetMenuSpace(chip->space_id());
   menu_runner_ = std::make_unique<views::MenuRunner>(
       menu_model_.get(), views::MenuRunner::CONTEXT_MENU);
   menu_runner_->RunMenuAt(source->GetWidget(), nullptr,
@@ -291,12 +291,14 @@ void SpaceBarView::ExecuteCommand(int command_id, int event_flags) {
     case kDelete:
       // Arcium's one delete that does not come back, so the sentence says
       // what goes and that it is gone for good: Zen's wording, over more than
-      // Zen loses, because an Arcium space owns its favourites too.
+      // Zen loses, because an Arcium space owns its favourites too. One entry
+      // is one thing whichever kind it is, so it reads "1 pin or favourite";
+      // "1 pin and favourite" would read as two.
       pending_delete_ = space.id;
       confirm_text_ = base::StrCat(
           {u"Delete “", space.name, u"”? Its ",
-           CountPhrase(space.open_tab_count, u"tab", u"tabs"), u", ",
-           CountPhrase(space.entry_count, u"pin and favourite",
+           CountPhrase(space.open_tab_count, u"tab", u"tabs"), u" and ",
+           CountPhrase(space.entry_count, u"pin or favourite",
                        u"pins and favourites"),
            u" will be deleted. This action cannot be undone."});
       ShowConfirmation(space.id);

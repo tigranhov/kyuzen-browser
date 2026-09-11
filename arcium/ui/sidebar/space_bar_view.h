@@ -112,10 +112,10 @@ class SpaceBarView : public views::View,
     return chips_;
   }
   views::ImageButton* add_button_for_testing() { return add_button_; }
-  // Points the menu at `id`, which is everything a right-click on its chip
-  // does before the menu runs. Running it is left out: a context menu on
-  // macOS spins a nested loop that a unit test cannot get out of.
-  void BuildMenuForTesting(SpaceId id) { menu_space_ = id; }
+  // What a right-click on `id`'s chip does before its menu runs. Running it
+  // is left out: a context menu on macOS spins a nested loop that a unit test
+  // cannot get out of.
+  void BuildMenuForTesting(SpaceId id) { SetMenuSpace(id); }
   // The sentence the pending delete confirmation shows; empty when none is.
   const std::u16string& confirm_text_for_testing() const {
     return confirm_text_;
@@ -128,6 +128,9 @@ class SpaceBarView : public views::View,
   enum class EditKind { kName, kIcon };
 
   void Rebuild();
+  // Points the menu at `id`'s space, which is everything a right-click on its
+  // chip does before the menu runs.
+  void SetMenuSpace(SpaceId id) { menu_space_ = id; }
   void OnChipPressed(SpaceChip* chip);
   SpaceChip* ChipFor(SpaceId id) const;
   // Where the menu's space is in `spaces`, if it still exists.
