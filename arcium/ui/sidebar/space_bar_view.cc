@@ -69,7 +69,7 @@ std::optional<ArchiveTimeout> TimeoutForCommand(int command_id) {
 
 std::optional<int> GradientForCommand(int command_id) {
   const int preset = command_id - SpaceBarView::kGradientFirst;
-  if (preset < 0 || preset >= kSpaceGradientCount) {
+  if (preset < 0 || static_cast<size_t>(preset) >= SpaceGradients().size()) {
     return std::nullopt;
   }
   return preset;
@@ -169,13 +169,11 @@ SpaceBarView::SpaceBarView(SidebarModel* model) : model_(model) {
   timeout_menu_->AddRadioItem(kTimeoutNever, u"Never", kTimeoutGroup);
 
   gradient_menu_ = std::make_unique<ui::SimpleMenuModel>(this);
-  for (int preset = 0; preset < kSpaceGradientCount; ++preset) {
-    gradient_menu_->AddRadioItem(
-        kGradientFirst + preset,
-        preset == 0
-            ? std::u16string(u"Default")
-            : base::StrCat({u"Gradient ", base::NumberToString16(preset)}),
-        kGradientGroup);
+  const base::span<const SpaceGradient> gradients = SpaceGradients();
+  for (size_t preset = 0; preset < gradients.size(); ++preset) {
+    gradient_menu_->AddRadioItem(kGradientFirst + static_cast<int>(preset),
+                                 std::u16string(gradients[preset].name),
+                                 kGradientGroup);
   }
 
   menu_model_ = std::make_unique<ui::SimpleMenuModel>(this);

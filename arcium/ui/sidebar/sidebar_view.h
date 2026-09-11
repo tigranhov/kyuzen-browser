@@ -17,6 +17,10 @@
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
 
+namespace ui {
+class ScrollEvent;
+}
+
 namespace views {
 class ScrollView;
 }
@@ -30,6 +34,7 @@ class FavoritesGridView;
 class TabListView;
 class SectionDividerView;
 class SpaceBarView;
+class TintBackground;
 
 // The sidebar column: nav rows, favourites, pinned, divider, today, space bar.
 // Pure Views; everything it shows comes from SidebarModel.
@@ -63,6 +68,10 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   SectionDividerView* divider() { return divider_; }
   // The open archive bubble's delegate, or null when none is open.
   ArchiveListView* archive_list_for_testing() { return archive_list_.get(); }
+  // The preset the background paints, which follows the active space.
+  int tint_preset_for_testing() const;
+  // The column that slides on a space switch.
+  views::View* column_for_testing();
 
   // True for points in the sidebar that should drag the window: the nav row
   // background and any empty space, but not buttons or tab rows.
@@ -75,9 +84,21 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
   bool AcceleratorPressed(const ui::Accelerator& accelerator) override;
+  // A two-finger sideways swipe switches to the neighbouring space. Reached
+  // for scrolls over any view inside the sidebar, not only over its own
+  // background; see ScrollForwarder.
+  void OnScrollEvent(ui::ScrollEvent* event) override;
 
  private:
+  class ScrollForwarder;
+
   void Rebuild();
+  // Switches to the space `step` places along the bar from the active one,
+  // or does nothing past either end.
+  void SwitchToNeighbour(int step);
+  // Slides the column in from the side the newly shown space sits on in the
+  // bar: from the trailing edge when it is to the right of the one before.
+  void SlideColumnIn(bool from_trailing);
   // Opens the archive list over the divider. Only ever reached from the
   // divider's archive button, which exists only when the model has an
   // archive.
@@ -91,6 +112,19 @@ class SidebarView : public views::View, public SidebarModel::Observer {
       this};
 
   int caption_button_width_ = 0;
+
+  // Owned by this view as its background.
+  raw_ptr<TintBackground> tint_ = nullptr;
+  // The space the last rebuild drew, and its place in the bar, so that a
+  // change can tell a switch, which slides, from everything else, which
+  // does not.
+  SpaceId shown_space_;
+  size_t shown_space_index_ = 0;
+  // Sideways travel since the current trackpad gesture began, and whether
+  // that gesture has already switched.
+  float swipe_offset_ = 0;
+  bool swipe_spent_ = false;
+  std::unique_ptr<ScrollForwarder> scroll_forwarder_;
 
   raw_ptr<NavRowView> nav_row_ = nullptr;
   raw_ptr<UrlPillView> url_pill_ = nullptr;

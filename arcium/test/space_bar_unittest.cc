@@ -6,14 +6,39 @@
 // spaces() and switch between them the way the real model does, since every
 // view test of the bar runs over it.
 
+#include <memory>
+#include <string>
+#include <utility>
+
+#include "arcium/test/test_app_activation.h"
 #include "arcium/ui/playground/fake_sidebar_model.h"
+#include "arcium/ui/sidebar/row_context_menu.h"
+#include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
+#include "arcium/ui/sidebar/sidebar_view.h"
 #include "arcium/ui/sidebar/space_bar_view.h"
+#include "arcium/ui/sidebar/tint_background.h"
+#include "base/functional/callback_helpers.h"
+#include "base/time/time.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkColor.h"
+#include "ui/base/accelerators/accelerator.h"
+#include "ui/color/color_provider.h"
+#include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animator.h"
+#include "ui/events/event.h"
+#include "ui/events/event_constants.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/test_event.h"
+#include "ui/gfx/geometry/point_f.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/transform.h"
+#include "ui/gfx/scoped_animation_duration_scale_mode.h"
+#include "ui/menus/simple_menu_model.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/test/views_test_base.h"
+#include "ui/views/widget/widget.h"
 
 namespace arcium {
 namespace {
@@ -24,7 +49,80 @@ class CountingObserver : public SidebarModel::Observer {
   int count = 0;
 };
 
-class SpaceBarTest : public views::ViewsTestBase {};
+class SpaceBarTest : public views::ViewsTestBase {
+ public:
+  void SetUp() override {
+    // Before ViewsTestBase::SetUp(), which would otherwise promote this binary
+    // to a foreground application and pull the desktop onto the suite's Space.
+    arcium::test::SuppressTestAppActivation();
+    views::ViewsTestBase::SetUp();
+  }
+
+ protected:
+  // A widget for the tests that need colours: a view only has a colour
+  // provider once it is in one.
+  std::unique_ptr<views::Widget> MakeWidget() {
+    auto widget =
+        CreateTestWidget(views::Widget::InitParams::CLIENT_OWNS_WIDGET);
+    widget->SetBounds(gfx::Rect(0, 0, 250, 600));
+    return widget;
+  }
+};
+
+// The pair TintBackground paints for `preset`, read against `view`'s colour
+// provider and colour mode.
+std::pair<SkColor, SkColor> TintColorsForTesting(const views::View& view,
+                                                 int preset) {
+  TintBackground tint;
+  tint.SetPreset(preset);
+  const TintBackground::Stops stops = tint.StopsFor(view);
+  return {stops.top, stops.bottom};
+}
+
+// The pair the colour mixer gives, which the sidebar drew before spaces had
+// colours of their own.
+std::pair<SkColor, SkColor> MixerColorsForTesting(const views::View& view) {
+  const ui::ColorProvider* cp = view.GetColorProvider();
+  return {cp->GetColor(kColorArciumSidebarBackgroundTop),
+          cp->GetColor(kColorArciumSidebarBackgroundBottom)};
+}
+
+// Whether a built menu, or any submenu in it, has an item by this label.
+bool HasItem(ui::MenuModel* menu, const std::u16string& label) {
+  for (size_t i = 0; i < menu->GetItemCount(); ++i) {
+    if (menu->GetLabelAt(i) == label) {
+      return true;
+    }
+    ui::MenuModel* submenu = menu->GetSubmenuModelAt(i);
+    if (submenu && HasItem(submenu, label)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+ui::MenuModel* Submenu(ui::MenuModel* menu, const std::u16string& label) {
+  for (size_t i = 0; i < menu->GetItemCount(); ++i) {
+    if (menu->GetLabelAt(i) == label) {
+      return menu->GetSubmenuModelAt(i);
+    }
+  }
+  return nullptr;
+}
+
+// A trackpad scroll as macOS delivers it: one event per movement, bracketed
+// by a begin and an end.
+bool Scroll(SidebarView& view,
+            float dx,
+            float dy,
+            ui::ScrollEventPhase phase = ui::ScrollEventPhase::kUpdate) {
+  ui::ScrollEvent event(ui::EventType::kScroll, gfx::PointF(20, 300),
+                        gfx::PointF(20, 300), base::TimeTicks::Now(),
+                        /*flags=*/0, dx, dy, dx, dy, /*finger_count=*/2,
+                        ui::EventMomentumPhase::NONE, phase);
+  view.OnScrollEvent(&event);
+  return event.handled();
+}
 
 TEST_F(SpaceBarTest, TheFakeReportsSpacesWithTheActiveOneMarked) {
   FakeSidebarModel model;
@@ -239,6 +337,170 @@ TEST_F(SpaceBarTest, TheSpaceMenuChoosesTheArchiveTimeout) {
   EXPECT_EQ(ArchiveTimeout::kNever, model.archive_timeout());
 
   EXPECT_TRUE(bar.IsCommandIdEnabled(SpaceBarView::kTimeoutOneDay));
+}
+
+TEST_F(SpaceBarTest, PresetZeroIsTheSidebarsOriginalPair) {
+  FakeSidebarModel model;
+  std::unique_ptr<views::Widget> widget = MakeWidget();
+  SidebarView* view = widget->SetContentsView(
+      std::make_unique<SidebarView>(&model, SidebarView::Delegate()));
+  // The colours the mixer gives, which is what every existing snapshot and
+  // every space that never chose a gradient draws.
+  EXPECT_EQ(TintColorsForTesting(*view, /*preset=*/0),
+            MixerColorsForTesting(*view));
+  EXPECT_NE(TintColorsForTesting(*view, /*preset=*/1),
+            MixerColorsForTesting(*view));
+  // A preset this build does not have, say from a newer profile, draws the
+  // original pair rather than reading past the table.
+  EXPECT_EQ(TintColorsForTesting(*view, /*preset=*/99),
+            MixerColorsForTesting(*view));
+}
+
+TEST_F(SpaceBarTest, TheSidebarPaintsTheActiveSpacesGradient) {
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 3);
+  SidebarView view(&model, SidebarView::Delegate());
+  EXPECT_EQ(0, view.tint_preset_for_testing());
+  model.SwitchToSpace(model.spaces()[1].id);
+  EXPECT_EQ(3, view.tint_preset_for_testing());
+}
+
+TEST_F(SpaceBarTest, CtrlDigitSwitchesToTheNthSpace) {
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 0);
+  model.AddSpaceForTesting(u"Play", u"", 0);
+  SidebarView view(&model, SidebarView::Delegate());
+  EXPECT_TRUE(view.AcceleratorPressed(
+      ui::Accelerator(ui::VKEY_3, ui::EF_CONTROL_DOWN)));
+  EXPECT_TRUE(model.spaces()[2].is_active);
+  // A digit past the last space is not this view's to swallow.
+  EXPECT_FALSE(view.AcceleratorPressed(
+      ui::Accelerator(ui::VKEY_9, ui::EF_CONTROL_DOWN)));
+  EXPECT_TRUE(model.spaces()[2].is_active);
+}
+
+// Fingers moving left bring in the space to the right, the way a page turns;
+// fingers moving right go back.
+TEST_F(SpaceBarTest, AHorizontalSwipeSwitchesToTheNeighbouringSpace) {
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 0);
+  SidebarView view(&model, SidebarView::Delegate());
+
+  Scroll(view, 0, 0, ui::ScrollEventPhase::kBegan);
+  Scroll(view, -20, 0);  // not far enough yet
+  EXPECT_TRUE(model.spaces()[0].is_active);
+  EXPECT_TRUE(Scroll(view, -50, 0));
+  EXPECT_TRUE(model.spaces()[1].is_active);
+  // The rest of the same gesture is spent: one swipe is one space.
+  Scroll(view, -100, 0);
+  Scroll(view, 0, 0, ui::ScrollEventPhase::kEnd);
+  EXPECT_TRUE(model.spaces()[1].is_active);
+
+  // A mostly vertical scroll is the column's to scroll, not a switch.
+  Scroll(view, 0, 0, ui::ScrollEventPhase::kBegan);
+  EXPECT_FALSE(Scroll(view, 80, 200));
+  Scroll(view, 0, 0, ui::ScrollEventPhase::kEnd);
+  EXPECT_TRUE(model.spaces()[1].is_active);
+
+  Scroll(view, 0, 0, ui::ScrollEventPhase::kBegan);
+  EXPECT_TRUE(Scroll(view, 80, 0));
+  EXPECT_TRUE(model.spaces()[0].is_active);
+}
+
+// The slide is the only animation this task adds, and it must not run on the
+// ordinary changes a sidebar sees all the time -- a title, a favicon, a load.
+TEST_F(SpaceBarTest, TheColumnSlidesOnlyWhenTheSpaceChanges) {
+  gfx::ScopedAnimationDurationScaleMode normal(
+      gfx::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 0);
+  std::unique_ptr<views::Widget> widget = MakeWidget();
+  SidebarView* view = widget->SetContentsView(
+      std::make_unique<SidebarView>(&model, SidebarView::Delegate()));
+  ui::Layer* layer = view->column_for_testing()->layer();
+  ASSERT_TRUE(layer);
+
+  model.RenameSpace(model.spaces()[0].id, u"Home");
+  EXPECT_FALSE(layer->GetAnimator()->is_animating());
+
+  model.SwitchToSpace(model.spaces()[1].id);
+  EXPECT_TRUE(layer->GetAnimator()->is_animating());
+  // Wherever it starts, it comes to rest where it always sits.
+  EXPECT_EQ(gfx::Transform(), layer->GetTargetTransform());
+}
+
+TEST_F(SpaceBarTest, MoveToSpaceIsOfferedOnEveryRowSection) {
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 0);
+  model.AddTab(u"Fav", "https://f.example/", SidebarSection::kFavorites, false);
+  model.AddTab(u"Pin", "https://p.example/", SidebarSection::kPinned, false);
+  model.AddTab(u"Today", "https://t.example/", SidebarSection::kToday, true);
+  RowContextMenu menu(&model);
+  ASSERT_EQ(3u, model.rows().size());
+  for (const SidebarRow& row : model.rows()) {
+    menu.BuildForRow(row, base::DoNothing());
+    EXPECT_TRUE(HasItem(menu.menu(), u"Move to space")) << row.title;
+  }
+}
+
+// Moving the tab on screen takes the window with it, so the moved row is the
+// one the sidebar then draws.
+TEST_F(SpaceBarTest, MoveToSpaceOffersEverySpaceButThisOne) {
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 0);
+  model.AddTab(u"Today", "https://t.example/", SidebarSection::kToday, true);
+  RowContextMenu menu(&model);
+  menu.BuildForRow(model.rows().front(), base::DoNothing());
+
+  ui::MenuModel* targets = Submenu(menu.menu(), u"Move to space");
+  ASSERT_TRUE(targets);
+  ASSERT_EQ(1u, targets->GetItemCount());
+  EXPECT_EQ(u"Work", targets->GetLabelAt(0));
+  EXPECT_TRUE(menu.IsCommandIdEnabled(RowContextMenu::kMoveToSpaceFirst));
+
+  menu.ExecuteCommand(RowContextMenu::kMoveToSpaceFirst, 0);
+  EXPECT_TRUE(model.spaces()[1].is_active);
+  ASSERT_EQ(1u, model.rows().size());
+  EXPECT_EQ(u"Today", model.rows()[0].title);
+}
+
+// A row that is not on screen leaves, and the window stays where it is.
+TEST_F(SpaceBarTest, MovingARowNotOnScreenLeavesTheWindowWhereItIs) {
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 0);
+  model.AddTab(u"A", "https://a.example/", SidebarSection::kToday, true);
+  model.AddTab(u"B", "https://b.example/", SidebarSection::kToday, false);
+  RowContextMenu menu(&model);
+  menu.BuildForRow(model.rows()[1], base::DoNothing());
+
+  menu.ExecuteCommand(RowContextMenu::kMoveToSpaceFirst, 0);
+  EXPECT_TRUE(model.spaces()[0].is_active);
+  ASSERT_EQ(1u, model.rows().size());
+  EXPECT_EQ(u"A", model.rows()[0].title);
+  EXPECT_EQ(1, model.spaces()[1].open_tab_count);
+}
+
+// A cold entry has no tab, so it can only move by its entry.
+TEST_F(SpaceBarTest, AColdEntryMovesToASpaceByItsEntry) {
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 0);
+  model.AddColdEntry(u"F1", "https://f1.example/", SidebarSection::kFavorites);
+  RowContextMenu menu(&model);
+  menu.BuildForRow(model.rows().front(), base::DoNothing());
+
+  menu.ExecuteCommand(RowContextMenu::kMoveToSpaceFirst, 0);
+  EXPECT_TRUE(model.rows().empty());
+  EXPECT_EQ(1, model.spaces()[1].entry_count);
+}
+
+// With one space there is nowhere to move a row to, so the item is not
+// offered at all rather than greyed out on every row's menu.
+TEST_F(SpaceBarTest, MoveToSpaceIsAbsentWithOneSpace) {
+  FakeSidebarModel model;
+  model.AddTab(u"Today", "https://t.example/", SidebarSection::kToday, true);
+  RowContextMenu menu(&model);
+  menu.BuildForRow(model.rows().front(), base::DoNothing());
+  EXPECT_FALSE(HasItem(menu.menu(), u"Move to space"));
 }
 
 }  // namespace

@@ -34,6 +34,11 @@ namespace arcium {
 // the menu was opened from.
 class RowContextMenu : public ui::SimpleMenuModel::Delegate {
  public:
+  // Every space in the "Move to space" submenu, in spaces() order. Above the
+  // folder range, which starts at 100 and is dispatched by a `>=` test that
+  // must come after this one; so the folder range holds 200 folders.
+  static constexpr int kMoveToSpaceFirst = 300;
+
   explicit RowContextMenu(SidebarModel* model);
   RowContextMenu(const RowContextMenu&) = delete;
   RowContextMenu& operator=(const RowContextMenu&) = delete;
@@ -86,6 +91,9 @@ class RowContextMenu : public ui::SimpleMenuModel::Delegate {
 
  private:
   void Run(views::View* source, const gfx::Point& point);
+  // Appends "Move to space", listing every space but the one on screen, which
+  // is the one the row is in. Appends nothing when that leaves none.
+  void AddMoveToSpaceSubmenu();
 
   raw_ptr<SidebarModel> model_;
   SidebarRow row_;
@@ -94,8 +102,11 @@ class RowContextMenu : public ui::SimpleMenuModel::Delegate {
   base::RepeatingClosure begin_rename_;
   // Parallel to the "Move to folder" submenu's items after the first.
   std::vector<FolderId> move_targets_;
+  // Parallel to the "Move to space" submenu's items.
+  std::vector<SpaceId> space_targets_;
   std::unique_ptr<ui::SimpleMenuModel> menu_;
   std::unique_ptr<ui::SimpleMenuModel> move_submenu_;
+  std::unique_ptr<ui::SimpleMenuModel> space_submenu_;
   std::unique_ptr<views::MenuRunner> runner_;
 };
 

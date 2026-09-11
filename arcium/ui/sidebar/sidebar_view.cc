@@ -4,9 +4,11 @@
 
 #include "arcium/ui/sidebar/sidebar_view.h"
 
+#include <cmath>
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
 #include "arcium/ui/sidebar/archive_list_view.h"
 #include "arcium/ui/sidebar/favorites_grid_view.h"
@@ -21,11 +23,19 @@
 #include "base/location.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
+#include "base/time/time.h"
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/compositor/layer.h"
+#include "ui/compositor/layer_animator.h"
+#include "ui/compositor/scoped_layer_animation_settings.h"
+#include "ui/events/event.h"
 #include "ui/events/event_constants.h"
+#include "ui/events/event_handler.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/animation/tween.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/transform.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/flex_layout.h"
@@ -35,6 +45,36 @@
 
 namespace arcium {
 
+namespace {
+
+// How long the column takes to slide in when the space changes.
+constexpr base::TimeDelta kSwitchSlideDuration = base::Milliseconds(200);
+
+// How far two fingers travel sideways before a swipe switches spaces: a
+// quarter of the sidebar, so a vertical scroll that drifts does not.
+constexpr float kSwipeThreshold = metrics::kSidebarWidth / 4;
+
+}  // namespace
+
+// Hands SidebarView the scroll events headed for any view inside it, before
+// that view sees them. The column is a layer-backed ScrollView, and on macOS
+// it passes every scroll to the compositor, which reports each one handled,
+// so a swipe over the rows never bubbles up to the sidebar. Only scrolls: the
+// view itself registered as a pre-target handler would also be sent every
+// descendant's mouse and key events, which View's own handlers act on.
+class SidebarView::ScrollForwarder : public ui::EventHandler {
+ public:
+  explicit ScrollForwarder(SidebarView* view) : view_(view) {}
+
+  // ui::EventHandler:
+  void OnScrollEvent(ui::ScrollEvent* event) override {
+    view_->OnScrollEvent(event);
+  }
+
+ private:
+  raw_ptr<SidebarView> view_;
+};
+
 SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
     : model_(model), delegate_(std::move(delegate)) {
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
@@ -42,7 +82,9 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
       .SetCrossAxisAlignment(views::LayoutAlignment::kStretch)
       .SetInteriorMargin(gfx::Insets(metrics::kSidebarPadding))
       .SetDefault(views::kMarginsKey, gfx::Insets::VH(3, 0));
-  SetBackground(std::make_unique<TintBackground>());
+  auto tint = std::make_unique<TintBackground>();
+  tint_ = tint.get();
+  SetBackground(std::move(tint));
 
   NavRowView::Delegate nav;
   nav.toggle_sidebar = delegate_.toggle_sidebar;
@@ -121,18 +163,36 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   // on; the active row is the one the user is looking at.
   AddAccelerator(
       ui::Accelerator(ui::VKEY_BACK, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN));
+  // Ctrl+1 to Ctrl+9 show the nth space in the bar. Like the one above, they
+  // arrive only when the page has not consumed the key.
+  for (int i = 0; i < 9; ++i) {
+    AddAccelerator(ui::Accelerator(
+        static_cast<ui::KeyboardCode>(ui::VKEY_1 + i), ui::EF_CONTROL_DOWN));
+  }
+
+  scroll_forwarder_ = std::make_unique<ScrollForwarder>(this);
+  AddPreTargetHandler(scroll_forwarder_.get());
 
   observation_.Observe(model_);
   Rebuild();
 }
 
 SidebarView::~SidebarView() {
+  RemovePreTargetHandler(scroll_forwarder_.get());
   // ~View destroys the children, and it runs after this object's own members
   // are gone. The sections must stop observing the session while it is still
   // there.
   favorites_->SetDragSession(nullptr);
   pinned_->SetDragSession(nullptr);
   today_->SetDragSession(nullptr);
+}
+
+int SidebarView::tint_preset_for_testing() const {
+  return tint_->preset();
+}
+
+views::View* SidebarView::column_for_testing() {
+  return scroll_->contents();
 }
 
 void SidebarView::SetCaptionButtonWidth(int width) {
@@ -157,7 +217,14 @@ bool SidebarView::IsPositionInWindowCaption(const gfx::Point& point) const {
 }
 
 void SidebarView::OnSidebarModelChanged() {
+  const SpaceId was_shown = shown_space_;
+  const size_t was_index = shown_space_index_;
   Rebuild();
+  // Only a switch slides. Everything else this hears -- a title, a favicon,
+  // a load -- rebuilds in place, and most of what it hears is that.
+  if (was_shown.is_valid() && shown_space_ != was_shown) {
+    SlideColumnIn(/*from_trailing=*/shown_space_index_ > was_index);
+  }
 }
 
 gfx::Size SidebarView::CalculatePreferredSize(
@@ -166,6 +233,18 @@ gfx::Size SidebarView::CalculatePreferredSize(
 }
 
 bool SidebarView::AcceleratorPressed(const ui::Accelerator& accelerator) {
+  if (accelerator.IsCtrlDown() && accelerator.key_code() >= ui::VKEY_1 &&
+      accelerator.key_code() <= ui::VKEY_9) {
+    const size_t index = accelerator.key_code() - ui::VKEY_1;
+    const std::vector<SidebarSpace> spaces = model_->spaces();
+    // Past the last space this is not ours: swallowing it would make a
+    // shortcut that does nothing, which reads as a broken key.
+    if (index >= spaces.size()) {
+      return false;
+    }
+    model_->SwitchToSpace(spaces[index].id);
+    return true;
+  }
   for (const SidebarRow& row : model_->rows()) {
     if (row.is_active && row.can_return_to_pinned_url &&
         row.entry_id.is_valid()) {
@@ -174,6 +253,82 @@ bool SidebarView::AcceleratorPressed(const ui::Accelerator& accelerator) {
     }
   }
   return false;
+}
+
+void SidebarView::OnScrollEvent(ui::ScrollEvent* event) {
+  // A trackpad gesture opens with kBegan, and that is where the last swipe's
+  // travel is forgotten. Not at kEnd: the momentum events after the fingers
+  // lift arrive later, and would switch a second time.
+  if (event->scroll_event_phase() == ui::ScrollEventPhase::kBegan) {
+    swipe_offset_ = 0;
+    swipe_spent_ = false;
+  }
+  const float dx = event->x_offset();
+  if (std::abs(dx) <= std::abs(event->y_offset())) {
+    // Mostly vertical: the column's to scroll.
+    return;
+  }
+  // Nothing in the sidebar scrolls sideways, so a sideways scroll belongs to
+  // the swipe whatever it is over. Stopping it here also means it is counted
+  // once, although this runs both before the target and, over the sidebar's
+  // own background, as the target.
+  event->SetHandled();
+  event->StopPropagation();
+  if (swipe_spent_) {
+    return;
+  }
+  swipe_offset_ += dx;
+  if (std::abs(swipe_offset_) < kSwipeThreshold) {
+    return;
+  }
+  // A positive offset is fingers moving right, which goes back a space, the
+  // way a page turns.
+  const int step = swipe_offset_ > 0 ? -1 : 1;
+  swipe_offset_ = 0;
+  // A trackpad swipe is one gesture and switches once, momentum included. A
+  // wheel's events carry no phase, so there is no gesture to spend and each
+  // threshold's worth switches again.
+  swipe_spent_ = event->scroll_event_phase() != ui::ScrollEventPhase::kNone ||
+                 event->momentum_phase() != ui::EventMomentumPhase::NONE;
+  SwitchToNeighbour(step);
+}
+
+void SidebarView::SwitchToNeighbour(int step) {
+  const std::vector<SidebarSpace> spaces = model_->spaces();
+  for (size_t i = 0; i < spaces.size(); ++i) {
+    if (!spaces[i].is_active) {
+      continue;
+    }
+    const int target = static_cast<int>(i) + step;
+    if (target >= 0 && static_cast<size_t>(target) < spaces.size()) {
+      model_->SwitchToSpace(spaces[target].id);
+    }
+    return;
+  }
+}
+
+void SidebarView::SlideColumnIn(bool from_trailing) {
+  ui::Layer* layer = scroll_->contents()->layer();
+  if (!layer) {
+    return;
+  }
+  // The animator ticks only while a slide runs and detaches from the
+  // compositor when it ends, so there is nothing left running between
+  // switches. A switch during a slide restarts it from the side.
+  ui::LayerAnimator* animator = layer->GetAnimator();
+  animator->StopAnimating();
+  // Slides from, and settles back on, whatever the layer rests at. That is
+  // the identity except right to left, where ScrollView keeps a flip on this
+  // same layer, and a slide to the identity would leave the rows mirrored.
+  const gfx::Transform rest = layer->GetTargetTransform();
+  gfx::Transform start = rest;
+  start.PostTranslate(
+      from_trailing ? metrics::kSidebarWidth : -metrics::kSidebarWidth, 0);
+  layer->SetTransform(start);
+  ui::ScopedLayerAnimationSettings settings(animator);
+  settings.SetTransitionDuration(kSwitchSlideDuration);
+  settings.SetTweenType(gfx::Tween::EASE_OUT);
+  layer->SetTransform(rest);
 }
 
 void SidebarView::ShowArchiveList() {
@@ -228,6 +383,24 @@ void SidebarView::DestroyArchiveList() {
 void SidebarView::Rebuild() {
   // Rebuilt wholesale on every change: cheap at tens of rows, and the model
   // coalesces bursts. Each section reuses its row views by position.
+  // The tint is the space on screen's, and remembering which space that is
+  // is how OnSidebarModelChanged tells a switch from any other change.
+  int preset = 0;
+  const std::vector<SidebarSpace> spaces = model_->spaces();
+  for (size_t i = 0; i < spaces.size(); ++i) {
+    if (spaces[i].is_active) {
+      preset = spaces[i].gradient;
+      shown_space_ = spaces[i].id;
+      shown_space_index_ = i;
+      break;
+    }
+  }
+  const int painted = tint_->preset();
+  tint_->SetPreset(preset);
+  if (tint_->preset() != painted) {
+    SchedulePaint();
+  }
+
   const std::vector<SidebarRow> rows = model_->rows();
   favorites_->SetRows(rows);
   pinned_->SetRows(rows);

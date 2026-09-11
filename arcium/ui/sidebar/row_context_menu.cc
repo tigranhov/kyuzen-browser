@@ -37,7 +37,10 @@ enum RowCommand {
   // when nothing inside it can be chosen; at id 0 it fell through to the
   // default and always read as enabled.
   kMoveToFolderParent,
-  // Every folder in the "Move to folder" submenu, in folders() order.
+  // "Move to space"'s own item. Only there when another space exists.
+  kMoveToSpaceParent,
+  // Every folder in the "Move to folder" submenu, in folders() order, up to
+  // RowContextMenu::kMoveToSpaceFirst, whose range is tested before this one.
   kMoveToFolderFirst = 100,
 };
 
@@ -87,6 +90,8 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
   begin_rename_ = std::move(begin_rename);
   move_targets_.clear();
   move_submenu_.reset();
+  space_targets_.clear();
+  space_submenu_.reset();
   menu_ = std::make_unique<ui::SimpleMenuModel>(this);
 
   switch (row.section) {
@@ -94,6 +99,7 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
       menu_->AddItem(kPin, u"Pin");
       menu_->AddItem(kAddToFavorites, u"Add to Favorites");
       menu_->AddItem(kRename, u"Rename");
+      AddMoveToSpaceSubmenu();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
       menu_->AddItem(kCloseTab, u"Close");
       break;
@@ -114,12 +120,14 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
       }
       menu_->AddSubMenu(kMoveToFolderParent, u"Move to folder",
                         move_submenu_.get());
+      AddMoveToSpaceSubmenu();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
       menu_->AddItem(kUnpin, u"Unpin");
       menu_->AddItem(kCloseTab, u"Close tab");
       break;
     case SidebarSection::kFavorites:
       menu_->AddItem(kRename, u"Rename");
+      AddMoveToSpaceSubmenu();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
       menu_->AddItem(kRemoveFromFavorites, u"Remove from Favorites");
       menu_->AddItem(kCloseTab, u"Close tab");
@@ -135,6 +143,8 @@ void RowContextMenu::BuildForFolder(const SidebarFolder& folder,
   begin_rename_ = std::move(begin_rename);
   move_targets_.clear();
   move_submenu_.reset();
+  space_targets_.clear();
+  space_submenu_.reset();
   menu_ = std::make_unique<ui::SimpleMenuModel>(this);
   menu_->AddItem(kRename, u"Rename");
   menu_->AddSeparator(ui::NORMAL_SEPARATOR);
@@ -162,6 +172,28 @@ void RowContextMenu::BuildForFolder(const SidebarFolder& folder,
   menu_->AddItem(kDeleteFolder, u"Delete folder (keeps its tabs)");
 }
 
+void RowContextMenu::AddMoveToSpaceSubmenu() {
+  // With one space there is nowhere to go, and an item greyed out on every
+  // row's menu would say something is missing. Unlike "Move to folder",
+  // which is still worth showing empty because a folder is made from this
+  // same menu, a space is made from the bar.
+  if (model_->spaces().size() < 2) {
+    return;
+  }
+  space_submenu_ = std::make_unique<ui::SimpleMenuModel>(this);
+  for (const SidebarSpace& space : model_->spaces()) {
+    // The row is drawn in the active space, so that is where it already is.
+    if (space.is_active) {
+      continue;
+    }
+    space_submenu_->AddItem(
+        kMoveToSpaceFirst + static_cast<int>(space_targets_.size()),
+        space.icon.empty() ? space.name : space.icon + u" " + space.name);
+    space_targets_.push_back(space.id);
+  }
+  menu_->AddSubMenu(kMoveToSpaceParent, u"Move to space", space_submenu_.get());
+}
+
 void RowContextMenu::Run(views::View* source, const gfx::Point& point) {
   if (ShowHook()) {
     ShowHook().Run(this);
@@ -176,6 +208,10 @@ void RowContextMenu::Run(views::View* source, const gfx::Point& point) {
 }
 
 bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
+  if (command_id >= kMoveToSpaceFirst) {
+    return static_cast<size_t>(command_id - kMoveToSpaceFirst) <
+           space_targets_.size();
+  }
   if (command_id >= kMoveToFolderFirst) {
     const size_t index = static_cast<size_t>(command_id - kMoveToFolderFirst);
     if (index >= move_targets_.size()) {
@@ -227,6 +263,20 @@ bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
 }
 
 void RowContextMenu::ExecuteCommand(int command_id, int event_flags) {
+  if (command_id >= kMoveToSpaceFirst) {
+    const size_t index = static_cast<size_t>(command_id - kMoveToSpaceFirst);
+    if (index >= space_targets_.size()) {
+      return;
+    }
+    // A row with an entry moves the entry, which carries its tab; a Today
+    // row has no entry, so the tab itself is re-tagged.
+    if (row_.entry_id.is_valid()) {
+      model_->MoveEntryToSpace(row_.entry_id, space_targets_[index]);
+    } else {
+      model_->MoveTabToSpace(row_.tab_index, space_targets_[index]);
+    }
+    return;
+  }
   if (command_id >= kMoveToFolderFirst) {
     const size_t index = static_cast<size_t>(command_id - kMoveToFolderFirst);
     if (index >= move_targets_.size()) {
