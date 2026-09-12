@@ -97,6 +97,12 @@ SidebarExample::SidebarExample()
       "https://example.com/long", now - base::Days(1));
   model_->AddArchived(u"Rust Book", "https://doc.rust-lang.org/book/",
                       now - base::Days(4));
+
+  // A second profile, so the badge and the space menu's Profile submenu have
+  // something besides Default to show.
+  model_->AddSpaceForTesting(u"Work", u"", 4);
+  const ProfileId work_profile = model_->AddProfileForTesting(u"Work", 2);
+  model_->SetSpaceProfile(model_->spaces()[1].id, work_profile);
 }
 
 SidebarExample::~SidebarExample() = default;

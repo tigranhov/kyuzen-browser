@@ -32,7 +32,16 @@ void SidebarTabModel::CreateProfileForSpace(SpaceId space,
   if (!arcium_model_->GetSpace(space)) {
     return;
   }
-  SetSpaceProfile(space, arcium_model_->AddProfile(name, color));
+  const ProfileId id = arcium_model_->AddProfile(name, color);
+  SetSpaceProfile(space, id);
+  // SetSpaceProfile routes through MoveSpaceToProfile, which refuses off the
+  // record and a handful of other cases this layer cannot see from here. A
+  // refusal must not leave a profile in the list that nothing points at and
+  // the user cannot explain, so undo the add rather than guess at every
+  // reason the attach could have failed.
+  if (arcium_model_->ProfileOfSpace(space) != id) {
+    arcium_model_->RemoveProfile(id);
+  }
 }
 
 void SidebarTabModel::SetSpaceProfile(SpaceId space, ProfileId profile) {

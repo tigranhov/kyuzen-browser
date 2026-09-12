@@ -10,6 +10,8 @@
 #include <utility>
 #include <vector>
 
+#include "arcium/ui/sidebar/profile_colors.h"
+#include "arcium/ui/sidebar/profile_menu.h"
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
@@ -19,6 +21,7 @@
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/third_party/icu/icu_utf.h"
+#include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/dialog_model.h"
 #include "ui/base/models/image_model.h"
@@ -160,7 +163,13 @@ SpaceBarView::SpaceBarView(SidebarModel* model) : model_(model) {
   profile_badge_ = AddChildView(std::make_unique<views::View>());
   profile_badge_->SetPreferredSize(
       gfx::Size(metrics::kProfileBadgeSize, metrics::kProfileBadgeSize));
-  profile_badge_->SetTooltipText(u"Profile: Default");
+  // A plain View has no role, and the accessibility tree refuses a name with
+  // none: it would have nothing to tell a screen reader the name is a name
+  // of. The badge is a small solid disc standing in for the profile, which
+  // is what an image role means here.
+  profile_badge_->GetViewAccessibility().SetRole(ax::mojom::Role::kImage);
+
+  profile_menu_ = std::make_unique<ProfileMenu>(model_, profile_badge_);
 
   timeout_menu_ = std::make_unique<ui::SimpleMenuModel>(this);
   timeout_menu_->AddRadioItem(kTimeoutTwelveHours, u"12 hours", kTimeoutGroup);
@@ -182,6 +191,7 @@ SpaceBarView::SpaceBarView(SidebarModel* model) : model_(model) {
   menu_model_->AddItem(kChangeIcon, u"Change icon");
   menu_model_->AddSubMenu(kArchiveTimeout, u"Archive Today tabs after",
                           timeout_menu_.get());
+  menu_model_->AddSubMenu(kProfile, u"Profile", profile_menu_->model());
   menu_model_->AddSeparator(ui::NORMAL_SEPARATOR);
   menu_model_->AddItem(kMoveLeft, u"Move left");
   menu_model_->AddItem(kMoveRight, u"Move right");
@@ -317,9 +327,7 @@ void SpaceBarView::OnSidebarModelChanged() {
 
 void SpaceBarView::OnThemeChanged() {
   views::View::OnThemeChanged();
-  profile_badge_->SetBackground(views::CreateRoundedRectBackground(
-      kColorArciumSpaceAccent,
-      static_cast<float>(metrics::kProfileBadgeSize) / 2));
+  UpdateProfileBadge();
 }
 
 void SpaceBarView::ConfirmDeleteForTesting(bool accept) {
@@ -348,6 +356,7 @@ void SpaceBarView::Rebuild() {
   for (size_t i = 0; i < spaces.size(); ++i) {
     chips_[i]->SetSpace(spaces[i]);
   }
+  UpdateProfileBadge();
   PlaceEditField();
   InvalidateLayout();
 }
@@ -365,6 +374,11 @@ SpaceBarView::SpaceChip* SpaceBarView::ChipFor(SpaceId id) const {
     }
   }
   return nullptr;
+}
+
+void SpaceBarView::SetMenuSpace(SpaceId id) {
+  menu_space_ = id;
+  profile_menu_->SetSpace(id);
 }
 
 std::optional<size_t> SpaceBarView::MenuSpaceIndex(
@@ -505,6 +519,28 @@ void SpaceBarView::OnConfirmation(int serial, bool accept) {
   if (accept) {
     model_->DeleteSpace(id);
   }
+}
+
+void SpaceBarView::UpdateProfileBadge() {
+  // The active space's profile: the one whose logins the tab on screen uses.
+  ProfileId profile_id = DefaultProfileId();
+  for (const SidebarSpace& space : model_->spaces()) {
+    if (space.is_active) {
+      profile_id = space.profile_id;
+    }
+  }
+  SidebarProfile profile{.id = DefaultProfileId(), .name = u"Default"};
+  for (const SidebarProfile& candidate : model_->profiles()) {
+    if (candidate.id == profile_id) {
+      profile = candidate;
+    }
+  }
+  profile_badge_->SetBackground(views::CreateRoundedRectBackground(
+      ProfileColorAt(profile.color).color,
+      static_cast<float>(metrics::kProfileBadgeSize) / 2));
+  const std::u16string label = base::StrCat({u"Profile: ", profile.name});
+  profile_badge_->SetTooltipText(label);
+  profile_badge_->GetViewAccessibility().SetName(label);
 }
 
 BEGIN_METADATA(SpaceBarView)

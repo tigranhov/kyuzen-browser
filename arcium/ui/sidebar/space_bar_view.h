@@ -28,6 +28,7 @@ class Widget;
 
 namespace arcium {
 
+class ProfileMenu;
 class RenameField;
 
 // Bottom bar: one chip per space, the button that makes a new one, and the
@@ -60,6 +61,7 @@ class SpaceBarView : public views::View,
     // After the timeouts, so no value above moves.
     kMoveLeft,
     kMoveRight,
+    kProfile,
     // kGradientFirst + i chooses preset i of space_gradients.h.
     kGradientFirst = 200,
   };
@@ -112,6 +114,8 @@ class SpaceBarView : public views::View,
     return chips_;
   }
   views::ImageButton* add_button_for_testing() { return add_button_; }
+  ProfileMenu* profile_menu_for_testing() { return profile_menu_.get(); }
+  views::View* profile_badge_for_testing() { return profile_badge_; }
   // What a right-click on `id`'s chip does before its menu runs. Running it
   // is left out: a context menu on macOS spins a nested loop that a unit test
   // cannot get out of.
@@ -130,7 +134,7 @@ class SpaceBarView : public views::View,
   void Rebuild();
   // Points the menu at `id`'s space, which is everything a right-click on its
   // chip does before the menu runs.
-  void SetMenuSpace(SpaceId id) { menu_space_ = id; }
+  void SetMenuSpace(SpaceId id);
   void OnChipPressed(SpaceChip* chip);
   SpaceChip* ChipFor(SpaceId id) const;
   // Where the menu's space is in `spaces`, if it still exists.
@@ -149,6 +153,7 @@ class SpaceBarView : public views::View,
 
   void ShowConfirmation(SpaceId id);
   void OnConfirmation(int serial, bool accept);
+  void UpdateProfileBadge();
 
   raw_ptr<SidebarModel> model_;
   base::ScopedObservation<SidebarModel, SidebarModel::Observer> observation_{
@@ -175,6 +180,9 @@ class SpaceBarView : public views::View,
   // SimpleMenuModel::AddSubMenu keeps a bare pointer to each and owns neither.
   std::unique_ptr<ui::SimpleMenuModel> timeout_menu_;
   std::unique_ptr<ui::SimpleMenuModel> gradient_menu_;
+  // Also declared before the menu: it owns the submenu's SimpleMenuModel,
+  // which AddSubMenu below keeps a bare pointer to.
+  std::unique_ptr<ProfileMenu> profile_menu_;
   std::unique_ptr<ui::SimpleMenuModel> menu_model_;
   std::unique_ptr<views::MenuRunner> menu_runner_;
 
