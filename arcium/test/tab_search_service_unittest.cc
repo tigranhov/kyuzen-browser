@@ -189,7 +189,7 @@ TEST_F(TabSearchServiceTest, ATabBoundToARemovedEntryIsStillFound) {
   ASSERT_EQ(1u, Search(u"stale", 10).size());
 
   // What ReplaceAll does: the entry goes, the binding stays.
-  model_.ReplaceAll(model_.spaces(), model_.folders(), {});
+  model_.ReplaceAll({}, model_.spaces(), model_.folders(), {});
   ASSERT_TRUE(binding_.IsBound(strip()->GetTabAtIndex(0)->GetHandle()));
 
   std::vector<SearchResult> results = Search(u"stale", 10);

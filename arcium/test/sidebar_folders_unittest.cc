@@ -194,7 +194,7 @@ TEST_F(SidebarFoldersTest, FoldersComeBackInPositionOrder) {
   first.name = u"First";
   first.position = 0;
   // Vector order is Second, First; position order is First, Second.
-  arcium_model_.ReplaceAll(std::move(spaces), {second, first}, {});
+  arcium_model_.ReplaceAll({}, std::move(spaces), {second, first}, {});
 
   std::vector<SidebarFolder> folders = model->folders();
   ASSERT_EQ(2u, folders.size());

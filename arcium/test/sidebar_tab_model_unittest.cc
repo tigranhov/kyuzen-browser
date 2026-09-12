@@ -689,7 +689,7 @@ TEST_F(SidebarTabModelTest, ATabWhoseEntryVanishesFallsBackIntoToday) {
 
   // Exactly what a completed load does to the model.
   std::vector<Space> spaces = arcium_model_.spaces();
-  arcium_model_.ReplaceAll(std::move(spaces), {}, {});
+  arcium_model_.ReplaceAll({}, std::move(spaces), {}, {});
 
   std::vector<SidebarRow> rows = model->rows();
   ASSERT_EQ(1u, rows.size());
@@ -751,7 +751,7 @@ TEST_F(SidebarTabModelTest, ATabClaimedByAnotherSpacesEntryIsNotDrawnHere) {
   entry.kind = EntryKind::kPinned;
   entry.space_id = other.id;
   entry.url = GURL("https://a.example/");
-  arcium_model_.ReplaceAll({first, other}, {}, {entry});
+  arcium_model_.ReplaceAll({}, {first, other}, {}, {entry});
   ASSERT_EQ(first.id, arcium_model_.default_space_id());
   binding_.Bind(entry.id, strip()->GetTabAtIndex(0)->GetHandle());
 

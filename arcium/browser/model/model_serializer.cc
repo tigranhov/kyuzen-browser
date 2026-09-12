@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "arcium/browser/model/arcium_model.h"
+#include "arcium/browser/model/arcium_profile.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 
@@ -64,6 +65,17 @@ base::DictValue SerializeModel(const ArciumModel& model) {
   base::DictValue dict;
   dict.Set("version", kModelSchemaVersion);
 
+  base::ListValue profiles;
+  for (const ArciumProfile& profile : model.profiles()) {
+    base::DictValue value;
+    value.Set("id", profile.id.value());
+    value.Set("name", base::UTF16ToUTF8(profile.name));
+    value.Set("color", profile.color);
+    value.Set("position", profile.position);
+    profiles.Append(std::move(value));
+  }
+  dict.Set("profiles", std::move(profiles));
+
   base::ListValue spaces;
   for (const Space& space : model.spaces()) {
     base::DictValue value;
@@ -73,6 +85,7 @@ base::DictValue SerializeModel(const ArciumModel& model) {
     value.Set("position", space.position);
     value.Set("icon", base::UTF16ToUTF8(space.icon));
     value.Set("gradient", space.gradient);
+    value.Set("profile_id", space.profile_id.value());
     if (space.last_active_tab.is_valid()) {
       value.Set("last_active_tab", space.last_active_tab.value());
     }
@@ -131,6 +144,30 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
     return false;
   }
 
+  // Rows with an unusable id are skipped; ArciumModel::ReplaceAll puts
+  // Default first whether or not the file had it, and points any space whose
+  // profile is missing at Default. The file is not trusted to be whole.
+  std::vector<ArciumProfile> profiles;
+  if (const base::ListValue* list = dict.FindList("profiles")) {
+    for (const base::Value& item : *list) {
+      const base::DictValue* value = item.GetIfDict();
+      if (!value) {
+        continue;
+      }
+      const std::string* id = value->FindString("id");
+      ArciumProfile profile;
+      profile.id = id ? ProfileId::FromString(*id) : ProfileId();
+      if (!profile.id.is_valid()) {
+        continue;
+      }
+      const std::string* name = value->FindString("name");
+      profile.name = name ? base::UTF8ToUTF16(*name) : u"Profile";
+      profile.color = value->FindInt("color").value_or(0);
+      profile.position = value->FindInt("position").value_or(0);
+      profiles.push_back(std::move(profile));
+    }
+  }
+
   std::vector<Space> spaces;
   std::set<SpaceId> space_ids;
   if (const base::ListValue* list = dict.FindList("spaces")) {
@@ -153,6 +190,9 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
       const std::string* icon = value->FindString("icon");
       space.icon = icon ? base::UTF8ToUTF16(*icon) : std::u16string();
       space.gradient = value->FindInt("gradient").value_or(0);
+      const std::string* profile_id = value->FindString("profile_id");
+      space.profile_id =
+          profile_id ? ProfileId::FromString(*profile_id) : DefaultProfileId();
       const std::string* last_tab = value->FindString("last_active_tab");
       space.last_active_tab =
           last_tab ? TabKey::FromString(*last_tab) : TabKey();
@@ -316,7 +356,8 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
     }
   }
 
-  model->ReplaceAll(std::move(spaces), std::move(folders), std::move(entries));
+  model->ReplaceAll(std::move(profiles), std::move(spaces), std::move(folders),
+                    std::move(entries));
 
   // After ReplaceAll, so the id is checked against the spaces that survived
   // parsing; last_active_space() falls back to the first space on its own

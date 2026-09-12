@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "arcium/browser/model/arcium_model.h"
+#include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/model_serializer.h"
 #include "base/values.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -77,6 +78,27 @@ TEST(ModelMigrationTest, AVersionTwoSpaceGainsTheStageThreeDefaults) {
   EXPECT_EQ(0, first->FindInt("gradient"));
   ASSERT_TRUE(first->FindString("icon"));
   EXPECT_EQ("", *first->FindString("icon"));
+}
+
+TEST(ModelMigrationTest, AVersionThreeFileGainsTheDefaultProfileOnEverySpace) {
+  base::DictValue dict = DictAtVersion(3);
+  base::DictValue space;
+  space.Set("id", "44444444-4444-4444-8444-444444444444");
+  space.Set("name", "Space");
+  dict.FindList("spaces")->Append(std::move(space));
+
+  std::optional<base::DictValue> migrated = MigrateModelDict(std::move(dict));
+
+  ASSERT_TRUE(migrated.has_value());
+  EXPECT_EQ(kModelSchemaVersion, migrated->FindInt("version"));
+  const base::ListValue* profiles = migrated->FindList("profiles");
+  ASSERT_TRUE(profiles);
+  ASSERT_EQ(1u, profiles->size());
+  EXPECT_EQ(kDefaultProfileIdValue, *(*profiles)[0].GetDict().FindString("id"));
+  EXPECT_EQ("Default", *(*profiles)[0].GetDict().FindString("name"));
+  EXPECT_EQ(
+      kDefaultProfileIdValue,
+      *(*migrated->FindList("spaces"))[0].GetDict().FindString("profile_id"));
 }
 
 }  // namespace

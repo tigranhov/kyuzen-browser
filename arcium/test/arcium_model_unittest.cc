@@ -8,6 +8,7 @@
 #include <optional>
 #include <vector>
 
+#include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
@@ -316,7 +317,7 @@ TEST_F(ArciumModelTest, ReplaceAllSwapsTheWholeModelAndNotifies) {
   entry.url = GURL("https://new.example/");
   entry.last_title = u"New";
 
-  model_.ReplaceAll({space}, {}, {entry});
+  model_.ReplaceAll({}, {space}, {}, {entry});
 
   EXPECT_EQ(1, observer.count);
   ASSERT_EQ(1u, model_.entries().size());
@@ -338,7 +339,7 @@ TEST_F(ArciumModelTest, GetSpaceFindsASpaceAndRefusesAnUnknownId) {
   other.id = SpaceId::Generate();
   other.name = u"Other";
   other.archive_timeout = ArchiveTimeout::kNever;
-  model_.ReplaceAll({first, other}, {}, {});
+  model_.ReplaceAll({}, {first, other}, {}, {});
 
   ASSERT_TRUE(model_.GetSpace(first.id));
   EXPECT_EQ(ArchiveTimeout::kSevenDays,
@@ -359,7 +360,7 @@ TEST_F(ArciumModelTest, ReplaceAllRenumbersTheLoadedSpaces) {
   Space high;
   high.id = SpaceId::Generate();
   high.position = 5;
-  model_.ReplaceAll({high, low}, {}, {});
+  model_.ReplaceAll({}, {high, low}, {}, {});
 
   ASSERT_EQ(2u, model_.spaces().size());
   EXPECT_EQ(low.id, model_.spaces()[0].id);
@@ -369,7 +370,7 @@ TEST_F(ArciumModelTest, ReplaceAllRenumbersTheLoadedSpaces) {
 }
 
 TEST_F(ArciumModelTest, ReplaceAllWithNoSpacesStillLeavesOneUsableSpace) {
-  model_.ReplaceAll({}, {}, {});
+  model_.ReplaceAll({}, {}, {}, {});
   EXPECT_EQ(1u, model_.spaces().size());
   EXPECT_TRUE(model_.default_space_id().is_valid());
 }
@@ -510,6 +511,87 @@ TEST_F(ArciumModelTest, TheLastActiveSpaceIsRememberedAndFallsBackToTheFirst) {
   // A space that has gone leaves the answer pointing at one that exists.
   model.RemoveSpace(second);
   EXPECT_EQ(model.default_space_id(), model.last_active_space());
+}
+
+TEST_F(ArciumModelTest, StartsWithOnlyTheDefaultProfile) {
+  ASSERT_EQ(1u, model_.profiles().size());
+  EXPECT_EQ(DefaultProfileId(), model_.profiles()[0].id);
+  EXPECT_EQ(u"Default", model_.profiles()[0].name);
+  EXPECT_EQ(DefaultProfileId(), model_.spaces()[0].profile_id);
+}
+
+TEST_F(ArciumModelTest, ANewSpaceUsesTheProfileItIsGiven) {
+  const ProfileId work = model_.AddProfile(u"Work", 2);
+  const SpaceId space = model_.AddSpace(u"Office", work);
+  EXPECT_EQ(work, model_.ProfileOfSpace(space));
+  EXPECT_EQ(DefaultProfileId(),
+            model_.ProfileOfSpace(model_.AddSpace(u"Home")));
+}
+
+TEST_F(ArciumModelTest, ANewSpaceGivenAnUnknownProfileUsesDefault) {
+  const SpaceId space = model_.AddSpace(
+      u"Office", ProfileId::FromString("11111111-1111-4111-8111-111111111111"));
+  EXPECT_EQ(DefaultProfileId(), model_.ProfileOfSpace(space));
+}
+
+TEST_F(ArciumModelTest, AddProfileAppendsANamedColouredProfileAndNotifies) {
+  CountingObserver observer;
+  model_.AddObserver(&observer);
+  const ProfileId work = model_.AddProfile(u"Work", 3);
+  model_.RemoveObserver(&observer);
+
+  EXPECT_EQ(1, observer.count);
+  ASSERT_EQ(2u, model_.profiles().size());
+  const ArciumProfile* profile = model_.GetProfile(work);
+  ASSERT_TRUE(profile);
+  EXPECT_EQ(u"Work", profile->name);
+  EXPECT_EQ(3, profile->color);
+  EXPECT_EQ(1, profile->position);
+}
+
+TEST_F(ArciumModelTest, AProfileCanBeRenamedAndRecoloured) {
+  const ProfileId work = model_.AddProfile(u"Work", 1);
+  model_.RenameProfile(work, u"Job");
+  model_.SetProfileColor(work, 5);
+  EXPECT_EQ(u"Job", model_.GetProfile(work)->name);
+  EXPECT_EQ(5, model_.GetProfile(work)->color);
+}
+
+TEST_F(ArciumModelTest, TheDefaultProfileCanBeRenamedButNotRemoved) {
+  model_.RenameProfile(DefaultProfileId(), u"Personal");
+  model_.RemoveProfile(DefaultProfileId());
+  ASSERT_EQ(1u, model_.profiles().size());
+  EXPECT_EQ(u"Personal", model_.profiles()[0].name);
+}
+
+TEST_F(ArciumModelTest, RemovingAProfileMovesItsSpacesToDefault) {
+  const ProfileId work = model_.AddProfile(u"Work", 1);
+  const SpaceId office = model_.AddSpace(u"Office", work);
+  const SpaceId lab = model_.AddSpace(u"Lab", work);
+
+  model_.RemoveProfile(work);
+
+  EXPECT_FALSE(model_.GetProfile(work));
+  EXPECT_EQ(DefaultProfileId(), model_.ProfileOfSpace(office));
+  EXPECT_EQ(DefaultProfileId(), model_.ProfileOfSpace(lab));
+  ASSERT_EQ(1u, model_.profiles().size());
+  EXPECT_EQ(0, model_.profiles()[0].position);
+}
+
+TEST_F(ArciumModelTest, SetSpaceProfileIgnoresAnUnknownProfile) {
+  const ProfileId work = model_.AddProfile(u"Work", 1);
+  const SpaceId space = model_.default_space_id();
+  model_.SetSpaceProfile(space, work);
+  EXPECT_EQ(work, model_.ProfileOfSpace(space));
+
+  model_.SetSpaceProfile(
+      space, ProfileId::FromString("22222222-2222-4222-8222-222222222222"));
+  EXPECT_EQ(work, model_.ProfileOfSpace(space));
+}
+
+TEST_F(ArciumModelTest, AnUnknownSpaceHasTheDefaultProfile) {
+  EXPECT_EQ(DefaultProfileId(), model_.ProfileOfSpace(SpaceId::FromString(
+                                    "33333333-3333-4333-8333-333333333333")));
 }
 
 }  // namespace

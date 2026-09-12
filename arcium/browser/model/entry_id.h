@@ -46,11 +46,13 @@ struct EntryIdTag;
 struct FolderIdTag;
 struct SpaceIdTag;
 struct TabKeyTag;
+struct ProfileIdTag;
 
 using EntryId = TypedId<EntryIdTag>;
 using FolderId = TypedId<FolderIdTag>;
 using SpaceId = TypedId<SpaceIdTag>;
 using TabKey = TypedId<TabKeyTag>;
+using ProfileId = TypedId<ProfileIdTag>;
 
 }  // namespace arcium
 

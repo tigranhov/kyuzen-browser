@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "arcium/browser/model/arcium_model.h"
+#include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/folder.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
@@ -421,6 +422,64 @@ TEST(ModelSerializerTest, AnUnreadableGradientOrIconLeavesTheDefaults) {
   ASSERT_TRUE(DeserializeModel(dict, &read));
   EXPECT_EQ(0, read.spaces().front().gradient);
   EXPECT_TRUE(read.spaces().front().icon.empty());
+}
+
+TEST(ModelSerializerTest, RoundTripPreservesProfilesAndEachSpacesProfile) {
+  ArciumModel original;
+  const ProfileId work = original.AddProfile(u"Work", 4);
+  const SpaceId office = original.AddSpace(u"Office", work);
+
+  ArciumModel restored;
+  ASSERT_TRUE(DeserializeModel(SerializeModel(original), &restored));
+
+  ASSERT_EQ(2u, restored.profiles().size());
+  EXPECT_EQ(DefaultProfileId(), restored.profiles()[0].id);
+  const ArciumProfile* profile = restored.GetProfile(work);
+  ASSERT_TRUE(profile);
+  EXPECT_EQ(u"Work", profile->name);
+  EXPECT_EQ(4, profile->color);
+  EXPECT_EQ(work, restored.ProfileOfSpace(office));
+  EXPECT_EQ(DefaultProfileId(),
+            restored.ProfileOfSpace(restored.default_space_id()));
+}
+
+TEST(ModelSerializerTest, ASpaceNamingAMissingProfileFallsBackToDefault) {
+  ArciumModel original;
+  const ProfileId work = original.AddProfile(u"Work", 1);
+  const SpaceId office = original.AddSpace(u"Office", work);
+  base::DictValue dict = SerializeModel(original);
+  // Drop Work from the list but leave the space pointing at it.
+  base::ListValue* profiles = dict.FindList("profiles");
+  ASSERT_TRUE(profiles);
+  profiles->EraseIf([&](const base::Value& value) {
+    const std::string* id = value.GetDict().FindString("id");
+    return id && *id == work.value();
+  });
+
+  ArciumModel restored;
+  ASSERT_TRUE(DeserializeModel(dict, &restored));
+  EXPECT_EQ(DefaultProfileId(), restored.ProfileOfSpace(office));
+}
+
+TEST(ModelSerializerTest, AFileWithoutTheDefaultProfileStillHasIt) {
+  ArciumModel original;
+  base::DictValue dict = SerializeModel(original);
+  dict.Set("profiles", base::ListValue());
+
+  ArciumModel restored;
+  ASSERT_TRUE(DeserializeModel(dict, &restored));
+  ASSERT_EQ(1u, restored.profiles().size());
+  EXPECT_EQ(DefaultProfileId(), restored.profiles()[0].id);
+}
+
+TEST(ModelSerializerTest, ARenamedDefaultProfileKeepsItsName) {
+  ArciumModel original;
+  original.RenameProfile(DefaultProfileId(), u"Personal");
+
+  ArciumModel restored;
+  ASSERT_TRUE(DeserializeModel(SerializeModel(original), &restored));
+  ASSERT_EQ(1u, restored.profiles().size());
+  EXPECT_EQ(u"Personal", restored.profiles()[0].name);
 }
 
 }  // namespace

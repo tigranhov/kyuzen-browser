@@ -296,7 +296,7 @@ TEST_F(ArchiveServiceTest, ATabBoundToAVanishedEntryIsStillArchivable) {
   // What the load's completion does: entries replaced wholesale, binding
   // untouched.
   std::vector<Space> spaces = model_.spaces();
-  model_.ReplaceAll(std::move(spaces), {}, {});
+  model_.ReplaceAll({}, std::move(spaces), {}, {});
   ASSERT_TRUE(binding_.IsBound(HandleAt(1)));
 
   EXPECT_TRUE(service_->MayArchive(HandleAt(1)));

@@ -210,7 +210,7 @@ TEST_F(SpaceSessionTest, ALaunchKeepsTheTabSessionRestoreSelected) {
   AddTabInSpace(GURL("https://w2.example/"), work.id);
   strip()->ActivateTabAt(1);
 
-  model_.ReplaceAll({first, work}, {}, {});
+  model_.ReplaceAll({}, {first, work}, {}, {});
   model_.SetLastActiveSpace(work.id);
   task_environment()->RunUntilIdle();
 

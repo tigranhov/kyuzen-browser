@@ -21,7 +21,10 @@ class ArciumModel;
 // 3: spaces gained `icon`, `gradient` and `last_active_tab`, and the model
 //    gained `last_active_space`. Bumped for the same reason 2 was: a Stage 2
 //    build opening a Stage 3 file would drop all four on its next save.
-inline constexpr int kModelSchemaVersion = 3;
+// 4: the model gained `profiles`, and spaces gained `profile_id`. Bumped so a
+//    build without profiles refuses the file rather than saving every space
+//    back onto Default and losing which logins it used.
+inline constexpr int kModelSchemaVersion = 4;
 
 base::DictValue SerializeModel(const ArciumModel& model);
 

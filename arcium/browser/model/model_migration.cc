@@ -7,6 +7,7 @@
 #include <iterator>
 #include <utility>
 
+#include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/model_serializer.h"
 #include "base/containers/span.h"
 
@@ -51,9 +52,35 @@ bool MigrateV2ToV3(base::DictValue& dict) {
   return true;
 }
 
+// Version 3 -> 4: the model gained profiles and every space a profile_id.
+//
+// Writes both, for MigrateV2ToV3's reason: every space in a version 3 file
+// used the one storage there was, which is Default's, so Default is the
+// honest answer and the migration says so rather than leaving it to a
+// reader's fallback.
+bool MigrateV3ToV4(base::DictValue& dict) {
+  base::DictValue default_profile;
+  default_profile.Set("id", kDefaultProfileIdValue);
+  default_profile.Set("name", "Default");
+  default_profile.Set("color", 0);
+  default_profile.Set("position", 0);
+  base::ListValue profiles;
+  profiles.Append(std::move(default_profile));
+  dict.Set("profiles", std::move(profiles));
+  if (base::ListValue* spaces = dict.FindList("spaces")) {
+    for (base::Value& item : *spaces) {
+      if (base::DictValue* space = item.GetIfDict()) {
+        space->Set("profile_id", kDefaultProfileIdValue);
+      }
+    }
+  }
+  return true;
+}
+
 // Indexed by source version: kSteps[0] takes a version 1 dict to version 2.
 using MigrationStep = bool (*)(base::DictValue&);
-constexpr MigrationStep kSteps[] = {&MigrateV1ToV2, &MigrateV2ToV3};
+constexpr MigrationStep kSteps[] = {&MigrateV1ToV2, &MigrateV2ToV3,
+                                    &MigrateV3ToV4};
 static_assert(
     std::size(kSteps) == static_cast<size_t>(kModelSchemaVersion) - 1,
     "Bumping kModelSchemaVersion needs a step that gets a file there");

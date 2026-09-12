@@ -208,7 +208,7 @@ TEST_F(SessionTabEntryTest, TheStashIsClearedWhenTheEntryWasMissing) {
   // The id names a real entry again — which is what a model load arriving
   // after the window is interactive looks like. The stale stash must not
   // resurrect and steal a tab the user has been treating as a Today tab.
-  state()->model()->ReplaceAll(state()->model()->spaces(), {}, {saved});
+  state()->model()->ReplaceAll({}, state()->model()->spaces(), {}, {saved});
   ASSERT_TRUE(state()->model()->GetEntry(id));
   BindStashedEntryId(ContentsAt(0));
 

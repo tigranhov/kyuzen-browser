@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/folder.h"
 #include "arcium/browser/model/space.h"
 #include "arcium/browser/model/tab_entry.h"
@@ -47,7 +48,13 @@ class ArciumModel {
   // drifted into being byte-identical copies.
   const Space* GetSpace(SpaceId id) const;
 
-  SpaceId AddSpace(const std::u16string& name);
+  // A new space on `profile`, or on Default when `profile` is unknown.
+  SpaceId AddSpace(const std::u16string& name,
+                   ProfileId profile = DefaultProfileId());
+  // Moves a space to another profile. An unknown space or profile changes
+  // nothing. The model only records it: reopening the space's open tabs in
+  // their new storage is the window's job (SpaceSwitcher).
+  void SetSpaceProfile(SpaceId space, ProfileId profile);
   void RenameSpace(SpaceId id, const std::u16string& name);
   void SetSpaceIcon(SpaceId id, const std::u16string& icon);
   void SetSpaceGradient(SpaceId id, int gradient);
@@ -60,6 +67,20 @@ class ArciumModel {
   // sequence.
   void RemoveSpace(SpaceId id);
   void SetArchiveTimeout(SpaceId space_id, ArchiveTimeout timeout);
+
+  // Profiles, in position order. Default is always present and always first.
+  const std::vector<ArciumProfile>& profiles() const { return profiles_; }
+  const ArciumProfile* GetProfile(ProfileId id) const;
+  // The profile `space` uses. Default for a space the model does not have,
+  // so a caller always gets storage it can use.
+  ProfileId ProfileOfSpace(SpaceId space) const;
+  ProfileId AddProfile(const std::u16string& name, int color);
+  void RenameProfile(ProfileId id, const std::u16string& name);
+  void SetProfileColor(ProfileId id, int color);
+  // Removes a profile. Every space on it moves to Default, the way a removed
+  // folder's contents move up rather than vanish. Refuses Default: every
+  // space needs a profile, and Default is the one that always exists.
+  void RemoveProfile(ProfileId id);
 
   // Entries. Every mutation notifies observers, and every one that names an
   // unknown id is a no-op rather than a crash, because ids arrive from disk.
@@ -114,7 +135,8 @@ class ArciumModel {
 
   // For ModelSerializer, which rebuilds a model from disk without firing a
   // notification per entry.
-  void ReplaceAll(std::vector<Space> spaces,
+  void ReplaceAll(std::vector<ArciumProfile> profiles,
+                  std::vector<Space> spaces,
                   std::vector<Folder> folders,
                   std::vector<TabEntry> entries);
 
@@ -134,6 +156,10 @@ class ArciumModel {
   TabEntry* FindEntry(EntryId id);
   Folder* FindFolder(FolderId id);
   Space* FindSpace(SpaceId id);
+  ArciumProfile* FindProfile(ProfileId id);
+  // Puts Default first and renumbers positions; points any space whose
+  // profile is gone at Default. The one place those two invariants are kept.
+  void NormaliseProfiles();
   // The greatest number of levels below `id`: 0 when it holds no folders.
   int SubtreeHeight(FolderId id) const;
   // Renumbers positions 0..n-1 within each (space, kind) so a reorder never
@@ -141,6 +167,7 @@ class ArciumModel {
   void NormalisePositions();
   void Notify();
 
+  std::vector<ArciumProfile> profiles_;
   std::vector<Space> spaces_;
   SpaceId last_active_space_;
   std::vector<Folder> folders_;

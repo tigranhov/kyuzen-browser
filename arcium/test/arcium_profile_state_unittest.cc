@@ -167,7 +167,7 @@ TEST_F(ArciumProfileStateTest, ABindingWhoseEntryVanishesIsReleased) {
   // What ModelStore::Load's completion does: entries replaced wholesale,
   // TabBinding untouched.
   std::vector<Space> spaces = state->model()->spaces();
-  state->model()->ReplaceAll(std::move(spaces), {}, {});
+  state->model()->ReplaceAll({}, std::move(spaces), {}, {});
 
   EXPECT_FALSE(state->binding()->IsBound(handle));
   EXPECT_FALSE(state->binding()->TabForEntry(id).has_value());
@@ -189,7 +189,7 @@ TEST_F(ArciumProfileStateTest, ALiveEntrysBindingSurvivesAReplaceAll) {
 
   std::vector<Space> spaces = state->model()->spaces();
   std::vector<TabEntry> entries = state->model()->entries();
-  state->model()->ReplaceAll(std::move(spaces), {}, std::move(entries));
+  state->model()->ReplaceAll({}, std::move(spaces), {}, std::move(entries));
 
   EXPECT_TRUE(state->binding()->IsBound(handle));
 
