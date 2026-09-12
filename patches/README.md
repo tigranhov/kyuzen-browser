@@ -50,7 +50,7 @@ GN wiring with no call of its own, following the wiring-before-target order `012
 | Patch | Seam | Delegates to |
 |---|---|---|
 | `0145-gn-navigation-throttles-arcium.patch` | `chrome/browser/BUILD.gn` `source_set("core")` — that target only | nothing — GN wiring for 0150 |
-| `0150-navigation-throttle-home-boundary.patch` | `CreateAndAddChromeThrottlesForNavigation` in `chrome/browser/chrome_content_browser_client_navigation_throttles.cc`, beside `web_app::TabbedWebAppNavigationThrottle` | `arcium::HomeBoundaryThrottle::MaybeCreateAndAdd` |
+| `0150-navigation-throttle-home-boundary.patch` | `CreateAndAddChromeThrottlesForNavigation` in `chrome/browser/chrome_content_browser_client_navigation_throttles.cc`, beside `web_app::TabbedWebAppNavigationThrottle` | `arcium::HomeBoundaryThrottle::MaybeCreateAndAdd` (also carries `0186`'s `#include`; see Stage 3b below) |
 
 Stage 3a. `0155` hooks the strip-wide tab commands in the same function `0090` hooks for
 `IDC_NEW_TAB`, in hunks of its own: none of its lines, the include among them, sits inside
@@ -98,6 +98,18 @@ the first — the exact conflict this file's rule above warns about. Folding it 
 rule allows, keeps both idempotent; `0120`'s row below still lists only its own delegates because
 the extra include line calls nothing.
 
+`0186` registers the navigation-throttle guard in the same function `0150` hooks, and hit the same
+conflict twice over. Its `#include` sorts alphabetically right after `0150`'s own
+`home_boundary_throttle.h` line, landing inside `0150`'s include hunk; folded into `0150`, whose row
+above now says so. The registering call collides too: placed directly beside
+`HomeBoundaryThrottle`'s own call, it sits inside that call's trailing context. Rather than fold the
+whole call into `0150`, `0186`'s call was moved a few lines further down, after
+`ImageNavigationThrottle`, with a comment noting that a throttle still runs after
+`HomeBoundaryThrottle` because this function calls that one first, regardless of where in the file
+`PartitionGuardThrottle`'s own call sits. Verified by reversing every patch to a pristine checkout
+and reapplying with `scripts/sync` twice: all 33 patches, `0186` included, applied clean on the
+first run and skipped clean on the second.
+
 | Patch | Seam | Delegates to |
 |---|---|---|
 | `0180-gn-navigator-arcium.patch` | `chrome/browser/ui/navigator/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0181 |
@@ -106,6 +118,7 @@ the extra include line calls nothing.
 | `0183-gn-resource-coordinator-arcium.patch` | `chrome/browser/resource_coordinator/BUILD.gn`, `impl` | nothing: GN wiring for 0184 |
 | `0184-discard-keeps-storage.patch` | `TabLifecycleUnit::FinishDiscard` in `chrome/browser/resource_coordinator/tab_lifecycle_unit.cc` | `arcium::SiteInstanceForReplacement` |
 | `0185-prerender-profile-storage.patch` | `Browser::IsPrerender2Supported` in `chrome/browser/ui/browser.cc` | `arcium::PrerenderEligibilityForTab` |
+| `0186-navigation-throttle-partition-guard.patch` | `CreateAndAddChromeThrottlesForNavigation` in `chrome/browser/chrome_content_browser_client_navigation_throttles.cc`, after `ImageNavigationThrottle` (its `#include` is folded into `0150`) | `arcium::PartitionGuardThrottle::MaybeCreateAndAdd` |
 | `0187-gn-web-applications-arcium.patch` | `chrome/browser/web_applications/BUILD.gn`, `source_set("web_applications")` | nothing: GN wiring for 0188 |
 | `0189-gn-net-arcium.patch` | `chrome/browser/net/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0190 |
 | `0191-gn-settings-arcium.patch` | `chrome/browser/ui/webui/settings/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0192 |

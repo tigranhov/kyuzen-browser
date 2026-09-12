@@ -77,10 +77,7 @@ void ReopenTabInProfile(TabStripModel* strip,
   }
 
   // The tag and the key live on the WebContents and do not follow it.
-  SetSpaceTag(new_contents.get(), SpaceTagOf(old_contents));
-  if (const TabKey key = ExistingKeyOf(old_contents); key.is_valid()) {
-    SetTabKey(new_contents.get(), key);
-  }
+  CarryTabIdentityTo(old_contents, new_contents.get());
 
   const bool was_on_screen = strip->active_index() == index;
   // Inside the tab: the handle, the entry binding and the selection all

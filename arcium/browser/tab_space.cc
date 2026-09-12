@@ -78,6 +78,20 @@ void SetTabKey(content::WebContents* web_contents, TabKey key) {
   TabSpaceData::FromWebContents(web_contents)->key = key;
 }
 
+void CarryTabIdentityTo(content::WebContents* from, content::WebContents* to) {
+  if (!from || !to) {
+    return;
+  }
+  if (!SpaceTagOf(to).is_valid()) {
+    SetSpaceTag(to, SpaceTagOf(from));
+  }
+  if (!ExistingKeyOf(to).is_valid()) {
+    if (const TabKey key = ExistingKeyOf(from); key.is_valid()) {
+      SetTabKey(to, key);
+    }
+  }
+}
+
 SpaceId SpaceOfTab(const ArciumModel& model,
                    const TabBinding& binding,
                    tabs::TabHandle handle) {

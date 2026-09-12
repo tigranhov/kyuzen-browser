@@ -1,0 +1,30 @@
+Seam: ChromeContentBrowserClient's navigation throttle registration, after
+      ImageNavigationThrottle -- not directly beside HomeBoundaryThrottle's
+      own call, whose adjacent hunk this patch's line would otherwise
+      collide with (see patches/README.md). Registration order still runs
+      the guard after the home boundary: MaybeCreateAndAdd calls add
+      throttles to the registry in the order they are called, and this
+      function calls HomeBoundaryThrottle's first regardless of where in
+      the file PartitionGuardThrottle's own call sits.
+Why: content creates a popup without an opener itself, in the default
+     partition, and cannot call into arcium/. A throttle is the one seam
+     that sees such a navigation before it commits, and it also catches any
+     other path that would put a page in the wrong profile's storage --
+     silently, since a shared login looks like nothing on screen.
+Delegates to: arcium::PartitionGuardThrottle::MaybeCreateAndAdd
+
+diff --git a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+index 252e0f5814..b3e3f037cf 100644
+--- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
++++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
+@@ -492,6 +492,10 @@
+   web_app::WebUIWebAppNavigationThrottle::MaybeCreateAndAdd(registry);
+ 
+   ImageNavigationThrottle::MaybeCreateAndAdd(registry);
++  // Registered after arcium::HomeBoundaryThrottle above: a link click the
++  // home boundary diverts into a new tab never reaches the guard, and the
++  // tab it opens is already in the right storage.
++  arcium::PartitionGuardThrottle::MaybeCreateAndAdd(registry);
+ #endif  // !BUILDFLAG(IS_ANDROID)
+ 
+ #if BUILDFLAG(SAFE_BROWSING_AVAILABLE)

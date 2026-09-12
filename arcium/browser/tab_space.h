@@ -64,6 +64,17 @@ TabKey ExistingKeyOf(content::WebContents* web_contents);
 // off disk rather than one it is minting itself.
 void SetTabKey(content::WebContents* web_contents, TabKey key);
 
+// Copies the two facts above onto the contents replacing another in the same
+// tab: a discard done to save memory, or a prerender swapping in. Both live
+// on the WebContents, so a replacement starts carrying neither, and a tab
+// that lost its tag reads as belonging to the model's first space -- it would
+// be drawn in the wrong space, written to the session file under the wrong
+// profile, and sent by the partition guard into storage it never belonged in.
+// Never overwrites a tag the new contents already carries: one put there
+// deliberately by whoever built it is the better answer, the same rule
+// TagInsertedTabs follows.
+void CarryTabIdentityTo(content::WebContents* from, content::WebContents* to);
+
 // The space `handle` is drawn in. An entry's space wins over the tab's own
 // tag, and a tag naming no space falls back to the model's first.
 SpaceId SpaceOfTab(const ArciumModel& model,

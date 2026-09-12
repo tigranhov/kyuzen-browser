@@ -6,19 +6,26 @@ Why: Chromium has no app-tab concept, so the pinned / favourite home boundary
      throttle is the only seam that sees it at all.
 Delegates to: arcium::HomeBoundaryThrottle::MaybeCreateAndAdd
 
+Also carries the #include for arcium::PartitionGuardThrottle (patch 0186):
+that include sorts alphabetically right after this file's own
+home_boundary_throttle.h line, so a second patch adding it separately would
+land inside this hunk's context and break this patch's already-applied check
+on every scripts/sync after the first. See patches/README.md.
+
 diff --git a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
-index 8de81338cc..1be8027b7d 100644
+index 8de81338cc..252e0f5814 100644
 --- a/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
 +++ b/chrome/browser/chrome_content_browser_client_navigation_throttles.cc
-@@ -4,6 +4,7 @@
+@@ -4,6 +4,8 @@
  
  #include "chrome/browser/chrome_content_browser_client_navigation_throttles.h"
  
 +#include "arcium/ui/browser/home_boundary_throttle.h"
++#include "arcium/ui/browser/partition_guard_throttle.h"
  #include "base/command_line.h"
  #include "base/feature_list.h"
  #include "build/build_config.h"
-@@ -485,6 +486,7 @@ void CreateAndAddChromeThrottlesForNavigation(
+@@ -485,6 +487,7 @@
    NewTabPageNavigationThrottle::MaybeCreateAndAdd(registry);
  
    web_app::TabbedWebAppNavigationThrottle::MaybeCreateAndAdd(registry);
