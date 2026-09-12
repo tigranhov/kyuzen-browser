@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+# Set up and launch everything the Stage 3b hand acceptance pass needs.
+#
+# The pass itself needs a person -- judgement, dragging, clicking -- but none
+# of it should need an hour of setup first. This builds the world the rows
+# assume: a browser carrying three spaces across two profiles, and a local
+# site on loopback that can hold two independent logins at once.
+#
+# Two accounts on one site is exactly what a loopback server does cleanly and
+# what real accounts make slow, so NO REAL CREDENTIAL IS EVER TYPED. The rows
+# are about storage isolation, and a cookie set by a local page proves that as
+# well as a real sign-in does -- the same reasoning the Stage 2.6 pass used.
+#
+# Usage:  scripts/acceptance-3b [--keep]
+#   --keep   reuse the previous run's profile instead of starting clean,
+#            which is what A3b.4 and A3b.6 need when they say "relaunch".
+source "$(dirname "$0")/lib.sh"
+need_src
+
+config="${ARCIUM_CONFIG:-dev}"
+bin="$SRC/out/$config/Arcium.app/Contents/MacOS/Arcium"
+[ -x "$bin" ] || die "no binary at $bin; run scripts/build $config"
+
+data="${ARCIUM_ACCEPTANCE_DIR:-$HOME/Library/Application Support/Arcium-acceptance-3b}"
+port="${ARCIUM_ACCEPTANCE_PORT:-8899}"
+keep=0
+[ "${1:-}" = "--keep" ] && keep=1
+
+profile_dir="$data/Default"
+model="$profile_dir/Arcium Model"
+
+if [ "$keep" = "0" ]; then
+  rm -rf "$data"
+  mkdir -p "$profile_dir"
+  # Fixed ids, so a relaunch under --keep lines up with what was here before
+  # and the checklist can name spaces by name. The shared-logins id is the one
+  # the model reserves for the default profile; it must be exactly this.
+  cat > "$model" <<'JSON'
+{
+  "version": 4,
+  "profiles": [
+    {"id": "00000000-0000-4000-8000-000000000000", "name": "Shared logins", "color": 0, "position": 0},
+    {"id": "160a3988-8d9b-4411-9aca-ac437be7c824", "name": "Work", "color": 3, "position": 1}
+  ],
+  "spaces": [
+    {"id": "23d17fb7-f053-4009-a7b0-91d14db2e906", "name": "Personal", "archive_timeout": "12h", "position": 0, "icon": "", "gradient": 0, "profile_id": "00000000-0000-4000-8000-000000000000"},
+    {"id": "26b2c8db-3696-40d6-a52a-d12efa7f5ef6", "name": "Work", "archive_timeout": "12h", "position": 1, "icon": "", "gradient": 1, "profile_id": "160a3988-8d9b-4411-9aca-ac437be7c824"},
+    {"id": "bd847c8e-e7c4-4228-81af-5e04c44e84e5", "name": "Reading", "archive_timeout": "12h", "position": 2, "icon": "", "gradient": 2, "profile_id": "00000000-0000-4000-8000-000000000000"}
+  ],
+  "folders": [],
+  "entries": [],
+  "last_active_space": "23d17fb7-f053-4009-a7b0-91d14db2e906"
+}
+JSON
+  log "seeded three spaces across two profiles in $data"
+else
+  [ -f "$model" ] || die "--keep given but no profile at $data; run without it first"
+  log "reusing the profile at $data"
+fi
+
+# The site. One page, one cookie, no storage cleverness: it says which account
+# this storage is signed in as, and offers two ways to change that. Anything
+# smarter would be testing the harness instead of the browser.
+server_py="$data/site.py"
+cat > "$server_py" <<'PY'
+import http.server, urllib.parse
+
+PAGE = """<!doctype html><meta charset=utf-8>
+<title>Arcium acceptance site</title>
+<style>body{font:16px system-ui;margin:3rem;max-width:40rem}
+.who{font-size:2rem;padding:1rem;border:2px solid #888;border-radius:.5rem}
+a{display:inline-block;margin:.5rem 1rem .5rem 0}</style>
+<h1>Arcium acceptance site</h1>
+<p class=who>Signed in as: <strong>%s</strong></p>
+<p><a href="?signin=ada">Sign in as ada</a>
+   <a href="?signin=grace">Sign in as grace</a>
+   <a href="?signout=1">Sign out</a></p>
+<p><a id=blank target=_blank href="/?from=blank">Open in a new tab (no opener)</a></p>
+<p>This page is on loopback. The name above comes from a cookie in
+   <em>this storage</em>, so two spaces on different profiles can show two
+   different names at the same time. That is the whole point.</p>
+"""
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        url = urllib.parse.urlparse(self.path)
+        query = urllib.parse.parse_qs(url.query)
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        if "signin" in query:
+            self.send_header(
+                "Set-Cookie", f"who={query['signin'][0]}; Path=/; Max-Age=86400")
+        elif "signout" in query:
+            self.send_header("Set-Cookie", "who=; Path=/; Max-Age=0")
+        self.end_headers()
+        who = "nobody"
+        for part in (self.headers.get("Cookie") or "").split(";"):
+            name, _, value = part.strip().partition("=")
+            if name == "who" and value:
+                who = value
+        if "signin" in query:
+            who = query["signin"][0]
+        elif "signout" in query:
+            who = "nobody"
+        self.wfile.write((PAGE % who).encode())
+
+    def log_message(self, *args):
+        pass
+
+import sys
+http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()
+PY
+
+python3 "$server_py" "$port" &
+server_pid=$!
+trap 'kill $server_pid 2>/dev/null' EXIT
+sleep 1
+kill -0 "$server_pid" 2>/dev/null || die "the loopback site did not start on port $port"
+log "site on http://127.0.0.1:$port/ (pid $server_pid)"
+
+cat <<EOF
+
+  The browser is about to open with three spaces already made:
+
+    Personal  shared logins
+    Work      its own profile, "Work"
+    Reading   shared logins
+
+  Site to use for every row:  http://127.0.0.1:$port/
+
+  A3.1   Open the site in Personal, sign in as ada. Switch to Work, open it,
+         sign in as grace. Both names must stick. Quit, run this script again
+         with --keep: both must still be signed in, each in its own space,
+         and nothing loads until you click a tab.
+  A3b.2  With Work signed in as grace, drag that tab onto Personal. It stays
+         where you dropped it, same page and back history, and now reads ada.
+  A3b.3  Space menu on Work > Profile > clear its data. Work reads nobody;
+         Personal still reads ada; no page reloads.
+  A3b.4  Space menu on Work > Profile > delete the profile. Work moves to
+         shared logins and reads ada. Quit, rerun with --keep: still gone.
+  A3b.5  Open Chrome's Clear browsing data with cookies ticked. The warning
+         must appear and say it cannot be undone. "Shared logins only" leaves
+         the Work profile signed in; "every space too" signs both out.
+  A3b6/7 Install an extension, uninstall it, relaunch twice with --keep: every
+         profile still signed in. Its options page shows the same settings
+         opened from a profile space and from a shared one.
+  A3.3   (in-use half) With both signed in and pages loaded, watch Activity
+         Monitor while switching spaces: no process per profile appears for a
+         space whose tabs are not loaded.
+
+  Close the browser to stop the site.
+
+EOF
+
+"$bin" --user-data-dir="$data" --no-first-run --no-default-browser-check \
+  "http://127.0.0.1:$port/"
+
+# The seed must have been read, not refused: a model file this build cannot
+# understand is moved aside, and the pass would then have been run against an
+# empty model with no spaces at all -- every row would "fail" for the wrong
+# reason.
+if [ -f "$model.unreadable" ]; then
+  die "the seeded model was REFUSED and moved aside; the run above proves nothing"
+fi
+log "seed was read normally; the spaces you saw were the seeded ones"

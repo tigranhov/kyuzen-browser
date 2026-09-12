@@ -77,7 +77,17 @@ real extension — and nothing here pretends to have done them. Two are not.
 A3b.1 was always the automated line. **A3.3 turned out to be half
 scriptable**: counting processes on an idle browser needs a seeded model file
 and sixty seconds rather than a person, and only its in-use half needs
-sign-ins. It was measured rather than left on the list out of habit. Renumbered to the design's own A3b.1-A3b.7 per the pre-flight
+sign-ins. It was measured rather than left on the list out of habit.
+
+The seven that do need a person should not also need an hour of setup, so
+`scripts/acceptance-3b` builds the world they assume: a browser already
+carrying three spaces across two profiles, and a loopback site that holds two
+independent logins at once, with the checklist printed beside it.
+`docs/stage3b-acceptance-harness.md` explains it, including the one
+substitution it makes — A3.1 says two real accounts and the harness uses two
+local cookies, which proves the storage isolation the row is about but not
+federated sign-in or refresh tokens. That is stated there rather than left for
+a reader to assume. Renumbered to the design's own A3b.1-A3b.7 per the pre-flight
 ruling, plus the master spec's A3.1 and A3.3 and the two informal checks the
 brief named "Guard" and "Browser pages".
 
