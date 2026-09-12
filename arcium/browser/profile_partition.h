@@ -12,6 +12,7 @@
 #include "arcium/browser/model/entry_id.h"
 #include "base/files/file_path.h"
 #include "base/memory/scoped_refptr.h"
+#include "content/public/browser/preloading.h"
 #include "content/public/browser/storage_partition_config.h"
 
 class GURL;
@@ -100,6 +101,20 @@ std::string PartitionDomainOfTab(content::WebContents* contents);
 bool IsInRightStorage(const GURL& url,
                       std::string_view tab_partition_domain,
                       const ProfileId& space_profile);
+
+// The storage a tab Chromium is recreating must keep: a SiteInstance fixed
+// to the partition `old_contents` uses, or nullptr when that is the default
+// partition and Chromium's own choice -- none at all -- is right.
+scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(
+    content::WebContents* old_contents);
+
+// Whether a page may be prerendered for `contents`. A prerender builds its
+// own frame tree in the default partition and activation swaps the tab into
+// it, so a tab in a profile refuses: R3.9 -- nothing loads unless it is
+// asked for -- argues the same way.
+content::PreloadingEligibility PrerenderEligibilityForTab(
+    content::WebContents& contents,
+    content::PreloadingEligibility chromium_answer);
 
 }  // namespace arcium
 

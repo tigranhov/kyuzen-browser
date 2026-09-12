@@ -140,4 +140,25 @@ bool IsInRightStorage(const GURL& url,
   NOTREACHED();
 }
 
+scoped_refptr<content::SiteInstance> SiteInstanceForReplacement(
+    content::WebContents* old_contents) {
+  content::BrowserContext* context = old_contents->GetBrowserContext();
+  const content::StoragePartitionConfig config =
+      context->GetStoragePartition(old_contents->GetSiteInstance())
+          ->GetConfig();
+  if (!IsArciumPartitionDomain(config.partition_domain())) {
+    return nullptr;
+  }
+  return content::SiteInstance::CreateForFixedStoragePartition(
+      context, old_contents->GetLastCommittedURL(), config);
+}
+
+content::PreloadingEligibility PrerenderEligibilityForTab(
+    content::WebContents& contents,
+    content::PreloadingEligibility chromium_answer) {
+  return IsArciumPartitionDomain(PartitionDomainOfTab(&contents))
+             ? content::PreloadingEligibility::kNonDefaultStoragePartition
+             : chromium_answer;
+}
+
 }  // namespace arcium

@@ -8,9 +8,12 @@
 #include "arcium/browser/model/entry_id.h"
 #include "base/files/file_path.h"
 #include "chrome/test/base/testing_profile.h"
+#include "content/public/browser/preloading.h"
 #include "content/public/browser/site_instance.h"
 #include "content/public/browser/storage_partition.h"
 #include "content/public/test/browser_task_environment.h"
+#include "content/public/test/test_renderer_host.h"
+#include "content/public/test/web_contents_tester.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
@@ -24,6 +27,7 @@ class ProfilePartitionTest : public testing::Test {
  protected:
   content::BrowserTaskEnvironment task_environment_;
   TestingProfile profile_;
+  content::RenderViewHostTestEnabler rvh_enabler_;
 };
 
 TEST_F(ProfilePartitionTest, TheDefaultProfileHasNoPartitionOfItsOwn) {
@@ -142,6 +146,49 @@ TEST_F(ProfilePartitionTest, TheGuardsRule) {
   EXPECT_TRUE(IsInRightStorage(GURL("about:blank"), "", kWork));
   // A guest's or an app's partition is not Arcium's to judge.
   EXPECT_TRUE(IsInRightStorage(web, "abcdefghijklmnopabcdefghijklmnop", kWork));
+}
+
+TEST_F(ProfilePartitionTest, AReplacementKeepsTheTabsOwnStorage) {
+  std::unique_ptr<content::WebContents> contents =
+      content::WebContentsTester::CreateTestWebContents(
+          &profile_,
+          SiteInstanceForProfile(&profile_, kWork, GURL("https://a.test/")));
+  scoped_refptr<content::SiteInstance> replacement =
+      SiteInstanceForReplacement(contents.get());
+  ASSERT_TRUE(replacement);
+  EXPECT_EQ(PartitionDomainForProfile(kWork),
+            profile_.GetStoragePartition(replacement.get())
+                ->GetConfig()
+                .partition_domain());
+}
+
+TEST_F(ProfilePartitionTest, AReplacementOfADefaultTabKeepsChromiumsChoice) {
+  std::unique_ptr<content::WebContents> contents =
+      content::WebContentsTester::CreateTestWebContents(&profile_, nullptr);
+  EXPECT_FALSE(SiteInstanceForReplacement(contents.get()));
+}
+
+// A prerender builds its page in the default partition and activation swaps
+// the tab into it, which would take the tab out of its profile.
+TEST_F(ProfilePartitionTest, ATabInAProfileIsNotPrerenderedInto) {
+  std::unique_ptr<content::WebContents> in_profile =
+      content::WebContentsTester::CreateTestWebContents(
+          &profile_,
+          SiteInstanceForProfile(&profile_, kWork, GURL("https://a.test/")));
+  EXPECT_EQ(content::PreloadingEligibility::kNonDefaultStoragePartition,
+            PrerenderEligibilityForTab(
+                *in_profile, content::PreloadingEligibility::kEligible));
+
+  std::unique_ptr<content::WebContents> in_default =
+      content::WebContentsTester::CreateTestWebContents(&profile_, nullptr);
+  EXPECT_EQ(content::PreloadingEligibility::kEligible,
+            PrerenderEligibilityForTab(
+                *in_default, content::PreloadingEligibility::kEligible));
+  // Chromium's own answer still stands where it says no.
+  EXPECT_EQ(
+      content::PreloadingEligibility::kPreloadingDisabled,
+      PrerenderEligibilityForTab(
+          *in_default, content::PreloadingEligibility::kPreloadingDisabled));
 }
 
 }  // namespace

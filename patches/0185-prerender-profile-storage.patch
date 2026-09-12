@@ -1,0 +1,32 @@
+Seam: Browser::IsPrerender2Supported in chrome/browser/ui/browser.cc.
+Why: a prerender builds its page in the default partition and activation
+     swaps the tab into it, which would take a tab out of its profile's
+     storage. Prefetch already refuses a non-default partition; this is the
+     same answer for prerender.
+Delegates to: arcium::PrerenderEligibilityForTab
+
+diff --git a/chrome/browser/ui/browser.cc b/chrome/browser/ui/browser.cc
+index 47c68b1f47..1683610894 100644
+--- a/chrome/browser/ui/browser.cc
++++ b/chrome/browser/ui/browser.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "arcium/browser/profile_partition.h"
+ #include "chrome/browser/ui/browser.h"
+ 
+ #include <stddef.h>
+@@ -1206,7 +1207,11 @@ content::PreloadingEligibility Browser::IsPrerender2Supported(
+     content::PreloadingTriggerType trigger_type) {
+   Profile* profile =
+       Profile::FromBrowserContext(web_contents.GetBrowserContext());
+-  return prefetch::IsSomePreloadingEnabled(*profile->GetPrefs());
++  // Arcium: a tab in a profile of its own cannot be prerendered into,
++  // because the prerender is built in the default partition
++  // (arcium/browser/profile_partition.h).
++  return arcium::PrerenderEligibilityForTab(
++      web_contents, prefetch::IsSomePreloadingEnabled(*profile->GetPrefs()));
+ }
+ 
+ bool Browser::ShouldShowStaleContentOnEviction(content::WebContents* source) {

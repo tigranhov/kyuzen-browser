@@ -1,0 +1,32 @@
+Seam: TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard in
+      chrome/browser/resource_coordinator/tab_lifecycle_unit.cc, where the
+      discarded tab's replacement WebContents is created.
+Why: the replacement is created with no SiteInstance, which means the
+     default partition, and its copied history entries still name the old
+     partition's SiteInstances. A tab in a profile would come back logged
+     out after Chromium had thrown it away to save memory.
+Delegates to: arcium::SiteInstanceForReplacement
+
+diff --git a/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc b/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
+index 70534fb4ed..5f2edec7e1 100644
+--- a/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
++++ b/chrome/browser/resource_coordinator/tab_lifecycle_unit.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "arcium/browser/profile_partition.h"
+ #include "chrome/browser/resource_coordinator/tab_lifecycle_unit.h"
+ 
+ #include <memory>
+@@ -281,6 +282,10 @@ void TabLifecycleUnitSource::TabLifecycleUnit::FinishDiscard(
+       content::WebContents::CreateParams::kNoRendererProcess;
+   create_params.last_active_time = old_contents->GetLastActiveTime();
+   create_params.last_active_time_ticks = old_contents->GetLastActiveTimeTicks();
++  // Arcium: the replacement keeps the tab's own storage; without it a tab
++  // in a profile comes back logged out, and its history entries would still
++  // point at the storage it left (arcium/browser/profile_partition.h).
++  create_params.site_instance = arcium::SiteInstanceForReplacement(old_contents);
+   std::unique_ptr<content::WebContents> null_contents =
+       content::WebContents::Create(create_params);
+   content::WebContents* raw_null_contents = null_contents.get();
