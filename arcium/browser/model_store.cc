@@ -8,6 +8,7 @@
 #include <string>
 #include <utility>
 
+#include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/model_migration.h"
 #include "arcium/browser/model/model_serializer.h"
 #include "base/files/file.h"
@@ -35,6 +36,34 @@ namespace {
   return base::Move(path, path.AddExtension(FILE_PATH_LITERAL("unreadable")));
 }
 
+// The same refusal DeserializeModel makes, asked here so the answer arrives
+// while the file is still in reach of this sequence. A profile row naming no
+// usable id is fatal on purpose: the keep list handed to Chrome's storage
+// sweep is built from profiles(), and a list short of a real profile means
+// that profile's cookies are deleted for good. But refusing a file without
+// preserving it would be the worse trade -- the model is then empty while the
+// user's real file is still at this path with saving armed, so the next thing
+// they touch overwrites every space, folder and pinned entry they had. This
+// runs on the background sequence, where moving the file aside is allowed;
+// OnLoaded is the UI thread and may not touch the disk.
+bool HasUnusableProfileRow(const base::DictValue& dict) {
+  const base::ListValue* list = dict.FindList("profiles");
+  if (!list) {
+    return false;
+  }
+  for (const base::Value& item : *list) {
+    const base::DictValue* value = item.GetIfDict();
+    if (!value) {
+      return true;
+    }
+    const std::string* id = value->FindString("id");
+    if (!id || !ProfileId::FromString(*id).is_valid()) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Runs on the background sequence, which is where the migration has to run:
 // the promise is that no schema work ever happens on the UI thread, and
 // OnLoaded is the UI thread. `dict` is nullopt for a missing, unreadable,
@@ -56,6 +85,11 @@ ModelStore::LoadResult ReadFileOnBackgroundSequence(
   }
   result.dict = MigrateModelDict(std::move(*dict));
   if (!result.dict) {
+    result.bytes_preserved = MoveUnreadableFileAside(path);
+    return result;
+  }
+  if (HasUnusableProfileRow(*result.dict)) {
+    result.dict.reset();
     result.bytes_preserved = MoveUnreadableFileAside(path);
   }
   return result;

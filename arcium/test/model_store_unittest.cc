@@ -238,6 +238,77 @@ TEST_F(ModelStoreTest, AFileThatCannotBeMovedAsideIsNotOverwrittenEither) {
   EXPECT_EQ(from_the_future, on_disk);
 }
 
+// The third place that makes the promise, and the one that nearly broke it.
+// A profile row with an unusable id fails the whole read on purpose: the keep
+// list handed to Chrome's storage sweep is built from profiles(), and a list
+// short of a real profile has that profile's cookies deleted for good. But
+// refusing a file is only half the job -- this one parses and migrates
+// perfectly well, so it never reached either branch above, and the model was
+// left empty with the user's real file still on disk and saving still armed.
+// The first pinned tab they touched would have overwritten every space,
+// folder and entry they had.
+TEST_F(ModelStoreTest,
+       AFileWithAnUnusableProfileRowIsMovedAsideNotOverwritten) {
+  const std::string bad_profile =
+      R"({"version":4,"profiles":[{"id":"not-a-uuid","name":"Work"}],)"
+      R"("spaces":[],"folders":[],"entries":[]})";
+  ASSERT_TRUE(base::WriteFile(path(), bad_profile));
+
+  ArciumModel model;
+  {
+    ModelStore store(&model, path());
+    base::RunLoop loop;
+    store.Load(loop.QuitClosure());
+    loop.Run();
+
+    // Refused, so nothing may delete what the model does not name.
+    EXPECT_FALSE(store.load_succeeded());
+
+    model.AddEntryForTesting(EntryKind::kPinned, GURL("https://a.example/"),
+                             u"A");
+    task_environment_.FastForwardBy(ModelStore::kSaveDelay * 2);
+  }
+
+  // The bytes are beside the path, not under it: the user's spaces and pins
+  // are recoverable by hand.
+  std::string aside;
+  ASSERT_TRUE(base::ReadFileToString(
+      path().AddExtension(FILE_PATH_LITERAL("unreadable")), &aside));
+  EXPECT_EQ(bad_profile, aside);
+}
+
+// And when it cannot be moved aside, the store must stop writing instead,
+// exactly as the two branches below do.
+TEST_F(ModelStoreTest,
+       AnUnusableProfileRowThatCannotBeMovedAsideIsNotOverwritten) {
+  const std::string bad_profile =
+      R"({"version":4,"profiles":[{"id":"not-a-uuid","name":"Work"}],)"
+      R"("spaces":[],"folders":[],"entries":[]})";
+  ASSERT_TRUE(base::WriteFile(path(), bad_profile));
+  ASSERT_TRUE(base::CreateDirectory(
+      path().AddExtension(FILE_PATH_LITERAL("unreadable"))));
+
+  ArciumModel model;
+  {
+    ModelStore store(&model, path());
+    base::RunLoop loop;
+    store.Load(loop.QuitClosure());
+    loop.Run();
+
+    EXPECT_TRUE(store.saves_suppressed_for_testing());
+
+    model.AddEntryForTesting(EntryKind::kPinned, GURL("https://a.example/"),
+                             u"A");
+    EXPECT_EQ(0, store.scheduled_save_count_for_testing());
+    task_environment_.FastForwardBy(ModelStore::kSaveDelay * 2);
+    EXPECT_EQ(0, store.initiated_save_count_for_testing());
+  }
+
+  std::string on_disk;
+  ASSERT_TRUE(base::ReadFileToString(path(), &on_disk));
+  EXPECT_EQ(bad_profile, on_disk);
+}
+
 // The same promise, at the other place that makes it. A file that is not
 // JSON at all takes a different branch from one whose version we refuse, and
 // each branch moves the file aside on its own line -- so a fix applied to one
