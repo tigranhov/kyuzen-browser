@@ -51,6 +51,11 @@ class BrowserSidebarController : public SidebarModel::Observer {
   SidebarView* view() { return view_; }
   int width() const;
 
+  // The real SidebarTabModel this window's sidebar draws from, so a test can
+  // call its forwarding methods directly instead of the free functions they
+  // forward to. Test-only.
+  SidebarTabModel* model_for_testing() { return model_.get(); }
+
   // The height macOS should treat as this window's title bar, so the traffic
   // lights land on the nav row's centre line rather than hard against the top
   // of the window. See metrics::kTitlebarHeight for why the number is what it

@@ -91,6 +91,7 @@ test("arcium_browsertests") {
     "browser/profile_isolation_browsertest.cc",
     "browser/profile_lifecycle_browsertest.cc",
     "browser/profile_restore_browsertest.cc",
+    "browser/sidebar_tab_model_profiles_browsertest.cc",
   ]
 
   # As browser_tests and sync_performance_tests set it.
@@ -100,6 +101,7 @@ test("arcium_browsertests") {
     "//arcium/browser",
     "//arcium/browser/model",
     "//arcium/ui/browser",
+    "//arcium/ui/sidebar",
     "//base/test:test_support",
     "//chrome/browser/ui",
     "//chrome/test:browser_tests_runner",
