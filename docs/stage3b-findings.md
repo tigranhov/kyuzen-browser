@@ -23,11 +23,15 @@ one domain and a profile id can never collide with an extension's (32-letter)
 or an isolated web app's (`i`-prefixed) partition domain.
 
 **Every tab-creation path is covered, by a hook per path plus a guard that
-catches what the hooks cannot see coming.** A new tab, a popup with an
-opener, a restored tab, a reopened closed tab and a discarded tab's
-replacement each get a `SiteInstance` fixed to their space's profile through
-one of five upstream hooks (patches 0181, 0182, 0184, 0185, 0190) delegating
-to `arcium/browser/profile_partition.cc` and `arcium/browser/tab_space.cc`.
+catches what the hooks cannot see coming.** A new tab, a restored tab and a
+discarded tab's replacement each get a `SiteInstance` fixed to their space's
+profile, through patches 0181, 0182 and 0184 respectively, delegating to
+`arcium/browser/profile_partition.cc` and `arcium/browser/tab_space.cc`. A
+popup that carries its opener needs no hook: it inherits the opener's
+storage already. Two further patches serve the same isolation without fixing
+a `SiteInstance` — 0185 refuses preloading inside a profile's storage, and
+0190 restores session cookies in it, which is what keeps two accounts signed
+in across a quit.
 A `target=_blank` popup with **no** opener, a browser or extension page typed
 into a profile's tab, and anything the hooks cannot reach are caught instead
 by `PartitionGuardThrottle` (patch 0186), a `NavigationThrottle` that compares
@@ -199,6 +203,24 @@ green in both browser-test runs of this pass.
   profile on macOS, which no browser test builds. Correct by inspection
   against Chromium's own cache-path derivation (confirmed independently in
   the task 8 review); simply not provable at this seam.
+- **Moving a pinned or favourite entry to a space on another profile
+  relocates its tab only in the window the move was made from.** The same
+  entry's tab in a second window is re-tagged to the new space immediately,
+  but keeps its old storage until it next navigates, when the guard notices
+  the mismatch and reopens it there. Moving a whole space walks every window
+  and does not have this gap; only the single-entry move relies on the
+  guard. Left as it is because the guard is a real backstop rather than a
+  hope — every navigation passes through it — and the alternative is a
+  second window-walking path whose only purpose is to beat a relocation that
+  happens anyway.
+- **The mark a relocated tab carries is spent on the first navigation it
+  sees, so that navigation's own redirects are not checked.** A page the
+  guard has just reopened in the right storage could, in principle, redirect
+  to something belonging in different storage and stay where it is until the
+  next navigation. This is the deliberate price of bounding the damage: the
+  mark is what stops a defect in a creation hook from reopening the same tab
+  forever, and checking the relocated navigation's redirects would put that
+  loop back. One extra tab is recoverable; an endless chain of them is not.
 - **A test that waits for a navigation nobody starts does not fail — it
   hangs for thirty seconds and reads as a timeout.** This branch lost time to
   this shape four times: an already-active tab whose reactivation is a
