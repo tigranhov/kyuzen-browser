@@ -14,6 +14,8 @@
 #include "chrome/browser/ui/tabs/tab_enums.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "content/public/browser/render_frame_host.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -72,7 +74,7 @@ IN_PROC_BROWSER_TEST_F(ProfileRestoreTest, ARestoredTabKeepsItsProfile) {
 }
 
 IN_PROC_BROWSER_TEST_F(ProfileRestoreTest,
-                       PRE_ARestoredTabBuildsNoStorageUntilItLoads) {
+                       PRE_ARestoredTabBuildsStorageAtCreationNotAtLoad) {
   RestoreSessionAtNextLaunch();
   ProfileId work_profile;
   AddSpaceOnNewProfile(u"Work", &work_profile);
@@ -87,14 +89,36 @@ IN_PROC_BROWSER_TEST_F(ProfileRestoreTest,
   FlushSessionAndModel();
 }
 
-// What the performance claim rests on: a profile whose tabs are all
-// unloaded costs nothing at startup.
+// This used to assert the opposite and fail on purpose (see the ledger,
+// task 4 and its review): the hoped-for behaviour was that a profile whose
+// tabs are all unloaded costs nothing at startup, but that is false for a
+// profile with a *restored* tab. `CreateRestoredTab` builds that tab's
+// WebContents with a SiteInstance already fixed to the profile's partition
+// (patches/0182-restored-tab-profile-storage.patch), and a fixed-partition
+// SiteInstance cannot join its BrowsingInstance's default site instance
+// group (content/browser/site_instance_impl.cc). That forces
+// WebContentsImpl's constructor to look up a process regardless of
+// `kNoRendererProcess`, and that lookup reaches GetStoragePartition with
+// creation permitted (content/public/browser/browser_context.h) -- so the
+// partition, its storage contexts and its network context are built the
+// moment the tab is created, not when it is first loaded. Only a profile
+// with no restored tab at all still costs nothing (§12 of the stage 3b
+// design, corrected alongside this test).
+//
+// What survives is the other half of the promise -- no renderer *process*
+// runs until the tab is clicked -- and that is proven separately below in
+// ARestoredTabsProcessIsNotSpawnedUntilClicked, because a process host is
+// an object and an OS process is a different thing.
 IN_PROC_BROWSER_TEST_F(ProfileRestoreTest,
-                       ARestoredTabBuildsNoStorageUntilItLoads) {
+                       ARestoredTabBuildsStorageAtCreationNotAtLoad) {
   ASSERT_EQ(2u, model()->spaces().size());
   const SpaceId work = model()->spaces()[1].id;
   const ProfileId work_profile = model()->ProfileOfSpace(work);
-  EXPECT_FALSE(IsPartitionLoaded(browser()->GetProfile(), work_profile));
+  // EXPECT, not ASSERT: this is the surprising true behaviour, proven by
+  // measurement rather than assumed, and the click below is worth checking
+  // even if this line ever regresses back to the hoped-for laziness -- the
+  // same shape this test carried when it was still the deliberate failure.
+  EXPECT_TRUE(IsPartitionLoaded(browser()->GetProfile(), work_profile));
 
   content::WebContents* work_tab = nullptr;
   for (int i = 0; i < strip()->count(); ++i) {
@@ -106,7 +130,59 @@ IN_PROC_BROWSER_TEST_F(ProfileRestoreTest,
   content::TestNavigationObserver observer(work_tab);
   strip()->ActivateTabAt(strip()->GetIndexOfWebContents(work_tab));
   observer.Wait();
-  EXPECT_TRUE(IsPartitionLoaded(browser()->GetProfile(), work_profile));
+  EXPECT_EQ("who=work", ReadCookie(work_tab));
+}
+
+IN_PROC_BROWSER_TEST_F(ProfileRestoreTest,
+                       PRE_ARestoredTabsProcessIsNotSpawnedUntilClicked) {
+  RestoreSessionAtNextLaunch();
+  ProfileId work_profile;
+  AddSpaceOnNewProfile(u"Work", &work_profile);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), PageUrl("a.test", "one"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  SetCookie(active(), "work");
+  switcher()->SwitchTo(model()->default_space_id());
+  FlushSessionAndModel();
+}
+
+// The open question the ledger carried into this task: does a restored tab
+// in its own profile spawn a real renderer process at launch, breaking
+// R3.9's no-extra-processes promise? Settled here by counting, not by
+// reading: `RenderProcessHost::GetCurrentRenderProcessCountForTesting()` is
+// Content's own definition of how many renderer processes actually exist
+// (it counts a host only when `IsInitializedAndNotDead()`, i.e. Init() was
+// called and the OS process has not died -- the spare renderer excluded).
+// A process *host* is created for the restored tab, per the test above, but
+// a host is only an object until something asks it to do work.
+IN_PROC_BROWSER_TEST_F(ProfileRestoreTest,
+                       ARestoredTabsProcessIsNotSpawnedUntilClicked) {
+  ASSERT_EQ(2u, model()->spaces().size());
+  const SpaceId work = model()->spaces()[1].id;
+  content::WebContents* work_tab = nullptr;
+  for (int i = 0; i < strip()->count(); ++i) {
+    if (switcher()->SpaceOfTabAt(i) == work) {
+      work_tab = strip()->GetWebContentsAt(i);
+    }
+  }
+  ASSERT_TRUE(work_tab);
+
+  content::RenderProcessHost* host =
+      work_tab->GetPrimaryMainFrame()->GetProcess();
+  ASSERT_TRUE(host);
+  EXPECT_FALSE(host->IsInitializedAndNotDead());
+  const int before_click =
+      content::RenderProcessHost::GetCurrentRenderProcessCountForTesting();
+
+  content::TestNavigationObserver observer(work_tab);
+  strip()->ActivateTabAt(strip()->GetIndexOfWebContents(work_tab));
+  observer.Wait();
+
+  EXPECT_TRUE(host->IsInitializedAndNotDead());
+  EXPECT_EQ(
+      before_click + 1,
+      content::RenderProcessHost::GetCurrentRenderProcessCountForTesting());
 }
 
 // Cmd+Shift+T reaches the same tab-building function by another road.
