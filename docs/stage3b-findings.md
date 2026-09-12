@@ -71,10 +71,13 @@ moment its promise resolves and has no way to represent a decline.
 
 ## What the acceptance pass found
 
-The eleven-line list is the owner's to run by hand — signing into two real
-accounts, dragging tabs between profiles, installing and uninstalling a real
-extension, watching Activity Monitor — and this task does not pretend to
-have done it. Renumbered to the design's own A3b.1-A3b.7 per the pre-flight
+Nine of the eleven lines are the owner's to run by hand — signing into two
+real accounts, dragging tabs between profiles, installing and uninstalling a
+real extension — and nothing here pretends to have done them. Two are not.
+A3b.1 was always the automated line. **A3.3 turned out to be half
+scriptable**: counting processes on an idle browser needs a seeded model file
+and sixty seconds rather than a person, and only its in-use half needs
+sign-ins. It was measured rather than left on the list out of habit. Renumbered to the design's own A3b.1-A3b.7 per the pre-flight
 ruling, plus the master spec's A3.1 and A3.3 and the two informal checks the
 brief named "Guard" and "Browser pages".
 
@@ -88,7 +91,7 @@ brief named "Guard" and "Browser pages".
 | A3b.6 | Install an extension, uninstall it, launch twice: every profile still signed in, both times | NOT RUN — owner |
 | A3b.7 | An extension's options page opened from a profile space and from a Default space show the same saved settings | NOT RUN — owner |
 | A3.1 (owner) | Sign in to the same site as two different accounts in two spaces, quit, launch again: both accounts still signed in, each in its own space, nothing loads until a tab is clicked | NOT RUN — owner |
-| A3.3 | Watch memory and process count with three spaces and two profiles open: no process per profile while nothing is loaded, no growth per background space | NOT RUN — owner |
+| A3.3 | Watch memory and process count with three spaces and two profiles open: no process per profile while nothing is loaded, no growth per background space | **MEASURED** for the idle case — 8 processes and 4 renderers with three spaces on two profiles, identical to a browser with no model at all, twice; summed RSS +19 MB. See the A3.3 section of `docs/perf/2026-09-12-stage3b.md`. Still owner's: the same watch with the profiles genuinely in use (signed in, pages loaded) and while switching spaces |
 | Guard | Open a link with no opener in a profile space: it opens in that space's profile and leaves no stray tab | NOT RUN — owner |
 | Browser pages | Type a settings address into a tab in a profile space: it opens normally, in shared storage, no empty tab left behind | NOT RUN — owner |
 
