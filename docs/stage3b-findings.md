@@ -212,7 +212,13 @@ green in both browser-test runs of this pass.
   guard. Left as it is because the guard is a real backstop rather than a
   hope — every navigation passes through it — and the alternative is a
   second window-walking path whose only purpose is to beat a relocation that
-  happens anyway.
+  happens anyway. Checked against Zen rather than argued from here alone: its
+  workspaces bind to a container so that tabs **opened in** the workspace
+  inherit the cookie jar, and neither its documentation nor Firefox's
+  container model says what becomes of a tab already open when that binding
+  changes (`docs/research/zen-profiles-containers.md`). The guarantee this
+  gap falls short of is one the browser this project follows does not make
+  either.
 - **The mark a relocated tab carries is spent on the first navigation it
   sees, so that navigation's own redirects are not checked.** A page the
   guard has just reopened in the right storage could, in principle, redirect
@@ -221,6 +227,12 @@ green in both browser-test runs of this pass.
   mark is what stops a defect in a creation hook from reopening the same tab
   forever, and checking the relocated navigation's redirects would put that
   loop back. One extra tab is recoverable; an endless chain of them is not.
+  Firefox has already shipped the failure the other choice invites: a link
+  opening in one container and then redirecting to a page assigned to a
+  different one would intermittently open that page **twice**
+  (mozilla/multi-account-containers#940). Deciding a page's cookie jar again
+  mid-redirect is where duplicate tabs come from
+  (`docs/research/zen-profiles-containers.md`).
 - **A test that waits for a navigation nobody starts does not fail — it
   hangs for thirty seconds and reads as a timeout.** This branch lost time to
   this shape four times: an already-active tab whose reactivation is a
