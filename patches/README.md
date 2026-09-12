@@ -90,10 +90,19 @@ partitions safe from Chrome's own cleanup, keep their session cookies, and put a
 of Chrome's Clear browsing data. Five of the hooked files build in targets that reach Arcium only
 privately, so each has a GN wiring patch numbered just before its hook.
 
+`0182`'s own `#include "arcium/browser/tab_space.h"` line lives inside `0120`'s include-block hunk
+in `chrome/browser/ui/browser_tabrestore.cc`, not in `0182` itself: it sorts directly next to
+`0120`'s `session_tab_entry.h` include, so a second patch adding its own line there would land
+inside `0120`'s hunk context and break `0120`'s already-applied check on every `scripts/sync` after
+the first — the exact conflict this file's rule above warns about. Folding it into `0120`, as that
+rule allows, keeps both idempotent; `0120`'s row below still lists only its own delegates because
+the extra include line calls nothing.
+
 | Patch | Seam | Delegates to |
 |---|---|---|
 | `0180-gn-navigator-arcium.patch` | `chrome/browser/ui/navigator/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0181 |
 | `0181-new-tab-profile-storage.patch` | `CreateTargetContents` in `chrome/browser/ui/navigator/browser_navigator.cc` | `arcium::SiteInstanceForNewTab`, `arcium::TagNewTab` |
+| `0182-restored-tab-profile-storage.patch` | `CreateRestoredTab` in `chrome/browser/ui/browser_tabrestore.cc` | `arcium::SiteInstanceForRestoredTab` |
 | `0183-gn-resource-coordinator-arcium.patch` | `chrome/browser/resource_coordinator/BUILD.gn`, `impl` | nothing: GN wiring for 0184 |
 | `0187-gn-web-applications-arcium.patch` | `chrome/browser/web_applications/BUILD.gn`, `source_set("web_applications")` | nothing: GN wiring for 0188 |
 | `0189-gn-net-arcium.patch` | `chrome/browser/net/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0190 |

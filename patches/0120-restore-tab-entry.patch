@@ -22,38 +22,47 @@ Why: session restore gives a tab a fresh SessionID, so Arcium cannot key a
      WebContents that nothing ever reads.
 Delegates to: arcium::StashRestoredEntryId, arcium::BindStashedEntryId.
 
+     This patch's include-block hunk also carries the #include patch 0182
+     needs for arcium::SiteInstanceForRestoredTab: the two lines sort
+     adjacent (both "arcium/browser/..."), so a second patch adding its own
+     line there would land inside this hunk's context and break this
+     patch's already-applied check on every `scripts/sync` after the first
+     — the conflict patches/README.md's rule warns about. Folding it in
+     here, as that rule allows, keeps both idempotent.
+
 diff --git a/chrome/browser/ui/browser_tabrestore.cc b/chrome/browser/ui/browser_tabrestore.cc
 --- a/chrome/browser/ui/browser_tabrestore.cc
 +++ b/chrome/browser/ui/browser_tabrestore.cc
-@@ -8,6 +8,7 @@
+@@ -8,6 +8,8 @@
  #include <memory>
  #include <utility>
- 
+
 +#include "arcium/browser/session_tab_entry.h"
++#include "arcium/browser/tab_space.h"
  #include "base/containers/span.h"
  #include "build/build_config.h"
  #include "chrome/browser/apps/app_service/web_contents_app_id_utils.h"
-@@ -88,6 +89,7 @@
+@@ -88,6 +90,7 @@
    glic::RestoreGlicStateFromExtraData(web_contents.get(), extra_data);
    send_tab_to_self::SendTabToSelfActivationTracker::RestoreFromExtraData(
        web_contents.get(), extra_data);
 +  arcium::StashRestoredEntryId(web_contents.get(), extra_data);
- 
+
    std::vector<std::unique_ptr<NavigationEntry>> entries =
        ContentSerializedNavigationBuilder::ToNavigationEntries(
-@@ -201,6 +203,7 @@
+@@ -201,6 +204,7 @@
          tabs::TabInterface::GetFromContents(raw_web_contents);
      TabUIHelper::From(tab_interface)->SetCreatedBySessionRestore(true);
    }
 +  arcium::BindStashedEntryId(raw_web_contents);
- 
+
    // We set the size of the view here, before Blink does its initial layout.
    // If we don't, the initial layout of background tabs will be performed
-@@ -326,6 +329,7 @@
+@@ -326,6 +330,7 @@
          tabs::TabInterface::GetFromContents(raw_web_contents);
      TabUIHelper::From(tab_interface)->SetCreatedBySessionRestore(true);
    }
 +  arcium::BindStashedEntryId(raw_web_contents);
- 
+
    tab_strip->CloseWebContentsAt(insertion_index, TabCloseTypes::CLOSE_NONE);
  

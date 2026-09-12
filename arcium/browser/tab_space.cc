@@ -9,13 +9,16 @@
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/tab_entry.h"
+#include "arcium/browser/profile_partition.h"
 #include "arcium/browser/tab_binding.h"
 #include "components/sessions/core/command_storage_manager.h"
 #include "components/sessions/core/session_service_commands.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/browser_context.h"
+#include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "url/gurl.h"
 
 namespace arcium {
 
@@ -157,6 +160,16 @@ void PopulateTabSpaceExtraData(tabs::TabInterface* tab,
   (*extra_data)[kSpaceIdExtraDataKey] = space.value();
   (*extra_data)[kTabKeyExtraDataKey] = KeyOf(tab->GetContents()).value();
   (*extra_data)[kProfileIdExtraDataKey] = model.ProfileOfSpace(space).value();
+}
+
+scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
+    content::BrowserContext* context,
+    const GURL& url,
+    const std::map<std::string, std::string>& extra_data,
+    scoped_refptr<content::SiteInstance> chromium_choice) {
+  scoped_refptr<content::SiteInstance> fixed =
+      SiteInstanceForProfile(context, ProfileIdFromExtraData(extra_data), url);
+  return fixed ? fixed : chromium_choice;
 }
 
 ProfileId ProfileIdFromExtraData(

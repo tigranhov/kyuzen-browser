@@ -9,12 +9,17 @@
 #include <string>
 
 #include "arcium/browser/model/entry_id.h"
+#include "base/memory/scoped_refptr.h"
 #include "components/sessions/core/session_id.h"
 #include "components/tabs/public/tab_interface.h"
 
+class GURL;
+
 namespace content {
+class BrowserContext;
+class SiteInstance;
 class WebContents;
-}
+}  // namespace content
 
 namespace sessions {
 class CommandStorageManager;
@@ -71,6 +76,16 @@ SpaceId SpaceOfTab(const ArciumModel& model,
 // leaves the corresponding fact untouched.
 void RestoreTabSpaceData(content::WebContents* web_contents,
                          const std::map<std::string, std::string>& extra_data);
+
+// The storage a restored tab belongs in, from the profile its session
+// recorded: `chromium_choice` unless that profile has storage of its own.
+// Restore runs before the model file has been read, so the session is the
+// only thing that can answer this.
+scoped_refptr<content::SiteInstance> SiteInstanceForRestoredTab(
+    content::BrowserContext* context,
+    const GURL& url,
+    const std::map<std::string, std::string>& extra_data,
+    scoped_refptr<content::SiteInstance> chromium_choice);
 
 // The profile a restored tab's storage belongs to: the default profile when
 // `extra_data` names none or names something that is not an id, which is

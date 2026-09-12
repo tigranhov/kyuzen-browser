@@ -1,0 +1,33 @@
+Seam: CreateRestoredTab in chrome/browser/ui/browser_tabrestore.cc, where
+      session restore and Cmd+Shift+T build a restored tab's WebContents.
+Why: a tab's storage is fixed when it is created, and restore creates its
+     tabs before the Arcium model file has been read, so the profile has to
+     travel in the session file beside the space id. Without this every
+     restored tab of a profile comes back logged out, which is A3.1.
+
+     The #include this hook needs, arcium/browser/tab_space.h, is not in
+     this patch's hunk: it sorts directly next to patch 0120's own
+     arcium/browser/session_tab_entry.h include, so it travels in 0120's
+     hunk instead — patches/README.md's rule against two patches sharing
+     one hunk's context, applied.
+Delegates to: arcium::SiteInstanceForRestoredTab
+
+diff --git a/chrome/browser/ui/browser_tabrestore.cc b/chrome/browser/ui/browser_tabrestore.cc
+index 8b4d5f6e46..8aa3ffe42d 100644
+--- a/chrome/browser/ui/browser_tabrestore.cc
++++ b/chrome/browser/ui/browser_tabrestore.cc
+@@ -75,7 +75,13 @@
+           browser->GetProfile(), session_storage_namespace);
+   WebContents::CreateParams create_params(
+       browser->GetProfile(),
+-      tab_util::GetSiteInstanceForNewTab(browser->GetProfile(), restore_url));
++      // Arcium: the profile its session recorded, if that profile has
++      // storage of its own (arcium/browser/tab_space.h). The session's
++      // answer, not the model's: the model file has not been read yet.
++      arcium::SiteInstanceForRestoredTab(
++          browser->GetProfile(), restore_url, extra_data,
++          tab_util::GetSiteInstanceForNewTab(browser->GetProfile(),
++                                             restore_url)));
+   create_params.initially_hidden = initially_hidden;
+   create_params.desired_renderer_state =
+       WebContents::CreateParams::kNoRendererProcess;
