@@ -182,6 +182,7 @@ IN_PROC_BROWSER_TEST_F(ProfileIsolationTest,
       browser(), page, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   content::WebContents* work_tab = active();
+  const int tabs_before = strip()->count();
 
   const GURL version("chrome://version/");
   work_tab->GetController().LoadURL(version, content::Referrer(),
@@ -195,6 +196,11 @@ IN_PROC_BROWSER_TEST_F(ProfileIsolationTest,
   // The tab the user was on still shows its page.
   EXPECT_EQ(page, work_tab->GetLastCommittedURL());
   EXPECT_EQ(PartitionDomainForProfile(work_profile), PartitionOf(work_tab));
+  // And nothing empty was left behind: the relocation cancels a navigation
+  // and opens a tab for it, so exactly one tab is added, never two. Without
+  // this the test would pass while a blank tab piled up on every browser
+  // page the user typed -- which is what the hand check was watching for.
+  EXPECT_EQ(tabs_before + 1, strip()->count());
 }
 
 // Traced twice as doing nothing: InsertBlankTab's about:blank tab never

@@ -92,8 +92,8 @@ brief named "Guard" and "Browser pages".
 | A3b.7 | An extension's options page opened from a profile space and from a Default space show the same saved settings | NOT RUN — owner |
 | A3.1 (owner) | Sign in to the same site as two different accounts in two spaces, quit, launch again: both accounts still signed in, each in its own space, nothing loads until a tab is clicked | NOT RUN — owner |
 | A3.3 | Watch memory and process count with three spaces and two profiles open: no process per profile while nothing is loaded, no growth per background space | **MEASURED** for the idle case — 8 processes and 4 renderers with three spaces on two profiles, identical to a browser with no model at all, twice; summed RSS +19 MB. See the A3.3 section of `docs/perf/2026-09-12-stage3b.md`. Still owner's: the same watch with the profiles genuinely in use (signed in, pages loaded) and while switching spaces |
-| Guard | Open a link with no opener in a profile space: it opens in that space's profile and leaves no stray tab | NOT RUN — owner |
-| Browser pages | Type a settings address into a tab in a profile space: it opens normally, in shared storage, no empty tab left behind | NOT RUN — owner |
+| Guard | Open a link with no opener in a profile space: it opens in that space's profile and leaves no stray tab | **COVERED** by `ProfileIsolationTest.APopupWithNoOpenerIsReopenedInTheProfile` — it asserts all three things this row watches for: the page lands in the space's own storage, it reads that space's cookie, and exactly one tab was added rather than two |
+| Browser pages | Type a settings address into a tab in a profile space: it opens normally, in shared storage, no empty tab left behind | **COVERED** by `ProfileIsolationTest.ABrowserPageInAProfileTabMovesToSharedStorage`, with `ABrowserPageStaysInSharedStorage` for a browser page opened directly: the page lands in shared storage, the tab behind it keeps both its own page and its profile's storage, and exactly one tab is added. Read the last of those three honestly — the source tab holds a page here, so no empty tab can arise on this path and that assertion guards an invariant rather than catching a break. The stray-tab guarantee proper belongs to the popup test above, which is the mutation-proven one |
 
 A3b.1's automated half is the one line this task can and did answer: both
 suites green twice, with the previously-flaky
@@ -244,7 +244,27 @@ green in both browser-test runs of this pass.
   window already on the tab its body expects to watch load. Every case was
   fixed by finding out whether a navigation actually starts (and waiting on
   the load already in flight with `content::WaitForLoadStop` when it does
-  not) rather than adding more waiting.
+  not) rather than adding more waiting. **A fifth sighting, and the one worth
+  remembering: this is also how a real defect reports itself here.** With the
+  guard's empty-tab cleanup deliberately disabled, the no-opener popup test
+  did fail — but after 35 seconds, inside the wait loop that looks for the
+  reopened tab, rather than at the tab-count assertion five lines later that
+  actually describes the damage. The coverage is genuine and the break is
+  caught; the diagnosis offered is a timeout. Anyone who breaks this path
+  should suspect a stray tab before suspecting the wait.
+- **The unit runner reports executions, not tests, and retries a failed batch
+  before declaring success — so a total above 624 means something retried.**
+  Registered is 625, of which one is `DISABLED_`, so 624 is a clean run. A run
+  taken immediately after a twelve-minute build reported 639, about fifteen
+  retries, and finished in 107 seconds; a run on a quiet machine minutes later
+  reported 624 with no retries at all and finished in 34. That matches the
+  load-contention pattern every earlier stage's notes record, and the archive
+  list bubble is the family it has always shown up in. **Which tests retried in
+  the 639 run is not known** — only the last lines of that run were kept, and
+  the retry lines were not among them. Recorded as an unknown rather than
+  pinned on the usual suspect. The way to settle the count itself is
+  `--gtest_list_tests`, counted against the test macros in `arcium/test`; when
+  those two agree, nothing has been added and the excess is retries.
 - **Adding a decorative view to the sidebar needs an explicit accessibility
   role before it can be given a name.** The profile badge DCHECK-crashed
   every space-bar test at construction until it was given one; a bare view
