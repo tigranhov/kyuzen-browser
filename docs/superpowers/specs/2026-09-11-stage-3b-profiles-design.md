@@ -414,21 +414,43 @@ Executed by hand, except where marked.
 
 ## 12. Performance
 
-1. **Processes:** none while only Default is used. A profile's first loaded
-   page needs a renderer of its own, because renderers and the spare renderer
-   are never shared across partitions. None at idle.
-2. **Idle memory:** per profile that has loaded a page this session, one
-   network context and a partition's storage contexts, measured by A3.3.
-   Nothing per tab; nothing for a profile none of whose tabs has loaded.
-   Clearing or erasing a profile builds the storage it touches, if nothing
-   had, for the rest of the session (§6.3).
-3. **Startup:** nothing before first paint; the model file gains a short list.
-   A partition is created when its first tab loads, which after R3.9 means on
-   the first click.
+**Corrected against task 13's measurements** (docs/stage3b-findings.md): the
+first draft of this section assumed a profile's storage waits for its first
+load, the same way its process does. Traced in the task 4 review and settled
+by test in task 13, that is true for a profile with no restored tab, but not
+for one that does — a fixed-partition `SiteInstance` cannot join its
+`BrowsingInstance`'s default site instance group, so `WebContentsImpl`'s
+constructor forces a process lookup that reaches `GetStoragePartition` with
+creation permitted the moment a restored tab is built, regardless of
+`kNoRendererProcess`. What still waits for the click is the renderer
+*process* itself: a process host is only an object, and no OS process is
+spawned until the tab is shown (`ARestoredTabsProcessIsNotSpawnedUntilClicked`,
+counted with `RenderProcessHost::GetCurrentRenderProcessCountForTesting()`).
+
+1. **Processes:** none while only Default is used. A restored tab in another
+   profile gets a process host at session-restore time but no OS process; a
+   profile's first *shown* page is what needs a renderer of its own, because
+   renderers and the spare renderer are never shared across partitions. None
+   at idle beyond that.
+2. **Idle memory:** per profile with a restored tab, one network context and
+   a partition's storage contexts are paid at startup, not deferred to a
+   click — corrected from the original claim of nothing per unloaded profile.
+   Only a profile with no restored tab at all still costs nothing until
+   something opens it. Measured by A3.3. Clearing or erasing a profile builds
+   the storage it touches, if nothing had, for the rest of the session
+   (§6.3).
+3. **Startup:** no page loads before first paint beyond the active tab, as
+   R3.9 requires; but a profile's storage is not deferred to first paint the
+   way its page load is. Session restore builds every restored tab's
+   `WebContents` at startup, and a tab whose profile is not Default pays for
+   that profile's partition, storage contexts and network context right
+   there. Only a profile with no restored tab at all is created lazily, on
+   its first click, as first drafted.
 4. **UI thread:** creating a partition builds about seventeen storage contexts
    on the UI thread (`storage_partition_impl.cc:1391-1640`), once per profile
-   per session, measured by `Storage.StoragePartition.InitializeDuration`. The
-   guard is one comparison per main-frame navigation.
+   with a restored tab, at startup rather than at first load, measured by
+   `Storage.StoragePartition.InitializeDuration`. The guard is one comparison
+   per main-frame navigation.
 
 ## 13. Out of scope
 

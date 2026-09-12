@@ -82,9 +82,11 @@ One window, one `Browser`, one `TabStripModel`, as Chromium expects. Arcium keep
 
 ### 4.4 How profiles isolate
 
-Each Arcium profile owns a `StoragePartitionConfig`. A tab in that profile is created with a `SiteInstance` fixed to that partition, so cookies, local storage, IndexedDB, cache and service workers are separate, and renderer processes are never shared across partitions. Popups and child frames inherit the partition. Extensions, history, bookmarks and passwords are shared across profiles by design.
+A profile is a storage area inside the one Chromium profile, named by an id, and a space points at one. The default profile is Chromium's own storage and has no directory of its own; every other profile owns a `StoragePartitionConfig`. A tab in that profile is created with a `SiteInstance` fixed to that partition, so cookies, local storage, IndexedDB, cache and service workers are separate, and renderer processes are never shared across partitions. Child frames and popups with an opener inherit the partition. Every other new tab is created in its space's profile by a hook, and a navigation guard reopens any page that would land in the wrong partition. Browser and extension pages always use the default partition. History, bookmarks, passwords, extensions and settings are shared by every profile; only cookies, site storage and cache are separate.
 
-Known limits, accepted: extensions that manage cookies see only the default partition; Chrome's built-in site-data settings show only the default partition, so Arcium ships its own per-profile clear-data control.
+Moving a tab between profiles reopens it at the same address with its history; nothing unsaved survives, because no page is asked whether it may close. A site that keeps its login in a session cookie stays signed in across a quit in every profile, which needed an upstream change.
+
+Known limits, accepted: extensions that manage cookies see only the default partition; Chrome's built-in site-data settings show only the default partition, so Arcium ships its own per-profile clear-data control. Chrome's own Clear browsing data reaches the shared logins only, unless the warning's wider answer is chosen to reach every profile too.
 
 ### 4.5 Persistence
 
@@ -370,7 +372,8 @@ Acceptance: A8.1 a signed build installs on a clean Mac and updates itself to th
 
 | Risk | Stage | Mitigation |
 |---|---|---|
-| Fixed-partition `SiteInstance` does not carry through all navigation paths (popups, prerender, back-forward cache) | 3 | Spike first: verify with a browser test before building the profile UI |
+| Fixed-partition `SiteInstance` does not carry through all navigation paths (popups, prerender, back-forward cache) | 3 | **Resolved** by the Stage 3b spike and design: an opener-less popup, a new tab and a child frame each need their own path, covered by a hook per creation path plus a navigation guard that reopens a page landing in the wrong partition; prerender is refused outright for a profile's tabs |
+| Chromium's own storage-partition cleanup deletes an Arcium profile's directory when nothing has opened it since the last extension removal | 3b | **Resolved**: the cleanup command is handed the list of every profile's partition directory to keep, computed from ids alone with no disk listing; when the model file cannot be read and understood yet, the cleanup is skipped for that launch entirely rather than run with an incomplete list |
 | Chrome Web Store rejects a non-Chrome user agent | 0 | Match Brave's approach; verify in A0.1 |
 | Hiding the tab strip breaks Chromium code that assumes it exists (tab dragging, fullscreen, accessibility) | 1 | Keep the strip alive but zero-height first; remove later |
 | Build times on a USB SSD | 0 | Component build, `use_remoteexec` off, ccache-style `cc_wrapper`, measure and record |
