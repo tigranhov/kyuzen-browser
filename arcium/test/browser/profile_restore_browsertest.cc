@@ -133,5 +133,41 @@ IN_PROC_BROWSER_TEST_F(ProfileRestoreTest,
   EXPECT_EQ("who=work", ReadCookie(reopened));
 }
 
+// A login kept in a session cookie: Chromium restores those only for the
+// default partition unless it is told otherwise, and A3.1 says both
+// accounts are still signed in after a relaunch.
+IN_PROC_BROWSER_TEST_F(ProfileRestoreTest, PRE_ASessionCookieSurvivesARestart) {
+  RestoreSessionAtNextLaunch();
+  ProfileId work_profile;
+  AddSpaceOnNewProfile(u"Work", &work_profile);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), PageUrl("a.test", "one"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  SetCookie(active(), "work", /*session_only=*/true);
+  FlushSessionAndModel();
+}
+
+IN_PROC_BROWSER_TEST_F(ProfileRestoreTest, ASessionCookieSurvivesARestart) {
+  ASSERT_EQ(2u, model()->spaces().size());
+  const SpaceId work = model()->spaces()[1].id;
+  content::WebContents* work_tab = nullptr;
+  for (int i = 0; i < strip()->count(); ++i) {
+    if (switcher()->SpaceOfTabAt(i) == work) {
+      work_tab = strip()->GetWebContentsAt(i);
+    }
+  }
+  ASSERT_TRUE(work_tab);
+  // Unlike PRE_ARestoredTabKeepsItsProfile's, this PRE_ test leaves the
+  // window on the Work space, so the Work tab is the one on screen at quit --
+  // the one R3.9 still loads itself at restart, same as Chromium's own
+  // session restore has always done for whichever tab was showing. It may
+  // already be done loading by the time this test body runs, so there is no
+  // fresh navigation left for a click to start; wait for the load already in
+  // flight (or already finished) rather than for one that will not happen.
+  ASSERT_TRUE(content::WaitForLoadStop(work_tab));
+  EXPECT_EQ("who=work", ReadCookie(work_tab));
+}
+
 }  // namespace
 }  // namespace arcium::test

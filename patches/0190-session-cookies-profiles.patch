@@ -1,0 +1,35 @@
+Seam: ProfileNetworkContextService::ConfigureNetworkContextParamsInternal in
+      chrome/browser/net/profile_network_context_service.cc, at the
+      main-partition test that decides session cookies.
+Why: Chromium keeps session cookies only for the default partition, copying
+     what app request contexts used to do. A site that keeps its login in a
+     session cookie would therefore log every Arcium profile out at each
+     relaunch, which A3.1 forbids. An Arcium partition now follows the
+     profile's own setting, exactly as the default partition does.
+Delegates to: arcium::IsArciumPartitionPath
+
+diff --git a/chrome/browser/net/profile_network_context_service.cc b/chrome/browser/net/profile_network_context_service.cc
+index c9ae7f58ab..b183950040 100644
+--- a/chrome/browser/net/profile_network_context_service.cc
++++ b/chrome/browser/net/profile_network_context_service.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "arcium/browser/profile_partition.h"
+ #include "chrome/browser/net/profile_network_context_service.h"
+ 
+ #include <memory>
+@@ -1446,7 +1447,11 @@ void ProfileNetworkContextService::ConfigureNetworkContextParamsInternal(
+         base::FilePath(chrome::kReportingAndNelStoreFilename);
+ #endif  // BUILDFLAG(ENABLE_REPORTING)
+ 
+-    if (relative_partition_path.empty()) {  // This is the main partition.
++    // Arcium: an Arcium profile's partition keeps session cookies exactly as
++    // the default partition does, or every profile would be logged out of
++    // any site that keeps its login in one (arcium/browser/profile_partition.h).
++    if (relative_partition_path.empty() ||
++        arcium::IsArciumPartitionPath(relative_partition_path)) {
+       network_context_params->restore_old_session_cookies =
+           profile_->ShouldRestoreOldSessionCookies();
+       network_context_params->persist_session_cookies =

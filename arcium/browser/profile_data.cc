@@ -6,6 +6,9 @@
 
 #include <utility>
 
+#include "arcium/browser/arcium_profile_state.h"
+#include "arcium/browser/model/arcium_model.h"
+#include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/profile_partition.h"
 #include "base/functional/callback.h"
 #include "base/scoped_observation.h"
@@ -75,6 +78,24 @@ void ClearArciumProfileData(content::BrowserContext* context,
       base::Time(), base::Time::Max(), kProfileDataMask,
       content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB,
       std::move(filter), new OneRemovalObserver(remover, std::move(done)));
+}
+
+std::optional<std::unordered_set<base::FilePath>> PartitionPathsToKeep(
+    content::BrowserContext* context) {
+  ArciumProfileState* state =
+      ArciumProfileState::GetForBrowserContextIfExists(context);
+  if (!state || !state->model_load_succeeded()) {
+    return std::nullopt;
+  }
+  std::unordered_set<base::FilePath> paths;
+  for (const ArciumProfile& profile : state->model()->profiles()) {
+    const base::FilePath path =
+        PartitionDirectory(context->GetPath(), profile.id);
+    if (!path.empty()) {
+      paths.insert(path);
+    }
+  }
+  return paths;
 }
 
 }  // namespace arcium

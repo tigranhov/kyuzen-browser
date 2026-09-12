@@ -1,0 +1,62 @@
+Seam: GarbageCollectStoragePartitionsCommand::DoGarbageCollection in
+      chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc,
+      where the list of storage directories to keep is built.
+Why: after an extension or an isolated web app is uninstalled, Chrome
+     deletes every storage directory that is not on that list and not
+     currently open. Arcium profiles are on no list, and R3.9 means most of
+     them are not open at startup, so one uninstall would erase every
+     profile's logins. The hook adds their directories, or -- when the model
+     file has not been read yet, so the list cannot be complete -- puts the
+     sweep off to a later launch.
+     The two statements in the skip branch are the exception to "a patch
+     carries no logic": the command has already reset the pref by the time
+     it runs, and prefs::kShouldGarbageCollectStoragePartitions is a
+     //chrome/common name that //arcium/browser must not depend on.
+Delegates to: arcium::PartitionPathsToKeep
+
+diff --git a/chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc b/chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc
+index ecb3123778..9e1ff6eedc 100644
+--- a/chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc
++++ b/chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc
+@@ -2,9 +2,11 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "arcium/browser/profile_data.h"
+ #include "chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.h"
+ 
+ #include <memory>
++#include <optional>
+ #include <string>
+ #include <unordered_set>
+ 
+@@ -64,6 +66,20 @@ void GarbageCollectStoragePartitionsCommand::OnPrefReset() {
+ void GarbageCollectStoragePartitionsCommand::DoGarbageCollection() {
+   std::unordered_set<base::FilePath> allowlist;
+ 
++  // Arcium: an Arcium profile's partition is on no list here, and the sweep
++  // deletes what no list names, so without the model there is nothing to
++  // keep it. Skipping costs a directory that lingers one more launch;
++  // sweeping without the model costs every profile's logins
++  // (arcium/browser/profile_data.h).
++  std::optional<std::unordered_set<base::FilePath>> arcium_paths =
++      arcium::PartitionPathsToKeep(profile_);
++  if (!arcium_paths) {
++    profile_->GetPrefs()->SetBoolean(
++        prefs::kShouldGarbageCollectStoragePartitions, true);
++    CompleteAndSelfDestruct(CommandResult::kSuccess);
++    return;
++  }
++
+   // InstallGate delays extension installations.
+   install_gate_ =
+       lock_->extensions_manager().RegisterGarbageCollectionInstallGate();
+@@ -74,6 +90,8 @@ void GarbageCollectStoragePartitionsCommand::DoGarbageCollection() {
+   // Get all paths from Web App system.
+   allowlist.merge(lock_->isolation_delegate().GetIsolatedStoragePaths());
+ 
++  allowlist.merge(*arcium_paths);
++
+   base::ListValue* debug_paths =
+       GetMutableDebugValue().EnsureList("allow_list_paths");
+   for (const auto& path : allowlist) {

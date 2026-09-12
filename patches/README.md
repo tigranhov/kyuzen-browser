@@ -120,7 +120,9 @@ first run and skipped clean on the second.
 | `0185-prerender-profile-storage.patch` | `Browser::IsPrerender2Supported` in `chrome/browser/ui/browser.cc` | `arcium::PrerenderEligibilityForTab` |
 | `0186-navigation-throttle-partition-guard.patch` | `CreateAndAddChromeThrottlesForNavigation` in `chrome/browser/chrome_content_browser_client_navigation_throttles.cc`, after `ImageNavigationThrottle` (its `#include` is folded into `0150`) | `arcium::PartitionGuardThrottle::MaybeCreateAndAdd` |
 | `0187-gn-web-applications-arcium.patch` | `chrome/browser/web_applications/BUILD.gn`, `source_set("web_applications")` | nothing: GN wiring for 0188 |
+| `0188-storage-cleanup-keeps-profiles.patch` | `GarbageCollectStoragePartitionsCommand::DoGarbageCollection` in `chrome/browser/web_applications/commands/garbage_collect_storage_partitions_command.cc` | `arcium::PartitionPathsToKeep` |
 | `0189-gn-net-arcium.patch` | `chrome/browser/net/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0190 |
+| `0190-session-cookies-profiles.patch` | `ProfileNetworkContextService::ConfigureNetworkContextParamsInternal` in `chrome/browser/net/profile_network_context_service.cc` | `arcium::IsArciumPartitionPath` |
 | `0191-gn-settings-arcium.patch` | `chrome/browser/ui/webui/settings/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0192 |
 
 ## Monthly rebase routine
