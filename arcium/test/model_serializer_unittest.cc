@@ -486,6 +486,25 @@ TEST(ModelSerializerTest, AFileWithoutTheDefaultProfileStillHasIt) {
   EXPECT_EQ(DefaultProfileId(), restored.profiles()[0].id);
 }
 
+// Unlike a bad space, folder or entry, a profile row that cannot be used
+// fails the whole read: PartitionPathsToKeep (arcium/browser/profile_data.h)
+// trusts profiles() to be complete, and a skipped row here would make the
+// keep list miss a real profile's directory while still reporting success --
+// which is exactly the incomplete list Chrome's own sweep would delete.
+TEST(ModelSerializerTest, AProfileThatCannotBeUsedFailsTheWholeRead) {
+  ArciumModel original;
+  original.AddProfile(u"Work", 1);
+  base::DictValue dict = SerializeModel(original);
+  base::ListValue* profiles = dict.FindList("profiles");
+  ASSERT_TRUE(profiles);
+  base::DictValue bad;
+  bad.Set("id", "not-a-uuid");
+  profiles->Append(std::move(bad));
+
+  ArciumModel restored;
+  EXPECT_FALSE(DeserializeModel(dict, &restored));
+}
+
 TEST(ModelSerializerTest, ARenamedDefaultProfileKeepsItsName) {
   ArciumModel original;
   original.RenameProfile(DefaultProfileId(), u"Personal");

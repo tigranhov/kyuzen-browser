@@ -144,21 +144,24 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
     return false;
   }
 
-  // Rows with an unusable id are skipped; ArciumModel::ReplaceAll puts
-  // Default first whether or not the file had it, and points any space whose
-  // profile is missing at Default. The file is not trusted to be whole.
+  // Unlike every other list below, a profile row that cannot be used fails
+  // the whole read rather than being skipped: a profile names a storage
+  // directory, and the caller that builds the keep list for Chrome's own
+  // sweep (arcium/browser/profile_data.h) trusts profiles() to be complete.
+  // A skipped row here would make that list incomplete while still reporting
+  // success, and Chrome deletes whatever a keep list does not name.
   std::vector<ArciumProfile> profiles;
   if (const base::ListValue* list = dict.FindList("profiles")) {
     for (const base::Value& item : *list) {
       const base::DictValue* value = item.GetIfDict();
       if (!value) {
-        continue;
+        return false;
       }
       const std::string* id = value->FindString("id");
       ArciumProfile profile;
       profile.id = id ? ProfileId::FromString(*id) : ProfileId();
       if (!profile.id.is_valid()) {
-        continue;
+        return false;
       }
       const std::string* name = value->FindString("name");
       profile.name = name ? base::UTF8ToUTF16(*name) : u"Profile";
