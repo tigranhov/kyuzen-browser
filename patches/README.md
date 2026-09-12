@@ -93,6 +93,7 @@ privately, so each has a GN wiring patch numbered just before its hook.
 | Patch | Seam | Delegates to |
 |---|---|---|
 | `0180-gn-navigator-arcium.patch` | `chrome/browser/ui/navigator/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0181 |
+| `0181-new-tab-profile-storage.patch` | `CreateTargetContents` in `chrome/browser/ui/navigator/browser_navigator.cc` | `arcium::SiteInstanceForNewTab`, `arcium::TagNewTab` |
 | `0183-gn-resource-coordinator-arcium.patch` | `chrome/browser/resource_coordinator/BUILD.gn`, `impl` | nothing: GN wiring for 0184 |
 | `0187-gn-web-applications-arcium.patch` | `chrome/browser/web_applications/BUILD.gn`, `source_set("web_applications")` | nothing: GN wiring for 0188 |
 | `0189-gn-net-arcium.patch` | `chrome/browser/net/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0190 |

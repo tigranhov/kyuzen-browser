@@ -1,0 +1,52 @@
+Seam: CreateTargetContents in chrome/browser/ui/navigator/browser_navigator.cc,
+      where every new tab that is not a content-created popup is built.
+Why: a tab's storage partition is fixed when its WebContents is created and
+     can never change, so the space it belongs to has to be known here
+     rather than at insertion. Cmd+click, "Open link in new tab", the quick
+     entry, bookmarks, extension-created tabs and the home-boundary divert
+     all pass through this one function. The tag is set in the same call so
+     the space Arcium records and the storage the tab uses cannot disagree.
+Delegates to: arcium::SiteInstanceForNewTab, arcium::TagNewTab
+
+diff --git a/chrome/browser/ui/navigator/browser_navigator.cc b/chrome/browser/ui/navigator/browser_navigator.cc
+index a3a2000fe5..06fb7b79f2 100644
+--- a/chrome/browser/ui/navigator/browser_navigator.cc
++++ b/chrome/browser/ui/navigator/browser_navigator.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "arcium/ui/browser/new_tab_storage.h"
+ #include "chrome/browser/ui/navigator/browser_navigator.h"
+ 
+ #include <algorithm>
+@@ -478,8 +479,13 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
+   // preserving the requested opener relationship along the way.
+   scoped_refptr<content::SiteInstance> initial_site_instance_for_new_contents =
+       params.opener ? params.opener->GetSiteInstance()
+-                    : tab_util::GetSiteInstanceForNewTab(
+-                          params.browser->GetProfile(), url);
++                    // Arcium: a new tab is created in its space's profile
++                    // (arcium/ui/browser/new_tab_storage.h). With an opener
++                    // the partition already comes from the opener's tab.
++                    : arcium::SiteInstanceForNewTab(
++                          params.browser, params.source_contents, url,
++                          tab_util::GetSiteInstanceForNewTab(
++                              params.browser->GetProfile(), url));
+ 
+   WebContents::CreateParams create_params(
+       params.browser->GetProfile(), initial_site_instance_for_new_contents);
+@@ -501,7 +507,12 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
+   }
+ #endif
+ 
+-  return WebContents::Create(create_params);
++  std::unique_ptr<content::WebContents> contents =
++      WebContents::Create(create_params);
++  // Arcium: tagged with the space its storage was chosen for, before the
++  // tab strip can tag it with anything else.
++  arcium::TagNewTab(params.browser, params.source_contents, contents.get());
++  return contents;
+ }
+ 
+ }  // namespace

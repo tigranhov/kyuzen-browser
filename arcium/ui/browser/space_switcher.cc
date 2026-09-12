@@ -9,6 +9,7 @@
 
 #include "arcium/browser/entry_claim.h"
 #include "arcium/browser/model/tab_entry.h"
+#include "arcium/browser/profile_partition.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/browser/tab_space.h"
 #include "arcium/ui/browser/session_rebuild_nudge.h"
@@ -19,7 +20,10 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/site_instance.h"
 #include "content/public/browser/web_contents.h"
+#include "url/gurl.h"
+#include "url/url_constants.h"
 
 namespace arcium {
 
@@ -282,8 +286,15 @@ int SpaceSwitcher::InsertBlankTab() {
   // that resolves an empty URL to the New Tab Page, and nothing about
   // landing on an empty space justifies loading a whole WebUI surface just
   // to give it something to show.
-  std::unique_ptr<content::WebContents> contents = content::WebContents::Create(
-      content::WebContents::CreateParams(tab_strip_model_->profile()));
+  content::BrowserContext* context = tab_strip_model_->profile();
+  // On the space's own profile, like every other tab of the space:
+  // about:blank because it navigates nowhere until the quick entry sends it
+  // somewhere, and that navigation then stays in this storage.
+  std::unique_ptr<content::WebContents> contents =
+      content::WebContents::Create(content::WebContents::CreateParams(
+          context,
+          SiteInstanceForProfile(context, model_->ProfileOfSpace(active_space_),
+                                 GURL(url::kAboutBlankURL))));
   // Tagged before insertion, the same as any other tab, so TagInsertedTabs's
   // never-overwrite rule keeps this rather than whatever a Chromium-assigned
   // opener would suggest: AppendWebContents(foreground) always makes the
