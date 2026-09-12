@@ -54,6 +54,7 @@ source_set("sidebar") {
     "sidebar_view.h",
     "space_bar_view.cc",
     "space_bar_view.h",
+    "space_bar_view_menu.cc",
     "space_gradients.cc",
     "space_gradients.h",
     "tab_list_drop.cc",

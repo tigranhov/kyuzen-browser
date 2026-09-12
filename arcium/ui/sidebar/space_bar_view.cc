@@ -19,14 +19,13 @@
 #include "arcium/ui/sidebar/vector_icons.h"
 #include "base/functional/bind.h"
 #include "base/strings/strcat.h"
-#include "base/strings/string_number_conversions.h"
 #include "base/third_party/icu/icu_utf.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/dialog_model.h"
 #include "ui/base/models/image_model.h"
 #include "ui/gfx/geometry/insets.h"
-#include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -39,7 +38,6 @@
 #include "ui/views/layout/flex_layout_types.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/view_class_properties.h"
-#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 
 namespace arcium {
@@ -55,29 +53,6 @@ constexpr int kGradientGroup = 2;
 constexpr int kNameFieldChars = 10;
 constexpr int kIconFieldChars = 3;
 
-std::optional<ArchiveTimeout> TimeoutForCommand(int command_id) {
-  switch (command_id) {
-    case SpaceBarView::kTimeoutTwelveHours:
-      return ArchiveTimeout::kTwelveHours;
-    case SpaceBarView::kTimeoutOneDay:
-      return ArchiveTimeout::kOneDay;
-    case SpaceBarView::kTimeoutSevenDays:
-      return ArchiveTimeout::kSevenDays;
-    case SpaceBarView::kTimeoutNever:
-      return ArchiveTimeout::kNever;
-    default:
-      return std::nullopt;
-  }
-}
-
-std::optional<int> GradientForCommand(int command_id) {
-  const int preset = command_id - SpaceBarView::kGradientFirst;
-  if (preset < 0 || static_cast<size_t>(preset) >= SpaceGradients().size()) {
-    return std::nullopt;
-  }
-  return preset;
-}
-
 // The icon, or else the name's first letter. A letter outside the Basic
 // Multilingual Plane is two UTF-16 units, and half of one draws as a box.
 std::u16string ChipText(const SidebarSpace& space) {
@@ -87,13 +62,6 @@ std::u16string ChipText(const SidebarSpace& space) {
   const size_t length =
       CBU16_IS_LEAD(space.name[0]) && space.name.size() > 1 ? 2 : 1;
   return space.name.substr(0, length);
-}
-
-std::u16string CountPhrase(int count,
-                           const std::u16string& one,
-                           const std::u16string& many) {
-  return base::StrCat(
-      {base::NumberToString16(count), u" ", count == 1 ? one : many});
 }
 
 }  // namespace
@@ -207,117 +175,6 @@ SpaceBarView::~SpaceBarView() {
   // bound to a weak pointer, so closing it cannot reach back into this view.
   if (confirm_widget_) {
     confirm_widget_->Close();
-  }
-}
-
-void SpaceBarView::ShowContextMenuForViewImpl(
-    views::View* source,
-    const gfx::Point& point,
-    ui::mojom::MenuSourceType source_type) {
-  auto* chip = views::AsViewClass<SpaceChip>(source);
-  if (!chip) {
-    return;
-  }
-  SetMenuSpace(chip->space_id());
-  menu_runner_ = std::make_unique<views::MenuRunner>(
-      menu_model_.get(), views::MenuRunner::CONTEXT_MENU);
-  menu_runner_->RunMenuAt(source->GetWidget(), nullptr,
-                          gfx::Rect(point, gfx::Size()),
-                          views::MenuAnchorPosition::kTopLeft, source_type);
-}
-
-bool SpaceBarView::IsCommandIdEnabled(int command_id) const {
-  const std::vector<SidebarSpace> spaces = model_->spaces();
-  const std::optional<size_t> index = MenuSpaceIndex(spaces);
-  if (command_id == kArchiveTimeout ||
-      TimeoutForCommand(command_id).has_value()) {
-    // The model keeps the active space's timeout and no other, so choosing
-    // one on a background space's chip would set a different space's.
-    return !index || spaces[*index].is_active;
-  }
-  if (!index) {
-    return false;
-  }
-  switch (command_id) {
-    case kMoveLeft:
-      return *index > 0;
-    case kMoveRight:
-      return *index + 1 < spaces.size();
-    case kDelete:
-      // The model refuses to delete the last space; offering it would ask
-      // for a confirmation that then does nothing.
-      return spaces.size() > 1;
-    default:
-      return true;
-  }
-}
-
-bool SpaceBarView::IsCommandIdChecked(int command_id) const {
-  if (const std::optional<int> preset = GradientForCommand(command_id)) {
-    const std::vector<SidebarSpace> spaces = model_->spaces();
-    const std::optional<size_t> index = MenuSpaceIndex(spaces);
-    return index && spaces[*index].gradient == *preset;
-  }
-  const std::optional<ArchiveTimeout> timeout = TimeoutForCommand(command_id);
-  return timeout.has_value() && *timeout == model_->archive_timeout();
-}
-
-void SpaceBarView::ExecuteCommand(int command_id, int event_flags) {
-  if (const std::optional<ArchiveTimeout> timeout =
-          TimeoutForCommand(command_id)) {
-    model_->SetArchiveTimeout(*timeout);
-    return;
-  }
-  // A copy: every command below changes the model, which rebuilds the bar.
-  const std::vector<SidebarSpace> spaces = model_->spaces();
-  const std::optional<size_t> index = MenuSpaceIndex(spaces);
-  if (!index) {
-    return;
-  }
-  const SidebarSpace& space = spaces[*index];
-  if (const std::optional<int> preset = GradientForCommand(command_id)) {
-    model_->SetSpaceGradient(space.id, *preset);
-    return;
-  }
-  switch (command_id) {
-    case kRename:
-      BeginEdit(space, EditKind::kName);
-      return;
-    case kChangeIcon:
-      // Takes whatever the field holds, which is how an emoji gets in
-      // without a picker of its own.
-      BeginEdit(space, EditKind::kIcon);
-      return;
-    case kMoveLeft:
-      if (*index > 0) {
-        model_->MoveSpace(space.id, static_cast<int>(*index) - 1);
-      }
-      return;
-    case kMoveRight:
-      if (*index + 1 < spaces.size()) {
-        model_->MoveSpace(space.id, static_cast<int>(*index) + 1);
-      }
-      return;
-    case kDelete:
-      // The tabs and the entries do not leave the same way, so the sentence
-      // makes two separate promises instead of one blanket one. Closing a
-      // space's tabs is an ordinary tab close underneath, so Cmd+Shift+T
-      // brings them back; the pins and favourites are removed from the model
-      // itself, with nothing to reopen, so only they are promised gone for
-      // good. One entry is one thing whichever kind it is, so it reads "1
-      // pin or favourite"; "1 pin and favourite" would read as two.
-      pending_delete_ = space.id;
-      confirm_text_ =
-          base::StrCat({u"Delete “", space.name, u"”? Its ",
-                        CountPhrase(space.open_tab_count, u"tab", u"tabs"),
-                        u" will close and its ",
-                        CountPhrase(space.entry_count, u"pin or favourite",
-                                    u"pins and favourites"),
-                        u" will be deleted for good."});
-      ShowConfirmation(space.id);
-      return;
-    default:
-      return;
   }
 }
 
