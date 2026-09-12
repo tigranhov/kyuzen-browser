@@ -531,7 +531,10 @@ TEST_F(ArciumModelTest, ANewSpaceUsesTheProfileItIsGiven) {
 TEST_F(ArciumModelTest, ANewSpaceGivenAnUnknownProfileUsesDefault) {
   const SpaceId space = model_.AddSpace(
       u"Office", ProfileId::FromString("11111111-1111-4111-8111-111111111111"));
-  EXPECT_EQ(DefaultProfileId(), model_.ProfileOfSpace(space));
+  // The space's own stored id, not ProfileOfSpace's fallback: that accessor
+  // has a guard of its own and would read Default even if AddSpace had
+  // written the unknown id straight through.
+  EXPECT_EQ(DefaultProfileId(), model_.GetSpace(space)->profile_id);
 }
 
 TEST_F(ArciumModelTest, AddProfileAppendsANamedColouredProfileAndNotifies) {
@@ -572,8 +575,11 @@ TEST_F(ArciumModelTest, RemovingAProfileMovesItsSpacesToDefault) {
   model_.RemoveProfile(work);
 
   EXPECT_FALSE(model_.GetProfile(work));
-  EXPECT_EQ(DefaultProfileId(), model_.ProfileOfSpace(office));
-  EXPECT_EQ(DefaultProfileId(), model_.ProfileOfSpace(lab));
+  // The spaces' own stored ids, not ProfileOfSpace's fallback: that accessor
+  // has a guard of its own and would read Default even if RemoveProfile had
+  // left the dead id sitting in the space.
+  EXPECT_EQ(DefaultProfileId(), model_.GetSpace(office)->profile_id);
+  EXPECT_EQ(DefaultProfileId(), model_.GetSpace(lab)->profile_id);
   ASSERT_EQ(1u, model_.profiles().size());
   EXPECT_EQ(0, model_.profiles()[0].position);
 }

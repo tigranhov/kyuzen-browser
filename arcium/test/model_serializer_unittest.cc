@@ -458,7 +458,21 @@ TEST(ModelSerializerTest, ASpaceNamingAMissingProfileFallsBackToDefault) {
 
   ArciumModel restored;
   ASSERT_TRUE(DeserializeModel(dict, &restored));
-  EXPECT_EQ(DefaultProfileId(), restored.ProfileOfSpace(office));
+  // The space's own stored id, not ProfileOfSpace's fallback: that accessor
+  // has a guard of its own and would read Default even if deserializing had
+  // left the dead id sitting in the space.
+  EXPECT_EQ(DefaultProfileId(), restored.GetSpace(office)->profile_id);
+}
+
+TEST(ModelSerializerTest, ARemovedProfilesSpaceDoesNotSurviveARoundTrip) {
+  ArciumModel original;
+  const ProfileId work = original.AddProfile(u"Work", 1);
+  const SpaceId office = original.AddSpace(u"Office", work);
+  original.RemoveProfile(work);
+
+  ArciumModel restored;
+  ASSERT_TRUE(DeserializeModel(SerializeModel(original), &restored));
+  EXPECT_EQ(DefaultProfileId(), restored.GetSpace(office)->profile_id);
 }
 
 TEST(ModelSerializerTest, AFileWithoutTheDefaultProfileStillHasIt) {
