@@ -26,6 +26,7 @@ std::vector<SidebarSpace> SidebarTabModel::spaces() const {
     out.name = space.name;
     out.icon = space.icon;
     out.gradient = space.gradient;
+    out.profile_id = arcium_model_->ProfileOfSpace(space.id);
     out.is_active = space.id == active;
     // Counted here rather than by the bar: the strip is this object's, and a
     // dot that walked it would be a view reaching into the browser.
@@ -45,7 +46,11 @@ void SidebarTabModel::SwitchToSpace(SpaceId id) {
 }
 
 void SidebarTabModel::AddSpace(const std::u16string& name) {
-  const SpaceId id = arcium_model_->AddSpace(name);
+  // On the profile of the space you are in, as Zen creates a workspace in
+  // the selected tab's container. Changing it before the space has tabs
+  // costs nothing.
+  const SpaceId id = arcium_model_->AddSpace(
+      name, arcium_model_->ProfileOfSpace(active_space()));
   // A new space is one you are put into: it is empty, so the switch opens
   // its blank tab and the quick entry over it, which is where a new space
   // starts from.

@@ -55,6 +55,12 @@ class FakeSidebarModel : public SidebarModel {
   SpaceId AddSpaceForTesting(const std::u16string& name,
                              const std::u16string& icon,
                              int gradient);
+  // Seeds a profile without assigning it to any space.
+  ProfileId AddProfileForTesting(const std::u16string& name, int color);
+  // Every profile ClearProfileData was asked to clear, in order.
+  const std::vector<ProfileId>& cleared_profiles_for_testing() const {
+    return cleared_profiles_;
+  }
   // Seeds a Today row tagged into `space`, not active: AddTab puts every row
   // in the first space, so this is how a test fills another one without
   // switching to it.
@@ -142,6 +148,15 @@ class FakeSidebarModel : public SidebarModel {
   void DeleteSpace(SpaceId id) override;
   void MoveTabToSpace(int tab_index, SpaceId space_id) override;
   void MoveEntryToSpace(EntryId id, SpaceId space_id) override;
+  std::vector<SidebarProfile> profiles() const override;
+  void CreateProfileForSpace(SpaceId space,
+                             const std::u16string& name,
+                             int color) override;
+  void SetSpaceProfile(SpaceId space, ProfileId profile) override;
+  void RenameProfile(ProfileId id, const std::u16string& name) override;
+  void SetProfileColor(ProfileId id, int color) override;
+  void ClearProfileData(ProfileId id) override;
+  void DeleteProfile(ProfileId id) override;
   void SetArchiveTimeout(ArchiveTimeout timeout) override;
   ArchiveTimeout archive_timeout() const override;
   bool has_archive() const override;
@@ -204,9 +219,14 @@ class FakeSidebarModel : public SidebarModel {
   // Marks `id` as the one space on screen. What SwitchToSpace does, and what
   // a move of the active row does in place of the real switcher's adoption.
   void MarkActiveSpace(SpaceId id);
+  SidebarProfile* FindProfile(ProfileId id);
 
   std::vector<SidebarRow> rows_;
   std::vector<SidebarSpace> spaces_;
+  // Default first, as the real model keeps it.
+  std::vector<SidebarProfile> profiles_ = {
+      {.id = DefaultProfileId(), .name = u"Default", .color = 0}};
+  std::vector<ProfileId> cleared_profiles_;
   std::vector<FakeFolder> folders_;
   ArchiveTimeout archive_timeout_ = ArchiveTimeout::kTwelveHours;
   // The real archive is SQLite behind a posted read; this is a vector behind

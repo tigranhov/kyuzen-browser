@@ -124,6 +124,15 @@ class SidebarTabModel : public SidebarModel,
   void DeleteSpace(SpaceId id) override;
   void MoveTabToSpace(int tab_index, SpaceId space_id) override;
   void MoveEntryToSpace(EntryId id, SpaceId space_id) override;
+  std::vector<SidebarProfile> profiles() const override;
+  void CreateProfileForSpace(SpaceId space,
+                             const std::u16string& name,
+                             int color) override;
+  void SetSpaceProfile(SpaceId space, ProfileId profile) override;
+  void RenameProfile(ProfileId id, const std::u16string& name) override;
+  void SetProfileColor(ProfileId id, int color) override;
+  void ClearProfileData(ProfileId id) override;
+  void DeleteProfile(ProfileId id) override;
   void SetArchiveTimeout(ArchiveTimeout timeout) override;
   ArchiveTimeout archive_timeout() const override;
   bool has_archive() const override;

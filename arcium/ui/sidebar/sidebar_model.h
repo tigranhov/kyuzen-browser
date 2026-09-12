@@ -9,6 +9,7 @@
 #include <string>
 #include <vector>
 
+#include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/space.h"
 #include "base/functional/callback.h"
@@ -81,6 +82,15 @@ struct SidebarFolder {
   int entry_count = 0;
 };
 
+// One profile as the space menu lists it. Prepared by the model, like
+// SidebarSpace.
+struct SidebarProfile {
+  ProfileId id;
+  std::u16string name;
+  // An index into profile_colors.h's palette.
+  int color = 0;
+};
+
 // One space as the bar draws it. Prepared by the model, like SidebarRow: a
 // dot must not scan tabs to say how many a delete would take.
 struct SidebarSpace {
@@ -93,6 +103,8 @@ struct SidebarSpace {
   // What the delete confirmation promises, counted where the strip is.
   int open_tab_count = 0;
   int entry_count = 0;
+  // Whose logins this space's tabs use. The badge draws the active space's.
+  ProfileId profile_id = DefaultProfileId();
 };
 
 // One row of the archive list. Prepared by the model, like SidebarRow: the
@@ -267,6 +279,28 @@ class SidebarModel {
   // Moves a favourite or pinned entry to another space, from the same menu.
   // Moving the one you are looking at takes you with it, as Zen does.
   virtual void MoveEntryToSpace(EntryId id, SpaceId space_id) = 0;
+
+  // Profile commands. A profile belongs to the whole browser, so every one
+  // of these reaches every window, not only this one.
+  //
+  // Every profile, Default first.
+  virtual std::vector<SidebarProfile> profiles() const = 0;
+  // "New profile…": makes a profile and puts `space` on it.
+  virtual void CreateProfileForSpace(SpaceId space,
+                                     const std::u16string& name,
+                                     int color) = 0;
+  // Puts `space` on another profile. Its open tabs reopen there, logged in
+  // as that profile; that is the model's rule, not the menu's.
+  virtual void SetSpaceProfile(SpaceId space, ProfileId profile) = 0;
+  virtual void RenameProfile(ProfileId id, const std::u16string& name) = 0;
+  // An index into the palette, not a colour, as for a space's gradient.
+  virtual void SetProfileColor(ProfileId id, int color) = 0;
+  // Logs every site in the profile out: its cookies, site data and cache go.
+  // Open tabs are not reloaded, as Chrome's own clear does not reload them.
+  virtual void ClearProfileData(ProfileId id) = 0;
+  // Erases the profile. Its spaces move to Default and their tabs reopen
+  // there. Default itself is refused.
+  virtual void DeleteProfile(ProfileId id) = 0;
 
   // How long a Today tab in the active space may sit idle before it is
   // archived. On the model rather than on the service because it is a

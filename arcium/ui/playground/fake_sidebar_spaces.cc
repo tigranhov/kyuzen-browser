@@ -107,6 +107,11 @@ void FakeSidebarModel::AddSpace(const std::u16string& name) {
   SidebarSpace space;
   space.id = SpaceId::Generate();
   space.name = name;
+  // A new space starts on the profile of the space you are in, as Zen
+  // creates a workspace in the selected tab's container.
+  if (const SidebarSpace* current = FindSpace(ActiveSpaceId())) {
+    space.profile_id = current->profile_id;
+  }
   const SpaceId id = space.id;
   spaces_.push_back(std::move(space));
   // A new space is one you are put into, not just a dot that appears.
