@@ -138,6 +138,18 @@ base::DictValue SerializeModel(const ArciumModel& model) {
   return dict;
 }
 
+// Returning false means the file is unusable as a whole, and whoever asks
+// must already have preserved its bytes: this runs on the UI thread, where
+// touching the disk is forbidden, so a refusal here cannot move anything
+// aside. Every refusal below must therefore be mirrored by the background
+// reader's own pre-check (HasUnusableProfileRow, model_store.cc), or a file
+// this rejects is left sitting at the path the store writes to with saving
+// still armed, and the user's next pinned tab overwrites it. Add a reason to
+// refuse here and you must add it there too.
+//
+// The version check is the one refusal that cannot fire on that path: a
+// migrated dict always carries the current version. It still guards callers
+// that hand over a raw file, which today means the tests.
 bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
   const std::optional<int> version = dict.FindInt("version");
   if (!version || *version > kModelSchemaVersion) {
