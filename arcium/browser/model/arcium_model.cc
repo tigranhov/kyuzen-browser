@@ -79,15 +79,6 @@ SpaceId ArciumModel::AddSpace(const std::u16string& name, ProfileId profile) {
   return id;
 }
 
-void ArciumModel::SetSpaceProfile(SpaceId space_id, ProfileId profile) {
-  Space* space = FindSpace(space_id);
-  if (!space || !GetProfile(profile) || space->profile_id == profile) {
-    return;
-  }
-  space->profile_id = profile;
-  Notify();
-}
-
 void ArciumModel::RenameSpace(SpaceId id, const std::u16string& name) {
   Space* space = FindSpace(id);
   if (!space || space->name == name) {
@@ -180,60 +171,6 @@ void ArciumModel::SetArchiveTimeout(SpaceId space_id, ArchiveTimeout timeout) {
       return;
     }
   }
-}
-
-const ArciumProfile* ArciumModel::GetProfile(ProfileId id) const {
-  for (const ArciumProfile& profile : profiles_) {
-    if (profile.id == id) {
-      return &profile;
-    }
-  }
-  return nullptr;
-}
-
-ProfileId ArciumModel::ProfileOfSpace(SpaceId space) const {
-  const Space* found = GetSpace(space);
-  return found && GetProfile(found->profile_id) ? found->profile_id
-                                                : DefaultProfileId();
-}
-
-ProfileId ArciumModel::AddProfile(const std::u16string& name, int color) {
-  ArciumProfile profile;
-  profile.id = ProfileId::Generate();
-  profile.name = name;
-  profile.color = color;
-  profile.position = static_cast<int>(profiles_.size());
-  const ProfileId id = profile.id;
-  profiles_.push_back(std::move(profile));
-  Notify();
-  return id;
-}
-
-void ArciumModel::RenameProfile(ProfileId id, const std::u16string& name) {
-  ArciumProfile* profile = FindProfile(id);
-  if (!profile || profile->name == name) {
-    return;
-  }
-  profile->name = name;
-  Notify();
-}
-
-void ArciumModel::SetProfileColor(ProfileId id, int color) {
-  ArciumProfile* profile = FindProfile(id);
-  if (!profile || profile->color == color) {
-    return;
-  }
-  profile->color = color;
-  Notify();
-}
-
-void ArciumModel::RemoveProfile(ProfileId id) {
-  if (id == DefaultProfileId() || !GetProfile(id)) {
-    return;
-  }
-  std::erase_if(profiles_, [id](const ArciumProfile& p) { return p.id == id; });
-  NormaliseProfiles();
-  Notify();
 }
 
 EntryId ArciumModel::AddEntry(SpaceId space_id,
@@ -625,45 +562,6 @@ Space* ArciumModel::FindSpace(SpaceId id) {
     }
   }
   return nullptr;
-}
-
-ArciumProfile* ArciumModel::FindProfile(ProfileId id) {
-  for (ArciumProfile& profile : profiles_) {
-    if (profile.id == id) {
-      return &profile;
-    }
-  }
-  return nullptr;
-}
-
-void ArciumModel::NormaliseProfiles() {
-  // Keep the first Default the list holds, whole -- its name and colour are
-  // the owner's to change and must survive a save -- and drop any second
-  // copy and any row with an unusable id.
-  std::optional<ArciumProfile> saved_default;
-  std::erase_if(profiles_, [&](const ArciumProfile& p) {
-    if (p.id == DefaultProfileId()) {
-      if (!saved_default) {
-        saved_default = p;
-      }
-      return true;
-    }
-    return !p.id.is_valid();
-  });
-  std::sort(profiles_.begin(), profiles_.end(),
-            [](const ArciumProfile& a, const ArciumProfile& b) {
-              return a.position < b.position;
-            });
-  profiles_.insert(profiles_.begin(),
-                   saved_default ? *saved_default : MakeDefaultProfile());
-  for (size_t i = 0; i < profiles_.size(); ++i) {
-    profiles_[i].position = static_cast<int>(i);
-  }
-  for (Space& space : spaces_) {
-    if (!GetProfile(space.profile_id)) {
-      space.profile_id = DefaultProfileId();
-    }
-  }
 }
 
 void ArciumModel::NormalisePositions() {
