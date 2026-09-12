@@ -1,0 +1,41 @@
+Seam: ClearBrowsingDataHandler::HandleClearBrowsingData in
+      chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc,
+      at the start of the removal the settings page asks for.
+Why: the removal covers the default storage only, so a space that keeps its
+     own logins survives a "clear everything" untouched. The hook puts the
+     question first and calls the handler again with the same arguments
+     once it is answered; the removal itself is unchanged, because the
+     settings page reports a deletion as soon as it hears back and cannot be
+     told that nothing happened.
+Delegates to: arcium::AskWhichProfilesToClear
+
+diff --git a/chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc b/chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc
+index 2f339f62eb..d2d59844e8 100644
+--- a/chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc
++++ b/chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc
+@@ -2,6 +2,8 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "arcium/ui/browser/clear_data_warning.h"
++
+ #include "chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.h"
+ 
+ #include <stddef.h>
+@@ -148,6 +150,16 @@ void ClearBrowsingDataHandler::HandleClearBrowsingDataForTest() {
+ 
+ void ClearBrowsingDataHandler::HandleClearBrowsingData(
+     const base::ListValue& args_list) {
++  // Arcium: this removal reaches the shared logins only, so a space with
++  // its own logins would be left signed in. Ask first, then come back here
++  // and remove (arcium/ui/browser/clear_data_warning.h).
++  if (arcium::AskWhichProfilesToClear(
++          web_ui()->GetWebContents(),
++          base::BindOnce(&ClearBrowsingDataHandler::HandleClearBrowsingData,
++                         weak_ptr_factory_.GetWeakPtr(),
++                         args_list.Clone()))) {
++    return;
++  }
+   CHECK_EQ(3U, args_list.size());
+   const std::string& webui_callback_id = args_list[0].GetString();
+ 

@@ -8,9 +8,13 @@
 #include "arcium/browser/profile_partition.h"
 #include "arcium/browser/tab_space.h"
 #include "arcium/test/browser/profile_browsertest_base.h"
+#include "arcium/ui/browser/clear_data_warning.h"
 #include "arcium/ui/browser/profile_actions.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "base/functional/bind.h"
 #include "base/run_loop.h"
+#include "base/test/bind.h"
+#include "base/test/run_until.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/ui/browser.h"
@@ -241,6 +245,40 @@ IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest,
   ASSERT_TRUE(relocated) << "the guard did not relocate the mismatched page";
   ASSERT_TRUE(content::WaitForLoadStop(relocated));
   EXPECT_EQ("", PartitionOf(relocated));
+}
+
+// The point of the warning's wider answer: it really does reach a space's
+// own logins, which Chrome's own removal never touches.
+IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest,
+                       ClearingEveryProfileReachesTheSpacesOwnLogins) {
+  const GURL url = PageUrl("a.test", "one");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  content::WebContents* default_tab = active();
+  SetCookie(default_tab, "default");
+
+  ProfileId work_profile;
+  AddSpaceOnNewProfile(u"Work", &work_profile);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  content::WebContents* work_tab = active();
+  SetCookie(work_tab, "work");
+
+  SetClearDataWarningAnswerForTesting(true);
+  bool removal_resumed = false;
+  ASSERT_TRUE(AskWhichProfilesToClear(
+      default_tab,
+      base::BindLambdaForTesting([&] { removal_resumed = true; })));
+  EXPECT_TRUE(removal_resumed);
+
+  EXPECT_TRUE(
+      base::test::RunUntil([&] { return ReadCookie(work_tab).empty(); }));
+  // Default is Chrome's own removal's job, and that is what resumes here
+  // rather than running inside this test.
+  EXPECT_EQ("who=default", ReadCookie(default_tab));
+  SetClearDataWarningAnswerForTesting(std::nullopt);
 }
 
 }  // namespace

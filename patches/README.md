@@ -124,6 +124,7 @@ first run and skipped clean on the second.
 | `0189-gn-net-arcium.patch` | `chrome/browser/net/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0190 |
 | `0190-session-cookies-profiles.patch` | `ProfileNetworkContextService::ConfigureNetworkContextParamsInternal` in `chrome/browser/net/profile_network_context_service.cc` | `arcium::IsArciumPartitionPath` |
 | `0191-gn-settings-arcium.patch` | `chrome/browser/ui/webui/settings/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0192 |
+| `0192-clear-data-warning.patch` | `ClearBrowsingDataHandler::HandleClearBrowsingData` in `chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc` | `arcium::AskWhichProfilesToClear` |
 
 ## Monthly rebase routine
 
