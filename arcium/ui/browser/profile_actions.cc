@@ -136,6 +136,19 @@ void DeleteArciumProfile(content::BrowserContext* context, ProfileId profile) {
 
   Profile* chrome_profile = Profile::FromBrowserContext(context);
   const std::string partition_domain = PartitionDomainForProfile(profile);
+  // Belt and braces around the one step in this feature that cannot be taken
+  // back. Default's partition domain is the empty string, and so is the
+  // domain of Chromium's own default storage partition, so an obliterate
+  // reaching here for Default would erase the shared profile's cookies
+  // instead of a space's. The check at the top of this function already
+  // refuses Default, and this one is therefore unreachable today -- it is
+  // here so that a later edit dropping that check cannot wipe the user's
+  // real storage. Failing this way leaves a profile that will not go away,
+  // which the user can try again; the other way round there is nothing to
+  // try again with.
+  if (!IsArciumPartitionDomain(partition_domain)) {
+    return;
+  }
   if (!IsPartitionLoaded(context, profile)) {
     // Nothing holds it open, so content deletes the whole directory now.
     DeleteProfileCache(chrome_profile, profile);
