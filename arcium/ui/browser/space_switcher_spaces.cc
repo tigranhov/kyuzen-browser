@@ -10,10 +10,12 @@
 #include <optional>
 #include <vector>
 
+#include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/browser/tab_space.h"
 #include "arcium/ui/browser/archive_service.h"
+#include "arcium/ui/browser/profile_reopen.h"
 #include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/browser/tab_close_types.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -25,6 +27,12 @@ void SpaceSwitcher::MoveTabToSpace(int index, SpaceId space) {
   if (!tab_strip_model_ || index < 0 || index >= tab_strip_model_->count() ||
       !model_->GetSpace(space)) {
     return;
+  }
+  // A tab cannot change its storage, so a move between profiles is a
+  // reopen: same address, same history, same place, other logins.
+  if (model_->ProfileOfSpace(SpaceOfTabAt(index)) !=
+      model_->ProfileOfSpace(space)) {
+    ReopenTabInProfile(tab_strip_model_, index, model_->ProfileOfSpace(space));
   }
   SetSpaceTag(tab_strip_model_->GetTabAtIndex(index)->GetContents(), space);
   AskForSessionRebuild();
@@ -39,6 +47,9 @@ void SpaceSwitcher::MoveTabToSpace(int index, SpaceId space) {
 }
 
 void SpaceSwitcher::MoveEntryToSpace(EntryId id, SpaceId space) {
+  const TabEntry* before = model_->GetEntry(id);
+  const ProfileId from =
+      before ? model_->ProfileOfSpace(before->space_id) : DefaultProfileId();
   model_->MoveEntryToSpace(id, space);
   const TabEntry* entry = model_->GetEntry(id);
   if (!entry || entry->space_id != space || !tab_strip_model_) {
@@ -51,12 +62,18 @@ void SpaceSwitcher::MoveEntryToSpace(EntryId id, SpaceId space) {
   if (!tab) {
     return;
   }
+  const int index = tab_strip_model_->GetIndexOfTab(tab);
+  // Only this window's strip: an entry's tab living in another window is
+  // re-tagged here and put right by the guard when it next navigates.
+  if (from != model_->ProfileOfSpace(space) && index != TabStripModel::kNoTab) {
+    ReopenTabInProfile(tab_strip_model_, index, model_->ProfileOfSpace(space));
+    tab = tab_strip_model_->GetTabAtIndex(index);
+  }
   // The entry's own tab is re-tagged too: an unpin drops the entry and falls
   // back to whatever the tab itself carries, and that has to agree with
   // where the entry just went.
   SetSpaceTag(tab->GetContents(), space);
   AskForSessionRebuild();
-  const int index = tab_strip_model_->GetIndexOfTab(tab);
   if (index != TabStripModel::kNoTab &&
       index == tab_strip_model_->active_index()) {
     // Moving the entry behind the tab you are looking at takes you with it,

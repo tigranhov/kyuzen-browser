@@ -10,6 +10,7 @@
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/tab_entry.h"
+#include "arcium/browser/profile_partition.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/browser/tab_space.h"
 #include "arcium/test/space_test_util.h"
@@ -493,6 +494,63 @@ TEST_F(SpaceSwitcherTest,
   // entry first, so it would say `work` even if the tab still wore `first`,
   // and an unpin would then drop the tab back into the wrong space.
   EXPECT_EQ(work, SpaceTagOf(a2->GetContents()));
+}
+
+TEST_F(SpaceSwitcherTest, MovingATabToASpaceOnAnotherProfileReopensIt) {
+  const ProfileId work_profile = model_.AddProfile(u"Work", 1);
+  const SpaceId work = model_.AddSpace(u"Work", work_profile);
+  auto switcher = MakeSwitcher();
+  tabs::TabInterface* tab =
+      AddTabInSpace(GURL("https://a.example/"), model_.default_space_id());
+  const int index = strip()->GetIndexOfTab(tab);
+  content::WebContents* before = strip()->GetWebContentsAt(index);
+
+  switcher->MoveTabToSpace(index, work);
+
+  content::WebContents* after = strip()->GetWebContentsAt(index);
+  EXPECT_NE(before, after);
+  EXPECT_EQ(PartitionDomainForProfile(work_profile),
+            PartitionDomainOfTab(after));
+  EXPECT_EQ(work, SpaceTagOf(after));
+  EXPECT_EQ(work, switcher->SpaceOfTabAt(index));
+}
+
+// Same profile, so nothing is thrown away: the tab is only re-tagged.
+TEST_F(SpaceSwitcherTest, MovingATabWithinAProfileKeepsTheSameTab) {
+  const SpaceId other = model_.AddSpace(u"Other");
+  auto switcher = MakeSwitcher();
+  tabs::TabInterface* tab =
+      AddTabInSpace(GURL("https://a.example/"), model_.default_space_id());
+  const int index = strip()->GetIndexOfTab(tab);
+  content::WebContents* before = strip()->GetWebContentsAt(index);
+
+  switcher->MoveTabToSpace(index, other);
+
+  EXPECT_EQ(before, strip()->GetWebContentsAt(index));
+  EXPECT_EQ(other, SpaceTagOf(before));
+}
+
+// A pin dragged to a space on another profile takes its open tab with it,
+// and the tab comes back logged in as that profile.
+TEST_F(SpaceSwitcherTest, MovingAnEntryToAnotherProfileReopensItsTab) {
+  const ProfileId work_profile = model_.AddProfile(u"Work", 1);
+  const SpaceId work = model_.AddSpace(u"Work", work_profile);
+  auto switcher = MakeSwitcher();
+  tabs::TabInterface* tab =
+      AddTabInSpace(GURL("https://a.example/"), model_.default_space_id());
+  const EntryId entry =
+      model_.AddEntry(model_.default_space_id(), EntryKind::kPinned,
+                      GURL("https://a.example/"), u"A");
+  binding_.Bind(entry, tab->GetHandle());
+  const int index = strip()->GetIndexOfTab(tab);
+
+  switcher->MoveEntryToSpace(entry, work);
+
+  content::WebContents* after = strip()->GetWebContentsAt(index);
+  EXPECT_EQ(PartitionDomainForProfile(work_profile),
+            PartitionDomainOfTab(after));
+  EXPECT_EQ(work, SpaceTagOf(after));
+  EXPECT_EQ(tab->GetHandle(), binding_.TabForEntry(entry));
 }
 
 }  // namespace
