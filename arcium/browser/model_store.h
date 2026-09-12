@@ -40,6 +40,14 @@ class ModelStore : public ArciumModel::Observer,
   // sequence. Never blocks: the sidebar draws live tabs meanwhile.
   void Load(base::OnceClosure done);
 
+  // Whether Load() has applied the file, whatever it held. Until then the
+  // model is a placeholder with one space, and nothing may judge a tab by it.
+  bool load_finished() const { return load_finished_; }
+  // Whether Load() found no file, or a file it understood. False for a file
+  // it had to move aside: the model is then empty, not the user's, and
+  // anything that deletes what the model does not name must not run.
+  bool load_succeeded() const { return load_succeeded_; }
+
   // If there is a pending write, performs it immediately. For tests only:
   // production code relies on the debounced schedule, not a forced flush.
   void SaveNowForTesting();
@@ -63,6 +71,9 @@ class ModelStore : public ArciumModel::Observer,
     // False only when the file was unusable AND could not be moved aside, so
     // its bytes are still at the store's own path. See OnLoaded.
     bool bytes_preserved = true;
+    // True when there was no file at all, which a first launch looks like.
+    // Nothing is lost by treating that model as the user's.
+    bool file_absent = false;
   };
 
  private:
@@ -91,6 +102,8 @@ class ModelStore : public ArciumModel::Observer,
   // Load() runs synchronously right after construction and every mutator is
   // a user command. Whoever adds one that runs during startup breaks it.
   bool saves_suppressed_ = false;
+  bool load_finished_ = false;
+  bool load_succeeded_ = false;
   base::WeakPtrFactory<ModelStore> weak_factory_{this};
 };
 

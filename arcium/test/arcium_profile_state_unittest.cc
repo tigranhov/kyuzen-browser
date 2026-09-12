@@ -197,5 +197,14 @@ TEST_F(ArciumProfileStateTest, ALiveEntrysBindingSurvivesAReplaceAll) {
   task_environment()->RunUntilIdle();
 }
 
+// Incognito has no file to read, so its model is complete from the start;
+// and nothing on disk may be judged by it.
+TEST_F(ArciumProfileStateTest, IncognitoIsLoadedButNeverASuccessfulRead) {
+  Profile* otr = profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  ArciumProfileState* state = ArciumProfileState::GetForBrowserContext(otr);
+  EXPECT_TRUE(state->model_load_finished());
+  EXPECT_FALSE(state->model_load_succeeded());
+}
+
 }  // namespace
 }  // namespace arcium

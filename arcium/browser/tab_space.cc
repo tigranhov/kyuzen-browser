@@ -7,6 +7,7 @@
 #include <optional>
 
 #include "arcium/browser/model/arcium_model.h"
+#include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "components/sessions/core/command_storage_manager.h"
@@ -130,13 +131,16 @@ void AppendTabSpaceCommands(
   }
   // The resolved space, not the raw tag: a tab whose entry has since moved
   // spaces would otherwise come back where it used to be.
+  const SpaceId space = SpaceOfTab(model, binding, tab->GetHandle());
   command_storage_manager->AppendRebuildCommand(
-      sessions::CreateAddTabExtraDataCommand(
-          tab_id, kSpaceIdExtraDataKey,
-          SpaceOfTab(model, binding, tab->GetHandle()).value()));
+      sessions::CreateAddTabExtraDataCommand(tab_id, kSpaceIdExtraDataKey,
+                                             space.value()));
   command_storage_manager->AppendRebuildCommand(
       sessions::CreateAddTabExtraDataCommand(tab_id, kTabKeyExtraDataKey,
                                              KeyOf(web_contents).value()));
+  command_storage_manager->AppendRebuildCommand(
+      sessions::CreateAddTabExtraDataCommand(
+          tab_id, kProfileIdExtraDataKey, model.ProfileOfSpace(space).value()));
 }
 
 void PopulateTabSpaceExtraData(tabs::TabInterface* tab,
@@ -149,9 +153,21 @@ void PopulateTabSpaceExtraData(tabs::TabInterface* tab,
   if (tab->GetContents()->GetBrowserContext()->IsOffTheRecord()) {
     return;
   }
-  (*extra_data)[kSpaceIdExtraDataKey] =
-      SpaceOfTab(model, binding, tab->GetHandle()).value();
+  const SpaceId space = SpaceOfTab(model, binding, tab->GetHandle());
+  (*extra_data)[kSpaceIdExtraDataKey] = space.value();
   (*extra_data)[kTabKeyExtraDataKey] = KeyOf(tab->GetContents()).value();
+  (*extra_data)[kProfileIdExtraDataKey] = model.ProfileOfSpace(space).value();
+}
+
+ProfileId ProfileIdFromExtraData(
+    const std::map<std::string, std::string>& extra_data) {
+  auto it = extra_data.find(kProfileIdExtraDataKey);
+  if (it == extra_data.end()) {
+    return DefaultProfileId();
+  }
+  // FromString refuses anything that is not a lowercase UUID.
+  const ProfileId id = ProfileId::FromString(it->second);
+  return id.is_valid() ? id : DefaultProfileId();
 }
 
 }  // namespace arcium

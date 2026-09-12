@@ -269,5 +269,51 @@ TEST_F(ModelStoreTest, GarbageThatCannotBeMovedAsideIsNotOverwrittenEither) {
   EXPECT_EQ(garbage, on_disk);
 }
 
+TEST_F(ModelStoreTest, ALoadWithNoFileFinishesAndSucceeds) {
+  ArciumModel model;
+  ModelStore store(&model, path());
+  EXPECT_FALSE(store.load_finished());
+  EXPECT_FALSE(store.load_succeeded());
+  base::RunLoop loop;
+  store.Load(loop.QuitClosure());
+  loop.Run();
+  EXPECT_TRUE(store.load_finished());
+  EXPECT_TRUE(store.load_succeeded());
+}
+
+TEST_F(ModelStoreTest, AFileThatWasUnderstoodSucceeds) {
+  {
+    ArciumModel model;
+    ModelStore store(&model, path());
+    base::RunLoop loop;
+    store.Load(loop.QuitClosure());
+    loop.Run();
+    model.AddSpace(u"Work");
+    store.SaveNowForTesting();
+    task_environment_.RunUntilIdle();
+  }
+  ArciumModel model;
+  ModelStore store(&model, path());
+  base::RunLoop loop;
+  store.Load(loop.QuitClosure());
+  loop.Run();
+  ASSERT_EQ(2u, model.spaces().size());
+  EXPECT_TRUE(store.load_succeeded());
+}
+
+// An unreadable file leaves an empty model. Its list of profiles is empty
+// too, and Chrome's partition cleanup keeps only what that list names, so
+// this load must never count as a success.
+TEST_F(ModelStoreTest, ACorruptFileFinishesButDoesNotSucceed) {
+  ASSERT_TRUE(base::WriteFile(path(), "{ this is not json"));
+  ArciumModel model;
+  ModelStore store(&model, path());
+  base::RunLoop loop;
+  store.Load(loop.QuitClosure());
+  loop.Run();
+  EXPECT_TRUE(store.load_finished());
+  EXPECT_FALSE(store.load_succeeded());
+}
+
 }  // namespace
 }  // namespace arcium

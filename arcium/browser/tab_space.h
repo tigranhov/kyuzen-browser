@@ -34,6 +34,11 @@ class TabBinding;
 inline constexpr char kSpaceIdExtraDataKey[] = "arcium.space_id";
 inline constexpr char kTabKeyExtraDataKey[] = "arcium.tab_key";
 
+// The profile of the tab's space when the session was written. Read by
+// restore, which creates the tab -- and so fixes its storage -- before the
+// model file has been read.
+inline constexpr char kProfileIdExtraDataKey[] = "arcium.profile_id";
+
 // The space a tab was tagged with, or an invalid SpaceId when it carries no
 // tag. Not the space it is drawn in — SpaceOfTab is that, and it consults the
 // entry binding first.
@@ -66,6 +71,12 @@ SpaceId SpaceOfTab(const ArciumModel& model,
 // leaves the corresponding fact untouched.
 void RestoreTabSpaceData(content::WebContents* web_contents,
                          const std::map<std::string, std::string>& extra_data);
+
+// The profile a restored tab's storage belongs to: the default profile when
+// `extra_data` names none or names something that is not an id, which is
+// also what a session written before profiles existed means.
+ProfileId ProfileIdFromExtraData(
+    const std::map<std::string, std::string>& extra_data);
 
 // Save. Appends the resolved space and the tab's key as rebuild commands for
 // `web_contents`, or nothing when it names no tab.

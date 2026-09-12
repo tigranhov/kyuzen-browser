@@ -45,6 +45,7 @@ ModelStore::LoadResult ReadFileOnBackgroundSequence(
   ModelStore::LoadResult result;
   std::string contents;
   if (!base::ReadFileToString(path, &contents)) {
+    result.file_absent = !base::PathExists(path);
     return result;
   }
   std::optional<base::DictValue> dict =
@@ -114,12 +115,15 @@ void ModelStore::OnLoaded(base::OnceClosure done, LoadResult result) {
     saves_suppressed_ = true;
   }
   loading_ = true;
+  bool understood = false;
   if (result.dict) {
     // A false return means the file is unusable as a whole. The model is
     // left as constructed — empty and valid — rather than partly filled.
-    DeserializeModel(*result.dict, model_);
+    understood = DeserializeModel(*result.dict, model_);
   }
   loading_ = false;
+  load_finished_ = true;
+  load_succeeded_ = understood || result.file_absent;
   std::move(done).Run();
 }
 

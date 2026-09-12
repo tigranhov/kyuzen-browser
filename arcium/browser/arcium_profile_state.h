@@ -75,6 +75,19 @@ class ArciumProfileState : public base::SupportsUserData::Data,
   // writer for it. Every caller must null-check.
   ModelStore* store() { return store_.get(); }
 
+  // Whether the model is the user's yet rather than the one-space
+  // placeholder. Off the record there is no file, so the model is complete
+  // from the start.
+  bool model_load_finished() const {
+    return !store_ || store_->load_finished();
+  }
+  // Whether the model was read from disk and understood, or there was no
+  // file. Always false off the record, where nothing on disk belongs to
+  // this model.
+  bool model_load_succeeded() const {
+    return store_ && store_->load_succeeded();
+  }
+
   // The profile's archive — one SQLite file, shared by every window on the
   // profile, which is why it lives here rather than beside a window's
   // ArchiveService.

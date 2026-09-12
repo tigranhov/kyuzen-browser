@@ -4,8 +4,12 @@
 
 #include "arcium/browser/tab_space.h"
 
+#include <map>
+#include <string>
+
 #include "arcium/browser/entry_claim.h"
 #include "arcium/browser/model/arcium_model.h"
+#include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/tab_binding.h"
 #include "chrome/browser/ui/browser.h"
@@ -94,6 +98,27 @@ TEST_F(TabSpaceTest, AnEntryOfAnotherSpaceStillClaimsItsTab) {
   tabs::TabInterface* tab = strip()->GetTabAtIndex(0);
   binding_.Bind(id, tab->GetHandle());
   EXPECT_TRUE(IsClaimedByEntry(model_, binding_, tab->GetHandle()));
+}
+
+// Restore creates a tab before the model file has been read, so the space
+// id alone could not say which storage the tab belongs in.
+TEST_F(TabSpaceTest, TheSessionRecordsTheProfileOfTheTabsSpace) {
+  AddTab(browser(), GURL("https://a.example/"));
+  const ProfileId work_profile = model_.AddProfile(u"Work", 1);
+  const SpaceId work = model_.AddSpace(u"Work", work_profile);
+  SetSpaceTag(strip()->GetTabAtIndex(0)->GetContents(), work);
+  std::map<std::string, std::string> extra_data;
+  PopulateTabSpaceExtraData(strip()->GetTabAtIndex(0), model_, binding_,
+                            &extra_data);
+  EXPECT_EQ(work_profile.value(), extra_data[kProfileIdExtraDataKey]);
+  EXPECT_EQ(work_profile, ProfileIdFromExtraData(extra_data));
+}
+
+// A session written before profiles existed, or a hand-edited one.
+TEST_F(TabSpaceTest, ASessionWithoutAReadableProfileMeansDefault) {
+  EXPECT_EQ(DefaultProfileId(), ProfileIdFromExtraData({}));
+  EXPECT_EQ(DefaultProfileId(),
+            ProfileIdFromExtraData({{kProfileIdExtraDataKey, "Work"}}));
 }
 
 }  // namespace
