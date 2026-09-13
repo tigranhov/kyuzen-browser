@@ -23,7 +23,9 @@
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/performance_manager/public/mojom/lifecycle.mojom.h"
 #include "content/public/browser/navigation_controller.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -33,6 +35,25 @@ namespace arcium::test {
 namespace {
 
 using ProfileLifecycleTest = ProfileBrowserTest;
+
+// Counts every navigation a tab's main frame starts while it is alive. A
+// reload is a navigation, so a tab that was left alone finishes with zero.
+class NavigationCounter : public content::WebContentsObserver {
+ public:
+  explicit NavigationCounter(content::WebContents* contents)
+      : content::WebContentsObserver(contents) {}
+
+  void DidStartNavigation(content::NavigationHandle* handle) override {
+    if (handle->IsInPrimaryMainFrame()) {
+      ++count_;
+    }
+  }
+
+  int count() const { return count_; }
+
+ private:
+  int count_ = 0;
+};
 
 // Chromium throws a background tab away under memory pressure and builds a
 // new contents for it; without the hook that contents is in the default
@@ -142,23 +163,28 @@ IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest,
   content::WebContents* home_tab = active();
   SetCookie(home_tab, "home");
 
+  // Decision 8: clearing does not reload anything, as Chrome's own clear does
+  // not. These three watch for that directly. An address assertion cannot,
+  // because a reload lands on the same address and would satisfy it.
+  NavigationCounter work_navigations(work_tab);
+  NavigationCounter home_navigations(home_tab);
+  NavigationCounter default_navigations(default_tab);
+
   base::RunLoop loop;
   ClearArciumProfileData(browser()->GetProfile(), work_profile,
                          loop.QuitClosure());
   loop.Run();
 
+  // Each of these is a round trip to the tab's renderer, so a navigation the
+  // clear had set in motion has had its chance to start before the counts are
+  // read below.
   EXPECT_EQ("", ReadCookie(work_tab));
   EXPECT_EQ("who=home", ReadCookie(home_tab));
   EXPECT_EQ("who=default", ReadCookie(default_tab));
-  // Decision 8: clearing does not reload anything, as Chrome's own clear
-  // does not. Read this assertion for exactly what it is — the tab is still
-  // sitting on its page rather than having been sent somewhere — because a
-  // reload would land on this same address and satisfy it too. The promise
-  // itself rests on the clearing path issuing one filtered removal and never
-  // asking for a load. Proving it here wants an observer counting
-  // navigations across the clear and asserting none; that needs the browser
-  // test binary rebuilt, which cannot happen while the owner's browser runs
-  // from the same output directory.
+
+  EXPECT_EQ(0, work_navigations.count());
+  EXPECT_EQ(0, home_navigations.count());
+  EXPECT_EQ(0, default_navigations.count());
   EXPECT_EQ(url, work_tab->GetLastCommittedURL());
 }
 
