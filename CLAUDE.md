@@ -82,6 +82,13 @@ Chromium keys by file name.
 - Chromium checkout: `/Volumes/Texternal/chromium/src` (external USB SSD, APFS). The internal disk
   is too small; never put the checkout or build output there.
 - `chromium/src/arcium` is a symlink to this repo's `arcium/`.
+- **One checkout, one owner.** That symlink points at whichever working tree ran `scripts/sync`
+  last, and `out/` is shared too, so two sessions working in two worktrees cannot build at the
+  same time: the second one's sync silently redirects the first one's next build at the wrong
+  sources, and it fails nothing — it compiles, links and runs, against somebody else's code.
+  Seen on 2026-09-13, where a build reported success and the new test simply was not in the
+  binary. Before trusting a build in a second worktree, check where the symlink points, and
+  after any `scripts/sync` assume the other worktree must sync again before it builds.
 - Machine: Apple M1 Pro, 10 cores, 32 GB. Clean dev build is hours; incremental UI builds are minutes.
   Prefer the Views playground for UI iteration.
 - Build configs in `build/`: `dev` (component build, minimal symbols), `perf` (release-like, for
