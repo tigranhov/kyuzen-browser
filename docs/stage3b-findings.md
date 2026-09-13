@@ -113,6 +113,22 @@ under two milliseconds. Both harness defects invented a browser fault that
 did not exist, which is the failure mode to watch for in a test rig that
 stands in for the thing under test.
 
+The pass also found one defect in Arcium itself, and it is fixed. Moving an
+open tab into a space on another profile could leave the page in a second
+tab: the owner moved one tab and ended up with three. A move between profiles
+has to reopen the tab, because a tab cannot change its storage, and the reopen
+starts a load. The guard that keeps a page in its space's storage reads the
+tab's space to decide where it belongs, and the move was only re-tagging the
+tab *after* the reopen — so at the moment the load arrived the tab still wore
+the space it was leaving, the guard judged it misplaced, cancelled the load
+and put the page in a fresh tab. The fix is to tag first, which also carries
+the right space onto the new contents. Moving an *entry* between spaces, ten
+lines further down the same file, never had this fault and shows why: it moves
+the entry before reopening, and an entry decides a tab's space before its tag
+is consulted at all. `MovingAnOnScreenTabToAnotherProfileAddsNoSecondTab`
+holds the fix down; it was written first and watched to fail, counting three
+tabs where two belonged.
+
 The same misreading raised a fair question, and it was settled against Zen
 rather than argued from here: nothing at a glance says which spaces share
 logins and which hold their own. Zen marks the tab whose jar is not the

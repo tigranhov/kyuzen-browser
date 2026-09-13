@@ -23,6 +23,7 @@
 #include "arcium/test/browser/profile_browsertest_base.h"
 #include "arcium/ui/browser/browser_sidebar_controller.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
+#include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/test/run_until.h"
 #include "chrome/browser/profiles/profile.h"
@@ -240,6 +241,59 @@ IN_PROC_BROWSER_TEST_F(SidebarTabModelProfilesTest,
   EXPECT_EQ(DefaultProfileId(), row->profile_id);
 
   CloseBrowserSynchronously(incognito);
+}
+
+// Found by hand during the Stage 3b acceptance pass: moving an open tab to a
+// space on another profile through the row menu left the page in a second
+// tab instead of in the tab that was moved.
+//
+// The move reopens the tab in the target profile's storage and only then
+// re-tags it, and the reopen loads the page at once when the tab is on
+// screen. For the length of that load the tab holds the target profile's
+// storage under the source space's tag, and the partition guard -- which
+// asks SpaceOfTab, and for a tab with no entry gets that stale tag -- reads
+// it as a tab loading in the wrong storage, cancels the navigation and opens
+// a tab of its own for the page.
+//
+// MoveEntryToSpace does the same reopen and cannot fail this way, because it
+// moves the entry in the model first and SpaceOfTab consults the entry
+// before the tag. The order is the whole difference, so this test pins the
+// order by its effect: the page stays in the tab that was moved, and no tab
+// is added.
+IN_PROC_BROWSER_TEST_F(SidebarTabModelProfilesTest,
+                       MovingAnOnScreenTabToAnotherProfileAddsNoSecondTab) {
+  SidebarTabModel* sidebar = SidebarModelFor(browser());
+  ASSERT_TRUE(sidebar);
+  ProfileId work_profile;
+  const SpaceId work = AddSpaceOnNewProfile(u"Work", &work_profile);
+  // AddSpaceOnNewProfile leaves the window in the new space; the tab has to
+  // start in the shared logins and be looked at, because the reopen only
+  // loads a tab that is on screen and it is that load the guard judges.
+  switcher()->SwitchTo(model()->default_space_id());
+
+  const GURL url = PageUrl("a.test", "one");
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  const int index = strip()->active_index();
+  ASSERT_EQ(model()->default_space_id(), switcher()->SpaceOfTabAt(index));
+  const int tabs_before = strip()->count();
+
+  sidebar->MoveTabToSpace(index, work);
+
+  // Wait for the page to commit wherever it ends up, so the duplicate has
+  // every chance to appear before anything is asserted. With the defect it
+  // commits in a tab the guard opened; without it, in the tab that moved.
+  content::WebContents* showing = nullptr;
+  ASSERT_TRUE(base::test::RunUntil([&] {
+    showing = FindTab(url);
+    return showing && showing->GetLastCommittedURL() == url;
+  }));
+
+  EXPECT_EQ(tabs_before, strip()->count());
+  EXPECT_EQ(strip()->GetWebContentsAt(index), showing);
+  EXPECT_EQ(PartitionDomainForProfile(work_profile), PartitionOf(showing));
+  EXPECT_EQ(work, switcher()->SpaceOfTabAt(index));
 }
 
 }  // namespace

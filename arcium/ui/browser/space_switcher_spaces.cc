@@ -28,13 +28,26 @@ void SpaceSwitcher::MoveTabToSpace(int index, SpaceId space) {
       !model_->GetSpace(space)) {
     return;
   }
+  const ProfileId from = model_->ProfileOfSpace(SpaceOfTabAt(index));
+  const ProfileId to = model_->ProfileOfSpace(space);
+  // The tag goes on before the reopen, never after. The reopen starts a load,
+  // and the guard that keeps a page in its space's storage reads the tag to
+  // decide where the tab belongs: a tab still wearing the space it is leaving
+  // looks misplaced the moment it arrives, so the guard cancels that load and
+  // puts the page in a second tab -- one move, two tabs. Moving an entry a
+  // few lines down has never had this fault for exactly this reason: it moves
+  // the entry first, and the entry is what decides a tab's space before its
+  // tag is consulted at all.
+  SetSpaceTag(tab_strip_model_->GetTabAtIndex(index)->GetContents(), space);
   // A tab cannot change its storage, so a move between profiles is a
   // reopen: same address, same history, same place, other logins.
-  if (model_->ProfileOfSpace(SpaceOfTabAt(index)) !=
-      model_->ProfileOfSpace(space)) {
-    ReopenTabInProfile(tab_strip_model_, index, model_->ProfileOfSpace(space));
+  if (from != to) {
+    ReopenTabInProfile(tab_strip_model_, index, to);
+    // The new contents inherits the tag, since carrying a tab's identity
+    // never overwrites one that is already set. Setting it again here costs
+    // nothing and keeps this function from resting on that.
+    SetSpaceTag(tab_strip_model_->GetTabAtIndex(index)->GetContents(), space);
   }
-  SetSpaceTag(tab_strip_model_->GetTabAtIndex(index)->GetContents(), space);
   AskForSessionRebuild();
   // Moving the tab you are looking at takes you with it, as Zen does --
   // adopted, not switched to: SwitchTo would land on whatever `space`
