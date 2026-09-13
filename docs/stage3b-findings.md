@@ -177,6 +177,16 @@ leaving a deleted profile's cookies readable. It is left open deliberately
 rather than patched under an acceptance pass, and it is the one thing in this
 stage that should be picked up before the next.
 
+Load is not the cause but it is plainly a factor, which is how the wrong
+attribution survived so long: alone and one at a time the crash came once in
+six runs, while the whole suite at two jobs crashed both of them on the first
+attempt and passed both on the retry. A rate that moves with load and a cause
+that has nothing to do with load are easy to confuse, and the way out was to
+vary one thing at a time rather than to argue about which it must be.
+
+The closing run of this stage: `arcium_browsertests` 32 unique, all passing,
+with only those two needing their retry; `arcium_unittests` 624, clean.
+
 ## Two things settled this task, neither by reading alone
 
 **The deliberately-failing test asserted the wrong thing, and now asserts
