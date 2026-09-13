@@ -198,6 +198,33 @@ test is the mutation-proven one. What is therefore not proven is only the
 cheapest thing a suite proves: that all 34 pass in one sitting. Run it before
 the next stage starts.
 
+**Found and fixed afterwards, and not yet proven.** The erase does not
+merely outlive the call: it is asked for from inside the teardown that has
+just dropped the browser context's storage partition map, and it builds a
+new one. Deleting a profile whose storage is open clears that storage and
+erases it once the clear reports back; when the browser goes before the
+clear is done, destroying a partition hands back every reply the clear was
+still waiting on, so the clear finishes on the spot, in the middle of the
+teardown, and the erase that follows it rebuilds the map the context is
+about to check it no longer has. That is also why load moves the rate
+without being the cause: more work outstanding at teardown, more chances
+the clear is one of them.
+
+Waiting for the erase was never on offer -- the teardown is one synchronous
+stretch and nothing may block it -- so the erase stops once the browser
+context says it is going away, and the storage waits for the sweep at the
+next launch, which is what the product already relied on. `StorageCanStillBeErased`
+in `arcium/ui/browser/profile_actions.cc`, with
+`DeletingAProfileErasesNoStorageOnceTheBrowserIsGoing` covering the rule on
+the one path that can be watched from outside.
+
+The honest state of it: that new test was seen to fail against a build
+without the fix, and nothing else was run. The build tree went stale mid-way
+through -- it served cached objects for a source that had changed -- and the
+twenty consecutive runs of the two delete-a-profile tests that would tell a
+fix from luck were not done. Until they are, this is a diagnosis with a
+patch attached, not a closed defect.
+
 ## Two things settled this task, neither by reading alone
 
 **The deliberately-failing test asserted the wrong thing, and now asserts
