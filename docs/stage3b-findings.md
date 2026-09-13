@@ -102,6 +102,19 @@ storage actually holds. It is recorded here because a harness that manufactures
 the symptom under test is worse than no harness at all, and because the fix
 came from a person using it rather than from any amount of reading it.
 
+The same misreading raised a fair question, and it was settled against Zen
+rather than argued from here: nothing at a glance says which spaces share
+logins and which hold their own. Zen marks the tab whose jar is not the
+default one, offers a setting to hide even that mark, and has no at-a-glance
+answer for which workspaces share a jar — its users colour workspaces by hand
+to match their containers. Arcium already draws the active space's profile as
+a coloured disc naming that profile in its tooltip, with the shared default
+keeping the accent it had before profiles existed, so it sits where Zen sits.
+**No UI was added for this**, and the reasoning is in
+`docs/research/zen-profiles-containers.md`: the question worth answering later
+is which *other* spaces share a set of logins, which belongs with the
+customisation work rather than here.
+
 | Check | What must happen | Result |
 |---|---|---|
 | A3b.1 (automated) | Every way a tab can be made lands in its space's own logins | **PASSED** — `arcium_browsertests`, `ProfileIsolationTest`, `ProfileRestoreTest`, `ProfileLifecycleTest` and `SidebarTabModelProfilesTest`, 31 unique tests, run twice, all green both times |

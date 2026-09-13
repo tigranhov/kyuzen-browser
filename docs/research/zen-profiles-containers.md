@@ -56,8 +56,48 @@ recorded in the findings: the mark is what stops a defect in a creation hook
 from reopening a tab forever, and the browser this project follows has already
 shipped the duplicate-tab failure that the other choice invites.
 
+## Showing which storage a space uses
+
+Checked 2026-09-13, after the owner read a deliberately shared space as a leak
+during the hand pass. Two of the three seeded spaces share the default logins
+on purpose, and nothing on screen announces that.
+
+**Zen marks the tab, not the workspace.** A workspace bound to a container
+gives its tabs a container indicator, which Zen shows more prominently than
+Firefox does — there it is a coloured stripe along the edge of the tab. The
+telling detail is a setting named **"Hide default container indicator"**: the
+case worth marking is a jar that is *not* the default one, and users who find
+even that mark noisy switch it off. Zen's own bug reports about indicators
+appearing wrongly take that setting as their baseline
+(zen-browser/desktop#1792 and #8470).
+
+**Zen does not show which workspaces share a jar.** Its workspace
+documentation does not say, and the community answer is a workaround rather
+than a feature: colour each workspace by hand to match its container, which a
+maintainer notes is already possible because containers have colours and
+workspaces have their own themes (zen-browser/desktop discussion #2630). A
+user in the same thread asks for the whole interface to turn red on a
+production container — the same wish approached from the other end, and also
+not a thing the browser does.
+
+Arcium already sits where Zen sits. The space bar draws a small disc filled
+with the current space's profile colour, carrying `Profile: <name>` as its
+tooltip and accessible name, with the profile menu hanging off it; the shared
+default keeps preset 0, the accent the badge drew before profiles existed, so
+a badge that looks unchanged means shared logins. That is Zen's shape exactly:
+the non-default jar is what gets marked.
+
+**Ruling: no new sidebar UI in this stage.** The confusion during the pass came
+from a harness that signed tabs back in on every reload, not from a missing
+badge, and the badge already answers "whose logins is this space using". The
+question neither browser answers at a glance is "which *other* spaces share
+this one's logins", and deciding that belongs with the customisation work,
+where space gradients and profile colours are edited side by side and a user
+can make the answer obvious themselves the way Zen's users do. If this is
+wrong, the cost is a later addition to a view that already holds the data.
+
 ## What this changed
 
-Nothing in the code. Both rulings stand, and both entries in
-`docs/stage3b-findings.md` now cite this note instead of resting on Arcium's
-own reasoning alone.
+Nothing in the code, on either visit. All three rulings stand, and the entries
+in `docs/stage3b-findings.md` cite this note instead of resting on Arcium's own
+reasoning alone.
