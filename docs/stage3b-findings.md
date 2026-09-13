@@ -157,10 +157,25 @@ customisation work rather than here.
 | Browser pages | Type a settings address into a tab in a profile space: it opens normally, in shared storage, no empty tab left behind | **COVERED** by `ProfileIsolationTest.ABrowserPageInAProfileTabMovesToSharedStorage`, with `ABrowserPageStaysInSharedStorage` for a browser page opened directly: the page lands in shared storage, the tab behind it keeps both its own page and its profile's storage, and exactly one tab is added. Read the last of those three honestly — the source tab holds a page here, so no empty tab can arise on this path and that assertion guards an invariant rather than catching a break. The stray-tab guarantee proper belongs to the popup test above, which is the mutation-proven one |
 
 A3b.1's automated half is the one line this task can and did answer: both
-suites green twice, with the previously-flaky
-`ProfileLifecycleTest.DeletingAProfileMovesItsSpacesAndLogsThemOut` clean on
-both runs of this pass (no recurrence of the parallel-load crash task 9's
-review recorded).
+suites green twice, with `ProfileLifecycleTest.DeletingAProfileMovesItsSpacesAndLogsThemOut`
+clean on both runs of this pass.
+
+**That test is intermittently unsound, and its cause was misattributed
+here.** It was recorded above as a crash under parallel load, and it is not:
+on 2026-09-13 it crashed twice running alone, one test at a time. Both
+delete-a-profile tests die the same way, at shutdown, on Chromium's own
+`DCHECK failed: !storage_partition_map_ StoragePartitionMap is not shut down
+properly`. Measured rather than assumed, and measured against the right
+baseline: with the tab-move fix of this pass put aside and the binary rebuilt
+without it, six runs produced one crash, so the fault predates that fix and
+is not caused by it. Deleting a profile starts an erase of its storage that
+outlives the call, and a browser context torn down while that erase is still
+in flight trips the check. What saves the product from the same race is the
+sweep at the next launch: storage belonging to no profile in the model is
+erased then, so an abandoned erase costs disk until relaunch rather than
+leaving a deleted profile's cookies readable. It is left open deliberately
+rather than patched under an acceptance pass, and it is the one thing in this
+stage that should be picked up before the next.
 
 ## Two things settled this task, neither by reading alone
 
