@@ -42,7 +42,11 @@ Made by the owner in the design session:
   already carry the idea, and a second one competing with them is worse than
   none. Nothing in this stage bookmarks, and Cmd+D is not wired.
 - **D3.** At rest the pill shows the domain alone: `google.com`, not
-  `https://www.google.com/`.
+  `https://www.google.com/`. Precisely, it shows the host with a leading
+  `www.` dropped, and not the registrable domain: `mail.google.com` stays
+  `mail.google.com`, because a bar that showed `google.com` there would be
+  telling the user they are somewhere they are not. Punycode is shown as
+  punycode, for the same reason.
 - **D4.** Hovering reveals exactly two buttons at the trailing edge: extensions
   and copy link.
 - **D5.** One box serves both Cmd+T and a click on the pill, over the page, and
@@ -98,8 +102,9 @@ buttons.
 
 `UrlPillView` grows from a placeholder host into the surface itself.
 
-**At rest.** A quiet fill, no border, no shadow. One line of text: the
-registrable domain of the active tab's URL, elided at the trailing edge. A page
+**At rest.** A quiet fill, no border, no shadow. One line of text: the host of
+the active tab's URL with a leading `www.` dropped (D3), elided at the trailing
+edge. A page
 with no host -- a new tab, a settings page -- shows a short label instead of an
 empty pill. If the connection is not secure, the site button shows as a warning
 mark at the leading edge, without hovering (D8).
@@ -190,8 +195,9 @@ Three seams, all hooks, no logic:
 
 Unit tests, in `arcium/test/`:
 
-- The domain shown for a URL: host with `www.` dropped, a port kept, an IP
-  address, a file URL, a page with no host, a very long host elided.
+- The domain shown for a URL: host with `www.` dropped, a subdomain kept, a
+  port kept, an IP address, a file URL, a page with no host, a punycode host
+  left as punycode, a very long host elided.
 - Whether a URL counts as not secure, so the mark appears for `http`, a bad
   certificate, and mixed content, and not for `https` or an internal page.
 - The suggestion source: rows come out in the controller's order, an open-tab
