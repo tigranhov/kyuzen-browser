@@ -46,7 +46,7 @@ No credential is typed into this harness, and none should be.
 | A3b.5 | Chrome's Clear browsing data, cookies ticked | The warning appears and says it cannot be undone; "shared logins only" leaves Work signed in; "every space too" signs both out |
 | A3b.6 | Load the unpacked extension the script writes beside the site, relaunch twice with `--keep`, then remove it and relaunch again | Every profile still signed in, every time |
 | A3b.7 | Save a note on the extension's options page from Work, then open it from Personal | The same note both times |
-| A3.3 (in-use half) | Both spaces signed in with pages loaded; watch Activity Monitor while switching | No process appears for a profile whose tabs are not loaded |
+| A3.3 (in-use half) | Nothing — covered by a test now | `ProfileLifecycleTest.SwitchingSpacesAddsNoProcessAndStartsNoLoad` counts processes and navigations across nine space switches, and proves its own counting by opening a page afterwards and requiring the count to rise |
 
 A3.3's idle half is already measured and needs nothing from you — see the
 A3.3 section of `docs/perf/2026-09-12-stage3b.md`.

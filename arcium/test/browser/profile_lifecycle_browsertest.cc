@@ -24,6 +24,7 @@
 #include "components/performance_manager/public/mojom/lifecycle.mojom.h"
 #include "content/public/browser/navigation_controller.h"
 #include "content/public/browser/navigation_handle.h"
+#include "content/public/browser/render_process_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/test/browser_test.h"
@@ -186,6 +187,79 @@ IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest,
   EXPECT_EQ(0, home_navigations.count());
   EXPECT_EQ(0, default_navigations.count());
   EXPECT_EQ(url, work_tab->GetLastCommittedURL());
+}
+
+// The half of A3.3 a person was meant to watch in Activity Monitor. Two
+// spaces on different profiles, both signed in and showing a page, and a
+// third space on a third profile that nobody has opened: switching between
+// them must cost nothing at all. A background space does no work, so no
+// process appears for a profile whose tabs are not loaded, and no tab that
+// was left alone is sent anywhere.
+IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest,
+                       SwitchingSpacesAddsNoProcessAndStartsNoLoad) {
+  const GURL url = PageUrl("a.test", "one");
+  const SpaceId personal = model()->default_space_id();
+  switcher()->SwitchTo(personal);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  content::WebContents* personal_tab = active();
+  SetCookie(personal_tab, "ada");
+
+  ProfileId work_profile;
+  const SpaceId work = AddSpaceOnNewProfile(u"Work", &work_profile);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  content::WebContents* work_tab = active();
+  SetCookie(work_tab, "grace");
+  ASSERT_EQ(PartitionDomainForProfile(work_profile), PartitionOf(work_tab));
+
+  // The space this row is really about: its own profile, and not one page
+  // ever opened in it.
+  ProfileId reading_profile;
+  const SpaceId reading = AddSpaceOnNewProfile(u"Reading", &reading_profile);
+
+  const int processes_before =
+      content::RenderProcessHost::GetCurrentRenderProcessCountForTesting();
+  NavigationCounter personal_navigations(personal_tab);
+  NavigationCounter work_navigations(work_tab);
+
+  for (int round = 0; round < 3; ++round) {
+    switcher()->SwitchTo(personal);
+    switcher()->SwitchTo(work);
+    switcher()->SwitchTo(reading);
+  }
+  switcher()->SwitchTo(personal);
+
+  // Each read is a round trip to that tab's renderer, so anything the
+  // switching had set going has had its chance to start. They also say the
+  // two logins are still separate and still there, which is what makes this
+  // a measurement of an in-use browser rather than an idle one.
+  EXPECT_EQ("who=ada", ReadCookie(personal_tab));
+  EXPECT_EQ("who=grace", ReadCookie(work_tab));
+
+  EXPECT_EQ(
+      processes_before,
+      content::RenderProcessHost::GetCurrentRenderProcessCountForTesting());
+  EXPECT_EQ(0, personal_navigations.count());
+  EXPECT_EQ(0, work_navigations.count());
+
+  // Everything above says nothing happened, and a blind instrument says that
+  // too. So ask for something that must happen: open a page in the space
+  // nobody had opened, and the count has to move. Without this the whole test
+  // would still pass with the counting wired to nothing.
+  switcher()->SwitchTo(reading);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  EXPECT_EQ(PartitionDomainForProfile(reading_profile), PartitionOf(active()));
+  EXPECT_GT(
+      content::RenderProcessHost::GetCurrentRenderProcessCountForTesting(),
+      processes_before);
+  // And it really is a third set of logins, not either of the two that were
+  // signed in while it sat in the background.
+  EXPECT_EQ("", ReadCookie(active()));
 }
 
 IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest,

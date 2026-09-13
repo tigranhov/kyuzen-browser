@@ -213,9 +213,11 @@ cat <<EOF
          its own logins, save a note, then open it again from a shared
          space. The same note must be there: extensions are shared by every
          space on purpose, as containers are in Zen.
-  A3.3   (in-use half) With both signed in and pages loaded, watch Activity
-         Monitor while switching spaces: no process per profile appears for a
-         space whose tabs are not loaded.
+  A3.3   Nothing to do. Both halves are measured now: the idle one by
+         scripts/perf, and the in-use one by a browser test that counts
+         processes and navigations across nine space switches and then
+         proves its own counting by opening a page and requiring the count
+         to rise.
 
   Close the browser to stop the site.
 
