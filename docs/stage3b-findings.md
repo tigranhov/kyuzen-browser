@@ -187,6 +187,17 @@ vary one thing at a time rather than to argue about which it must be.
 The closing run of this stage: `arcium_browsertests` 32 unique, all passing,
 with only those two needing their retry; `arcium_unittests` 624, clean.
 
+Read that closing run for what it covers. It was taken **before** the last
+two tests of the pass existed — the tab-move regression test and the
+space-switching process test — and a whole-suite run including them was
+skipped at the owner's request, because browser tests take over the screen on
+macOS and the machine was in use. Each of those two passes on its own, three
+times running for the newer one, and neither touches product code that the
+other 32 exercise; the tab-move fix is the only product change, and its own
+test is the mutation-proven one. What is therefore not proven is only the
+cheapest thing a suite proves: that all 34 pass in one sitting. Run it before
+the next stage starts.
+
 ## Two things settled this task, neither by reading alone
 
 **The deliberately-failing test asserted the wrong thing, and now asserts
