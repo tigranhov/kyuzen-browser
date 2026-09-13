@@ -151,7 +151,14 @@ IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest,
   EXPECT_EQ("who=home", ReadCookie(home_tab));
   EXPECT_EQ("who=default", ReadCookie(default_tab));
   // Decision 8: clearing does not reload anything, as Chrome's own clear
-  // does not.
+  // does not. Read this assertion for exactly what it is — the tab is still
+  // sitting on its page rather than having been sent somewhere — because a
+  // reload would land on this same address and satisfy it too. The promise
+  // itself rests on the clearing path issuing one filtered removal and never
+  // asking for a load. Proving it here wants an observer counting
+  // navigations across the clear and asserting none; that needs the browser
+  // test binary rebuilt, which cannot happen while the owner's browser runs
+  // from the same output directory.
   EXPECT_EQ(url, work_tab->GetLastCommittedURL());
 }
 
