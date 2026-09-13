@@ -85,23 +85,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         url = urllib.parse.urlparse(self.path)
         query = urllib.parse.parse_qs(url.query)
+        # Signing in or out answers with a redirect to "/" instead of a page,
+        # so the address bar never keeps ?signin=ada. A tab parked on that
+        # address signs itself back in on every reload, and the rows are all
+        # about reloading a tab and reading the name: without this, an
+        # untouched space looks like it leaked a login it never saw, and a
+        # sign-out looks ignored. Found by the owner during the pass.
+        if "signin" in query or "signout" in query:
+            self.send_response(303)
+            self.send_header("Location", "/")
+            if "signin" in query:
+                self.send_header(
+                    "Set-Cookie", f"who={query['signin'][0]}; Path=/; Max-Age=86400")
+            else:
+                self.send_header("Set-Cookie", "who=; Path=/; Max-Age=0")
+            self.end_headers()
+            return
         self.send_response(200)
         self.send_header("Content-Type", "text/html; charset=utf-8")
-        if "signin" in query:
-            self.send_header(
-                "Set-Cookie", f"who={query['signin'][0]}; Path=/; Max-Age=86400")
-        elif "signout" in query:
-            self.send_header("Set-Cookie", "who=; Path=/; Max-Age=0")
+        # A cached page would report a login this storage no longer holds,
+        # which is the same false reading by another route.
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         who = "nobody"
         for part in (self.headers.get("Cookie") or "").split(";"):
             name, _, value = part.strip().partition("=")
             if name == "who" and value:
                 who = value
-        if "signin" in query:
-            who = query["signin"][0]
-        elif "signout" in query:
-            who = "nobody"
         self.wfile.write((PAGE % who).encode())
 
     def log_message(self, *args):

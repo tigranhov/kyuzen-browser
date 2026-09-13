@@ -91,6 +91,17 @@ a reader to assume. Renumbered to the design's own A3b.1-A3b.7 per the pre-fligh
 ruling, plus the master spec's A3.1 and A3.3 and the two informal checks the
 brief named "Guard" and "Browser pages".
 
+The harness itself carried a defect, and the owner found it in the first
+minutes of the pass. Signing in left the tab parked on the sign-in address, so
+every later reload signed that tab back in: a space that had never seen a login
+appeared to be holding one, and a sign-out appeared to be ignored. Both
+readings accuse the browser of exactly the failure these rows exist to detect,
+and neither was true. Signing in or out now answers with a redirect to a plain
+address, and the page is never cached, so a reload reports only what that
+storage actually holds. It is recorded here because a harness that manufactures
+the symptom under test is worse than no harness at all, and because the fix
+came from a person using it rather than from any amount of reading it.
+
 | Check | What must happen | Result |
 |---|---|---|
 | A3b.1 (automated) | Every way a tab can be made lands in its space's own logins | **PASSED** — `arcium_browsertests`, `ProfileIsolationTest`, `ProfileRestoreTest`, `ProfileLifecycleTest` and `SidebarTabModelProfilesTest`, 31 unique tests, run twice, all green both times |
