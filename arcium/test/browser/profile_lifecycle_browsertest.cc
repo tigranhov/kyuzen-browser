@@ -11,10 +11,14 @@
 #include "arcium/ui/browser/clear_data_warning.h"
 #include "arcium/ui/browser/profile_actions.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "base/files/file_path.h"
+#include "base/files/file_util.h"
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
+#include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/test/bind.h"
 #include "base/test/run_until.h"
+#include "base/threading/thread_restrictions.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "chrome/browser/ui/browser.h"
@@ -281,6 +285,54 @@ IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest,
   EXPECT_EQ("", PartitionOf(after));
   ASSERT_TRUE(content::WaitForLoadStop(after));
   EXPECT_EQ("", ReadCookie(after));
+}
+
+// Regression test for the crash that made both delete-a-profile tests die
+// about one run in six, at shutdown, on Chromium's
+// "StoragePartitionMap is not shut down properly"
+// (browser_context_impl.cc). Deleting a profile whose storage is open
+// clears it and erases it afterwards, and the clear is answered later. When
+// the browser goes before the clear is done, the answer arrives from inside
+// the storage teardown -- destroying a partition hands back the replies the
+// clear was still waiting on -- and the erase then rebuilt the storage map
+// the teardown had just dropped.
+//
+// The rule that fixes it: once the browser context says it is going away,
+// deleting a profile leaves its storage alone. Run here on the path that
+// can be watched from outside, a profile nothing has opened, whose storage
+// directory the erase deletes outright; the open-storage path takes the
+// same decision in the same place, and is only visible by crashing.
+IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest,
+                       DeletingAProfileErasesNoStorageOnceTheBrowserIsGoing) {
+  Profile* profile = browser()->GetProfile();
+  const ProfileId work = model()->AddProfile(u"Work", /*color=*/1);
+  const SpaceId space = model()->AddSpace(u"Work", work);
+  ASSERT_FALSE(IsPartitionLoaded(profile, work));
+  const base::FilePath directory = PartitionDirectory(profile->GetPath(), work);
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    ASSERT_TRUE(
+        base::CreateDirectory(directory.Append(FILE_PATH_LITERAL("def"))));
+  }
+
+  // What the browser does on its way out, before it tears the storage down.
+  profile->NotifyWillBeDestroyed();
+
+  DeleteArciumProfile(profile, work);
+  // The erase reaches disk through the thread pool, so waiting for that is
+  // what makes "nothing was erased" mean something. Not the whole browser's
+  // idle: a context that has been told it is going away never reaches one.
+  {
+    base::ScopedAllowBlockingForTesting allow_blocking;
+    base::ThreadPoolInstance::Get()->FlushForTesting();
+  }
+
+  // The model still changes -- that half is the user's decision, and it is
+  // what the next launch's sweep reads to erase this storage.
+  EXPECT_EQ(1u, model()->profiles().size());
+  EXPECT_EQ(DefaultProfileId(), model()->ProfileOfSpace(space));
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  EXPECT_TRUE(base::PathExists(directory));
 }
 
 IN_PROC_BROWSER_TEST_F(ProfileLifecycleTest, DefaultCannotBeDeleted) {

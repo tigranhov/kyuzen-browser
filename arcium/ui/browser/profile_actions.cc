@@ -70,9 +70,31 @@ void AskForCleanupAtNextLaunch(base::WeakPtr<Profile> profile) {
   }
 }
 
+// Whether an erase of a profile's storage may still be started. A browser
+// context on its way out drops its storage partition map, and anything
+// asking for storage after that builds a fresh map under a context that is
+// about to check it has none -- which is Chromium's
+// "StoragePartitionMap is not shut down properly"
+// (browser_context_impl.cc).
+//
+// This is reached in earnest, not in theory. The clear below is asked for
+// on a user's stack but answered later, and when the browser goes before it
+// is done the answer arrives from inside the storage teardown itself:
+// destroying a partition hands back every reply the clear was still waiting
+// on, and the browsing data remover finishes on the spot. Both
+// delete-a-profile browser tests died that way, about one run in six.
+//
+// Stopping costs nothing the user can see. The storage stays on disk until
+// the next launch, where the sweep erases whatever belongs to no profile in
+// the model, and the profile itself is already gone from the model that was
+// just written.
+bool StorageCanStillBeErased(content::BrowserContext* context) {
+  return !context->ShutdownStarted();
+}
+
 void ObliterateWhenCleared(base::WeakPtr<Profile> profile,
                            const std::string& partition_domain) {
-  if (!profile) {
+  if (!profile || !StorageCanStillBeErased(profile.get())) {
     return;
   }
   profile->AsyncObliterateStoragePartition(
@@ -147,6 +169,11 @@ void DeleteArciumProfile(content::BrowserContext* context, ProfileId profile) {
   // which the user can try again; the other way round there is nothing to
   // try again with.
   if (!IsArciumPartitionDomain(partition_domain)) {
+    return;
+  }
+  // The model above is the user's decision and stands whatever happens
+  // here; only the storage waits.
+  if (!StorageCanStillBeErased(context)) {
     return;
   }
   if (!IsPartitionLoaded(context, profile)) {
