@@ -102,6 +102,17 @@ storage actually holds. It is recorded here because a harness that manufactures
 the symptom under test is worse than no harness at all, and because the fix
 came from a person using it rather than from any amount of reading it.
 
+It had a second defect of the same family, found the same way. The site served
+one request at a time, and a browser routinely opens a connection before it
+has anything to send on it, so the server sat blocked inside that silent
+socket while real page loads queued behind it — on screen, a tab that hangs
+for seconds in the space you just pasted an address into. Measured rather
+than assumed: with one idle connection held open, the old server returned
+nothing at all inside six seconds while the threaded replacement answered in
+under two milliseconds. Both harness defects invented a browser fault that
+did not exist, which is the failure mode to watch for in a test rig that
+stands in for the thing under test.
+
 The same misreading raised a fair question, and it was settled against Zen
 rather than argued from here: nothing at a glance says which spaces share
 logins and which hold their own. Zen marks the tab whose jar is not the

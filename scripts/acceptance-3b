@@ -118,7 +118,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         pass
 
 import sys
-http.server.HTTPServer(("127.0.0.1", int(sys.argv[1])), Handler).serve_forever()
+# Threaded, never the plain one-request-at-a-time server. A browser opens
+# sockets before it has anything to send on them -- a speculative connection
+# for the link you are about to click -- and the single-threaded server
+# blocks inside the first of those, waiting for a request line that is not
+# coming, while every real page load queues behind it. On screen that is a
+# tab that hangs for seconds, which is a browser fault this harness would be
+# inventing. Found by the owner pasting the address into another space.
+server = http.server.ThreadingHTTPServer(
+    ("127.0.0.1", int(sys.argv[1])), Handler)
+server.daemon_threads = True
+server.serve_forever()
 PY
 
 python3 "$server_py" "$port" &
