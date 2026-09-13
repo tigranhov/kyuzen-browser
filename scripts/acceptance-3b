@@ -131,6 +131,48 @@ server.daemon_threads = True
 server.serve_forever()
 PY
 
+# The extension the last two rows need. Written here rather than fetched,
+# because those rows are about what survives an install and an uninstall and
+# about one settings value being the same from any space -- nothing about a
+# real extension's own behaviour. An unpacked one also avoids a store
+# account, which this pass has no business asking for.
+ext="$data/extension"
+mkdir -p "$ext"
+cat > "$ext/manifest.json" <<'JSON'
+{
+  "manifest_version": 3,
+  "name": "Arcium acceptance",
+  "version": "1.0",
+  "options_page": "options.html"
+}
+JSON
+cat > "$ext/options.html" <<'HTML'
+<!doctype html><meta charset=utf-8>
+<title>Arcium acceptance options</title>
+<style>body{font:16px system-ui;margin:2rem;max-width:34rem}
+input{font:inherit;padding:.3rem}</style>
+<h1>Arcium acceptance options</h1>
+<p><label>Saved note: <input id=note size=28></label>
+   <button id=save>Save</button></p>
+<p id=state></p>
+<p>Extensions are shared by every space on purpose, so this note must read
+   the same opened from a space with its own logins and from a shared one.</p>
+<script src="options.js"></script>
+HTML
+cat > "$ext/options.js" <<'JS'
+const note = document.getElementById('note');
+const state = document.getElementById('state');
+chrome.storage.local.get('note', (v) => {
+  note.value = v.note || '';
+  state.textContent = v.note ? 'Loaded: ' + v.note : 'Nothing saved yet';
+});
+document.getElementById('save').addEventListener('click', () => {
+  chrome.storage.local.set({note: note.value}, () => {
+    state.textContent = 'Saved: ' + note.value;
+  });
+});
+JS
+
 python3 "$server_py" "$port" &
 server_pid=$!
 trap 'kill $server_pid 2>/dev/null' EXIT
@@ -161,9 +203,16 @@ cat <<EOF
   A3b.5  Open Chrome's Clear browsing data with cookies ticked. The warning
          must appear and say it cannot be undone. "Shared logins only" leaves
          the Work profile signed in; "every space too" signs both out.
-  A3b6/7 Install an extension, uninstall it, relaunch twice with --keep: every
-         profile still signed in. Its options page shows the same settings
-         opened from a profile space and from a shared one.
+  A3b.6  Open chrome://extensions, turn on Developer mode, "Load unpacked"
+         and choose:
+           $ext
+         Quit and rerun with --keep twice: every space still signed in both
+         times. Then remove the extension and rerun once more: still signed
+         in.
+  A3b.7  With the extension loaded, open its options page from a space with
+         its own logins, save a note, then open it again from a shared
+         space. The same note must be there: extensions are shared by every
+         space on purpose, as containers are in Zen.
   A3.3   (in-use half) With both signed in and pages loaded, watch Activity
          Monitor while switching spaces: no process per profile appears for a
          space whose tabs are not loaded.

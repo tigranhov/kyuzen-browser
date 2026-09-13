@@ -44,8 +44,8 @@ No credential is typed into this harness, and none should be.
 | A3b.3 | Space menu on Work, clear that profile's data | Work reads `nobody`, Personal still reads `ada`, no page reloads |
 | A3b.4 | Space menu on Work, delete the profile. Quit, rerun with `--keep` | Work moves to the shared logins and reads `ada`; the profile is gone from the menu and stays gone |
 | A3b.5 | Chrome's Clear browsing data, cookies ticked | The warning appears and says it cannot be undone; "shared logins only" leaves Work signed in; "every space too" signs both out |
-| A3b.6 | Install an extension, uninstall it, relaunch twice with `--keep` | Every profile still signed in, both times |
-| A3b.7 | Open the extension's options page from Work and from Personal | The same saved settings both times |
+| A3b.6 | Load the unpacked extension the script writes beside the site, relaunch twice with `--keep`, then remove it and relaunch again | Every profile still signed in, every time |
+| A3b.7 | Save a note on the extension's options page from Work, then open it from Personal | The same note both times |
 | A3.3 (in-use half) | Both spaces signed in with pages loaded; watch Activity Monitor while switching | No process appears for a profile whose tabs are not loaded |
 
 A3.3's idle half is already measured and needs nothing from you — see the
