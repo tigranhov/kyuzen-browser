@@ -37,6 +37,8 @@ source_set("browser") {
     "space_switcher.cc",
     "space_switcher.h",
     "space_switcher_spaces.cc",
+    "suggestion_source.cc",
+    "suggestion_source.h",
     "tab_close_types.h",
     "tab_commands.cc",
     "tab_commands.h",
