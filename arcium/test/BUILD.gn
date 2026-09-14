@@ -16,6 +16,7 @@ test("arcium_unittests") {
     "model_serializer_unittest.cc",
     "model_store_unittest.cc",
     "new_tab_storage_unittest.cc",
+    "pill_domain_unittest.cc",
     "profile_data_unittest.cc",
     "profile_menu_unittest.cc",
     "profile_partition_unittest.cc",

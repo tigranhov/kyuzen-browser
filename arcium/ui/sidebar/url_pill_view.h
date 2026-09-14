@@ -13,6 +13,8 @@
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
+class GURL;
+
 namespace views {
 class Label;
 }
@@ -31,7 +33,9 @@ class UrlPillView : public views::View {
   UrlPillView& operator=(const UrlPillView&) = delete;
   ~UrlPillView() override;
 
-  void SetPlaceholderText(const std::u16string& text);
+  // Shows where the reader is: the address's domain, and nothing else. A
+  // page that is not a website shows nothing at all.
+  void SetUrl(const GURL& url);
   // Replaces the placeholder with `view`, which fills the pill.
   views::View* SetHostedView(std::unique_ptr<views::View> view);
   bool has_hosted_view() const { return hosted_ != nullptr; }

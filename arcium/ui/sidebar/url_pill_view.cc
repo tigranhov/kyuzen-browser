@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "arcium/ui/sidebar/pill_domain.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -15,6 +16,7 @@
 #include "ui/views/border.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/fill_layout.h"
+#include "url/gurl.h"
 
 namespace arcium {
 
@@ -30,8 +32,8 @@ UrlPillView::UrlPillView(base::RepeatingClosure on_click)
 
 UrlPillView::~UrlPillView() = default;
 
-void UrlPillView::SetPlaceholderText(const std::u16string& text) {
-  placeholder_->SetText(text);
+void UrlPillView::SetUrl(const GURL& url) {
+  placeholder_->SetText(PillDomain(url));
 }
 
 views::View* UrlPillView::SetHostedView(std::unique_ptr<views::View> view) {

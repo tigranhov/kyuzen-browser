@@ -30,6 +30,8 @@ source_set("sidebar") {
     "folder_tree.h",
     "nav_row_view.cc",
     "nav_row_view.h",
+    "pill_domain.cc",
+    "pill_domain.h",
     "profile_colors.cc",
     "profile_colors.h",
     "profile_menu.cc",

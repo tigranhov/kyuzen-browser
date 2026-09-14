@@ -447,7 +447,7 @@ void SidebarView::Rebuild() {
   if (!url_pill_->has_hosted_view()) {
     for (const SidebarRow& row : rows) {
       if (row.is_active) {
-        url_pill_->SetPlaceholderText(base::UTF8ToUTF16(row.url.host()));
+        url_pill_->SetUrl(row.url);
         break;
       }
     }
