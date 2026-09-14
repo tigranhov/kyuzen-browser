@@ -7,6 +7,8 @@
 
 #include <string>
 
+#include "url/gurl.h"
+
 #include "base/auto_reset.h"
 #include "base/files/scoped_temp_dir.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -16,6 +18,7 @@ class ExtensionsToolbarDesktop;
 namespace arcium {
 
 class BrowserSidebarController;
+class CommandBox;
 class ExtensionsRowView;
 class UrlPillView;
 
@@ -40,6 +43,20 @@ class SidebarUiTest : public InProcessBrowserTest {
   // Writes a minimal extension with a button of its own and loads it
   // unpacked, so these tests need no store account and no network. Each call
   // writes a differently named one, which is what the wrapping test needs.
+  CommandBox* Box();
+  // Opens the box and waits for it to exist.
+  void OpenBox();
+  void Type(const std::u16string& text);
+  void PressEnter();
+  void PressEscape();
+  // The middle of the pill, which is its text and not one of its buttons.
+  void ClickPillBackground();
+  // Answers arrive from providers that do real work, so every assertion
+  // about rows waits for them rather than sleeping.
+  void WaitForRows();
+  void WaitForRowThatIsAnOpenTab();
+  void WaitForHistory(const GURL& url);
+
   std::string LoadTestExtension();
   void PinExtension(const std::string& id);
   void UnpinExtension(const std::string& id);
@@ -51,6 +68,9 @@ class SidebarUiTest : public InProcessBrowserTest {
   base::AutoReset<bool> no_reveal_animation_;
   base::ScopedTempDir extensions_dir_;
   int extensions_written_ = 0;
+
+  void SendKeyToBox(int key_code);
+  bool AnyRowIsAnOpenTab();
 };
 
 }  // namespace test

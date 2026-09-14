@@ -6,11 +6,13 @@
 #define ARCIUM_UI_BROWSER_BROWSER_SIDEBAR_CONTROLLER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "arcium/common/arcium_features.h"
 #include "arcium/ui/browser/archive_service.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
+#include "arcium/ui/browser/suggestion_source.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -34,7 +36,8 @@ class Widget;
 
 namespace arcium {
 
-class QuickEntryBubble;
+class CommandBox;
+class SuggestionSource;
 class SidebarView;
 class SpaceSwitcher;
 
@@ -80,8 +83,16 @@ class BrowserSidebarController : public SidebarModel::Observer,
   // toolbar this browser never lays out is where they would otherwise sit.
   void HostExtensionsContainer();
 
-  // Cmd+T: the floating entry over the page.
-  void ShowQuickEntry();
+  // Cmd+T, Cmd+L and a click on the pill: the floating box over the page.
+  // `initial_text` fills the field and selects it, which is what Cmd+L means.
+  void ShowCommandBox(std::optional<std::u16string> initial_text);
+  // The same, shaped for the callbacks that carry no text.
+  void ShowCommandBoxWithNoText();
+
+  CommandBox* command_box_for_testing() { return command_box_.get(); }
+  SuggestionSource* suggestion_source_for_testing() {
+    return suggestion_source_.get();
+  }
 
   // SidebarModel::Observer:
   void OnSidebarModelChanged() override;
@@ -98,7 +109,7 @@ class BrowserSidebarController : public SidebarModel::Observer,
   void ExecuteCommand(int command_id);
   void UpdateNavButtons();
   void MaybeScheduleSnapshot();
-  void MaybeShowQuickEntryForDebugging();
+  void MaybeShowCommandBoxForDebugging();
   void WriteSnapshot(const base::FilePath& path);
   // The pill's own buttons.
   void OpenExtensionsMenu();
@@ -109,9 +120,13 @@ class BrowserSidebarController : public SidebarModel::Observer,
   void UpdatePillForActiveTab();
   void UpdatePillSecurity();
 
-  void OnQuickEntrySubmitted(const std::u16string& text);
-  void OnQuickEntryClosed(views::Widget::ClosedReason reason);
-  void DestroyQuickEntry();
+  void OnCommandBoxAccepted(SuggestionRow row);
+  void OnCommandBoxClosed(views::Widget::ClosedReason reason);
+  void DestroyCommandBox();
+  // Switches to an open tab showing `url`, in whatever space holds it.
+  // False when there is none, which is what keeps the caller's fallback
+  // honest rather than silent.
+  bool ActivateTabWithUrl(const GURL& url);
 
   raw_ptr<BrowserView> browser_view_;
   // Which space this window shows. Declared before `model_` and
@@ -137,10 +152,13 @@ class BrowserSidebarController : public SidebarModel::Observer,
   float applied_corner_radius_ = -1.f;
   raw_ptr<ContentsContainerView> last_container_ = nullptr;
 
+  // Built when the box opens and destroyed when it closes, so a browser
+  // sitting idle carries no autocomplete providers and no timers.
+  std::unique_ptr<SuggestionSource> suggestion_source_;
   // The delegate must outlive its widget; both are torn down together after
   // the widget reports it closed.
-  std::unique_ptr<QuickEntryBubble> quick_entry_;
-  std::unique_ptr<views::Widget> quick_entry_widget_;
+  std::unique_ptr<CommandBox> command_box_;
+  std::unique_ptr<views::Widget> command_box_widget_;
 
   base::WeakPtrFactory<BrowserSidebarController> weak_factory_{this};
 };

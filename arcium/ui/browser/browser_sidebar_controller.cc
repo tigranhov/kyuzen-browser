@@ -9,7 +9,7 @@
 
 #include "arcium/browser/arcium_profile_state.h"
 #include "arcium/common/arcium_features.h"
-#include "arcium/ui/browser/quick_entry_bubble.h"
+#include "arcium/ui/browser/command_box.h"
 #include "arcium/ui/browser/session_rebuild_nudge.h"
 #include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/sidebar/extensions_row_view.h"
@@ -87,8 +87,9 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   space_switcher_ = std::make_unique<SpaceSwitcher>(
       browser_view_->browser()->tab_strip_model(), state->model(),
       state->binding());
-  space_switcher_->SetBlankTabCallback(base::BindRepeating(
-      &BrowserSidebarController::ShowQuickEntry, weak_factory_.GetWeakPtr()));
+  space_switcher_->SetBlankTabCallback(
+      base::BindRepeating(&BrowserSidebarController::ShowCommandBoxWithNoText,
+                          weak_factory_.GetWeakPtr()));
   model_ = std::make_unique<SidebarTabModel>(
       browser_view->browser()->tab_strip_model(), state->model(),
       state->binding(), space_switcher_.get());
@@ -128,7 +129,7 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   model_->AddObserver(this);
   UpdateNavButtons();
   MaybeScheduleSnapshot();
-  MaybeShowQuickEntryForDebugging();
+  MaybeShowCommandBoxForDebugging();
 }
 
 BrowserSidebarController::~BrowserSidebarController() {
@@ -234,49 +235,80 @@ void BrowserSidebarController::HostExtensionsContainer() {
   view_->extensions_row()->SetHostedView(std::move(owned));
 }
 
-void BrowserSidebarController::ShowQuickEntry() {
-  if (quick_entry_widget_) {
-    quick_entry_->FocusField();
+void BrowserSidebarController::ShowCommandBoxWithNoText() {
+  ShowCommandBox(std::nullopt);
+}
+
+void BrowserSidebarController::ShowCommandBox(
+    std::optional<std::u16string> initial_text) {
+  if (command_box_widget_) {
+    command_box_->FocusField();
+    if (initial_text) {
+      command_box_->SetText(*initial_text, /*select_all=*/true);
+    }
     return;
   }
-  quick_entry_ = std::make_unique<QuickEntryBubble>(
-      browser_view_,
-      base::BindOnce(&BrowserSidebarController::OnQuickEntrySubmitted,
+  suggestion_source_ =
+      std::make_unique<SuggestionSource>(browser_view_->GetProfile());
+  command_box_ = std::make_unique<CommandBox>(
+      browser_view_, suggestion_source_.get(),
+      base::BindOnce(&BrowserSidebarController::OnCommandBoxAccepted,
                      weak_factory_.GetWeakPtr()));
-  quick_entry_widget_ = views::BubbleDialogDelegate::CreateBubble(
-      quick_entry_.get(),
-      base::BindOnce(&BrowserSidebarController::OnQuickEntryClosed,
+  command_box_widget_ = views::BubbleDialogDelegate::CreateBubble(
+      command_box_.get(),
+      base::BindOnce(&BrowserSidebarController::OnCommandBoxClosed,
                      weak_factory_.GetWeakPtr()));
-  quick_entry_widget_->Show();
-  quick_entry_->FocusField();
-}
-
-void BrowserSidebarController::OnQuickEntrySubmitted(
-    const std::u16string& text) {
-  AutocompleteMatch match;
-  AutocompleteClassifierFactory::GetForProfile(browser_view_->GetProfile())
-      ->Classify(text, /*in_keyword_mode=*/false,
-                 /*allow_exact_keyword_match=*/false,
-                 ::metrics::OmniboxEventProto::INVALID_SPEC, &match,
-                 /*alternate_nav_url=*/nullptr);
-  if (match.destination_url.is_valid()) {
-    chrome::AddSelectedTabWithURL(browser_view_->browser(),
-                                  match.destination_url,
-                                  ui::PAGE_TRANSITION_TYPED);
+  command_box_widget_->Show();
+  if (initial_text) {
+    command_box_->SetText(*initial_text, /*select_all=*/true);
   }
+  command_box_->FocusField();
 }
 
-void BrowserSidebarController::OnQuickEntryClosed(
+void BrowserSidebarController::OnCommandBoxAccepted(SuggestionRow row) {
+  if (!row.destination.is_valid()) {
+    return;
+  }
+  // A tab already open is switched to rather than loaded a second time, in
+  // whatever space is holding it.
+  if (row.is_open_tab && ActivateTabWithUrl(row.destination)) {
+    return;
+  }
+  chrome::AddSelectedTabWithURL(browser_view_->browser(), row.destination,
+                                ui::PAGE_TRANSITION_TYPED);
+}
+
+bool BrowserSidebarController::ActivateTabWithUrl(const GURL& url) {
+  TabStripModel* strip = browser_view_->browser()->tab_strip_model();
+  for (int i = 0; i < strip->count(); ++i) {
+    content::WebContents* contents = strip->GetWebContentsAt(i);
+    if (!contents || contents->GetLastCommittedURL() != url) {
+      continue;
+    }
+    // The tab may live in a space this window is not showing; going to the
+    // tab without going to its space would show it under the wrong sidebar.
+    if (space_switcher_) {
+      space_switcher_->SwitchTo(space_switcher_->SpaceOfTabAt(i));
+    }
+    strip->ActivateTabAt(i);
+    return true;
+  }
+  return false;
+}
+
+void BrowserSidebarController::OnCommandBoxClosed(
     views::Widget::ClosedReason reason) {
-  // Runs synchronously from the close; free both once the stack unwinds.
+  // Runs synchronously from the close; free them once the stack unwinds.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&BrowserSidebarController::DestroyQuickEntry,
+      FROM_HERE, base::BindOnce(&BrowserSidebarController::DestroyCommandBox,
                                 weak_factory_.GetWeakPtr()));
 }
 
-void BrowserSidebarController::DestroyQuickEntry() {
-  quick_entry_widget_.reset();
-  quick_entry_.reset();
+void BrowserSidebarController::DestroyCommandBox() {
+  command_box_widget_.reset();
+  command_box_.reset();
+  // With the box goes everything it was asking on behalf of.
+  suggestion_source_.reset();
 }
 
 void BrowserSidebarController::OnSidebarModelChanged() {
@@ -380,14 +412,14 @@ void BrowserSidebarController::MaybeScheduleSnapshot() {
       base::Seconds(delay_seconds > 0 ? delay_seconds : 4));
 }
 
-void BrowserSidebarController::MaybeShowQuickEntryForDebugging() {
+void BrowserSidebarController::MaybeShowCommandBoxForDebugging() {
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           features::kQuickEntrySwitch)) {
     return;
   }
   base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
       FROM_HERE,
-      base::BindOnce(&BrowserSidebarController::ShowQuickEntry,
+      base::BindOnce(&BrowserSidebarController::ShowCommandBoxWithNoText,
                      weak_factory_.GetWeakPtr()),
       base::Seconds(2));
 }
@@ -414,7 +446,7 @@ bool HandleNewTabCommand(Browser* browser) {
   if (!browser_view || !browser_view->arcium_sidebar()) {
     return false;
   }
-  browser_view->arcium_sidebar()->ShowQuickEntry();
+  browser_view->arcium_sidebar()->ShowCommandBox(std::nullopt);
   return true;
 }
 

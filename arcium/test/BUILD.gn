@@ -89,6 +89,7 @@ test("arcium_unittests") {
 # nothing on screen.
 test("arcium_browsertests") {
   sources = [
+    "browser/command_box_browsertest.cc",
     "browser/extensions_row_browsertest.cc",
     "browser/pill_browsertest.cc",
     "browser/profile_browsertest_base.cc",
