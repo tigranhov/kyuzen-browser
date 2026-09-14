@@ -15,6 +15,8 @@ source_set("browser") {
     "color_ids_check.cc",
     "home_boundary_throttle.cc",
     "home_boundary_throttle.h",
+    "hosted_location_bar.cc",
+    "hosted_location_bar.h",
     "new_tab_storage.cc",
     "new_tab_storage.h",
     "partition_guard_throttle.cc",

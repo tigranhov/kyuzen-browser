@@ -88,12 +88,15 @@ test("arcium_unittests") {
 # nothing on screen.
 test("arcium_browsertests") {
   sources = [
+    "browser/pill_browsertest.cc",
     "browser/profile_browsertest_base.cc",
     "browser/profile_browsertest_base.h",
     "browser/profile_isolation_browsertest.cc",
     "browser/profile_lifecycle_browsertest.cc",
     "browser/profile_restore_browsertest.cc",
     "browser/sidebar_tab_model_profiles_browsertest.cc",
+    "browser/sidebar_ui_browsertest_base.cc",
+    "browser/sidebar_ui_browsertest_base.h",
   ]
 
   # As browser_tests and sync_performance_tests set it.
@@ -110,6 +113,7 @@ test("arcium_browsertests") {
     "//chrome/test:test_support",
     "//chrome/test:test_support_ui",
     "//components/browsing_data/core",
+    "//components/permissions:test_support",
     "//content/test:test_support",
     "//net:test_support",
     "//testing/gtest",

@@ -1,0 +1,50 @@
+Seam: LocationBarView::OnPaintBorder, RefreshBackground, Layout.
+Why: the sidebar's pill draws the address itself, so the bar hosted behind it
+     draws nothing -- while staying present and drawn, because Chrome's
+     password and page information bubbles anchor to it and a permission
+     request is a chip it owns.
+Delegates to: arcium::IsLocationBarHosted, arcium::OnHostedLocationBarLaidOut
+
+diff --git a/chrome/browser/ui/views/location_bar/location_bar_view.cc b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+index c299038dd8..fefeaa047e 100644
+--- a/chrome/browser/ui/views/location_bar/location_bar_view.cc
++++ b/chrome/browser/ui/views/location_bar/location_bar_view.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "arcium/ui/browser/hosted_location_bar.h"
+ #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+ 
+ #include <algorithm>
+@@ -1001,6 +1002,8 @@ void LocationBarView::Layout(PassKey) {
+   }
+ 
+   LayoutSuperclass<View>(this);
++
++  arcium::OnHostedLocationBarLaidOut(this);
+ }
+ 
+ void LocationBarView::OnThemeChanged() {
+@@ -1482,7 +1485,9 @@ void LocationBarView::RefreshBackground() {
+     border_color = color_provider->GetColor(kColorLocationBarBorderOnMismatch);
+   }
+ 
+-  if (is_popup_mode_) {
++  if (arcium::IsLocationBarHosted(this)) {
++    SetBackground(nullptr);
++  } else if (is_popup_mode_) {
+     SetBackground(views::CreateSolidBackground(background_color_));
+   } else {
+     SetBackground(CreateRoundRectBackground(
+@@ -1724,6 +1729,10 @@ void LocationBarView::OnFocus() {
+ }
+ 
+ void LocationBarView::OnPaintBorder(gfx::Canvas* canvas) {
++  if (arcium::IsLocationBarHosted(this)) {
++    return;
++  }
++
+   if (!is_popup_mode_) {
+     return;  // The border is painted by our Background.
+   }
