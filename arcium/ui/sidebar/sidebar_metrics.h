@@ -21,6 +21,13 @@ inline constexpr int kFavoritesPerRow = 4;
 inline constexpr int kFavoriteTileGap = 6;
 inline constexpr int kNavButtonSize = 26;
 inline constexpr int kUrlPillHeight = 28;
+// The buttons inside the URL pill: small enough that three of them plus the
+// domain fit a 250px sidebar without the text eliding on a normal host.
+inline constexpr int kPillButtonSize = 20;
+inline constexpr int kPillButtonGap = 2;
+inline constexpr int kPillIconSize = 14;
+// Zen's own stylesheet fades these over 150ms. Copied rather than guessed.
+inline constexpr int kPillRevealMs = 150;
 inline constexpr int kSpaceChipHeight = 28;
 inline constexpr int kProfileBadgeSize = 20;
 inline constexpr int kContentInset = 8;

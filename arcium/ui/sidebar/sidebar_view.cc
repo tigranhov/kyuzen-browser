@@ -98,7 +98,13 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   nav.forward = delegate_.forward;
   nav.reload = delegate_.reload;
   nav_row_ = AddChildView(std::make_unique<NavRowView>(std::move(nav)));
-  url_pill_ = AddChildView(std::make_unique<UrlPillView>(delegate_.edit_url));
+  UrlPillView::Actions pill_actions;
+  pill_actions.open_box = delegate_.edit_url;
+  pill_actions.open_extensions = delegate_.open_extensions;
+  pill_actions.copy_link = delegate_.copy_link;
+  pill_actions.open_site_info = delegate_.open_site_info;
+  url_pill_ =
+      AddChildView(std::make_unique<UrlPillView>(std::move(pill_actions)));
   favorites_ = AddChildView(std::make_unique<FavoritesGridView>(model_));
 
   // Pinned, the divider and Today scroll as one column. Pinned outside the

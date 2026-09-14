@@ -180,6 +180,9 @@ class SidebarViewsTest : public views::ViewsTestBase {
     delegate.forward = base::DoNothing();
     delegate.reload = base::DoNothing();
     delegate.edit_url = base::DoNothing();
+    delegate.open_extensions = base::DoNothing();
+    delegate.copy_link = base::DoNothing();
+    delegate.open_site_info = base::DoNothing();
     SidebarView* sidebar = contents_->AddChildView(
         std::make_unique<SidebarView>(&model_, std::move(delegate)));
     views::test::RunScheduledLayout(widget_.get());

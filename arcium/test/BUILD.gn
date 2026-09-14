@@ -43,6 +43,7 @@ test("arcium_unittests") {
     "tab_space_unittest.cc",
     "test_app_activation.h",
     "unloaded_rows_unittest.cc",
+    "url_pill_unittest.cc",
   ]
 
   # The activation-policy override is the one thing here that has to speak to

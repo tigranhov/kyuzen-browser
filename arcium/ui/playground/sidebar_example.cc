@@ -124,6 +124,9 @@ void SidebarExample::CreateExampleView(views::View* container) {
   delegate.forward = log("forward");
   delegate.reload = log("reload");
   delegate.edit_url = log("edit url");
+  delegate.open_extensions = log("open extensions");
+  delegate.copy_link = log("copy link");
+  delegate.open_site_info = log("open site info");
   auto* sidebar = container->AddChildView(
       std::make_unique<SidebarView>(model_.get(), std::move(delegate)));
   sidebar->SetCaptionButtonWidth(metrics::kDefaultCaptionButtonWidth);

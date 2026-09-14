@@ -105,6 +105,9 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   delegate.edit_url =
       base::BindRepeating(&BrowserSidebarController::ExecuteCommand,
                           base::Unretained(this), IDC_FOCUS_LOCATION);
+  delegate.open_extensions = base::DoNothing();
+  delegate.copy_link = base::DoNothing();
+  delegate.open_site_info = base::DoNothing();
   view_ = browser_view_->AddChildView(
       std::make_unique<SidebarView>(model_.get(), std::move(delegate)));
   model_->AddObserver(this);

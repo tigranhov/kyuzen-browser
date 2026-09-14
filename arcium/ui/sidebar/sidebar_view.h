@@ -48,8 +48,12 @@ class SidebarView : public views::View, public SidebarModel::Observer {
     base::RepeatingClosure back;
     base::RepeatingClosure forward;
     base::RepeatingClosure reload;
-    // Clicking the URL pill placeholder (no hosted location bar).
+    // Clicking the URL pill: open the command box.
     base::RepeatingClosure edit_url;
+    // The pill's own buttons.
+    base::RepeatingClosure open_extensions;
+    base::RepeatingClosure copy_link;
+    base::RepeatingClosure open_site_info;
   };
 
   SidebarView(SidebarModel* model, Delegate delegate);
