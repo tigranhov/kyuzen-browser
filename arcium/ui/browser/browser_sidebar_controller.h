@@ -75,6 +75,11 @@ class BrowserSidebarController : public SidebarModel::Observer,
   // BrowserView::InitViews after the toolbar exists (patch 0050).
   void HostLocationBar();
 
+  // Moves the toolbar's strip of pinned extension buttons into the row above
+  // the favourites. Called from the same place, for the same reason: the
+  // toolbar this browser never lays out is where they would otherwise sit.
+  void HostExtensionsContainer();
+
   // Cmd+T: the floating entry over the page.
   void ShowQuickEntry();
 
@@ -143,6 +148,14 @@ class BrowserSidebarController : public SidebarModel::Observer,
 // Hook target for IDC_NEW_TAB (patch 0090). Returns false when `browser` has
 // no sidebar, in which case the caller opens a plain new tab.
 bool HandleNewTabCommand(Browser* browser);
+
+// Hook target for the extensions container's construction (patch 0210). A
+// window with an Arcium sidebar wants the pinned buttons and not the menu
+// button beside them, which is what auto-hide mode means; every other window
+// gets Chromium's normal mode. Returns the int value of
+// ExtensionsToolbarDesktop::DisplayMode, so this header carries no dependency
+// on //chrome/browser/ui/views.
+int ExtensionsDisplayMode(Browser* browser);
 
 }  // namespace arcium
 

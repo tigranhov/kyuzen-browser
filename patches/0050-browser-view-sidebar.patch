@@ -1,10 +1,11 @@
 Seam: BrowserView::InitViews (twice), ShouldDrawTabStrip, NonClientHitTest (mac).
-Why: create the sidebar controller; move the location bar into the sidebar after
-     the toolbar exists; hide the tab strip; drag the window from the sidebar.
+Why: create the sidebar controller; move the location bar and the pinned
+     extension buttons into the sidebar after the toolbar exists; hide the tab
+     strip; drag the window from the sidebar.
 Delegates to: arcium/ui/browser/browser_sidebar_controller.cc
 
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index cfa9bbe1e0..f8108b3cfd 100644
+index cfa9bbe1e0..9ce23431f3 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -946,6 +946,7 @@ BrowserView::BrowserView(Browser* browser)
@@ -36,12 +37,13 @@ index cfa9bbe1e0..f8108b3cfd 100644
      // The vertical tabstrip is not part of the overlay in immersive mode and
      // must be tested separately.
      if (vertical_tab_strip_region_view_ &&
-@@ -4934,6 +4942,9 @@ void BrowserView::AddedToWidget() {
+@@ -4934,6 +4942,10 @@ void BrowserView::AddedToWidget() {
  #endif
  
    toolbar_->Init();
 +  if (arcium_sidebar_) {
 +    arcium_sidebar_->HostLocationBar();
++    arcium_sidebar_->HostExtensionsContainer();
 +  }
  
    if (omnibox::IsWebUIOmniboxInBrowserViewEnabled()) {

@@ -28,6 +28,10 @@ inline constexpr int kPillButtonGap = 2;
 inline constexpr int kPillIconSize = 14;
 // Zen's own stylesheet fades these over 150ms. Copied rather than guessed.
 inline constexpr int kPillRevealMs = 150;
+// The pinned-extension buttons above the favourites. Smaller than a favourite
+// tile on purpose: an extension is a control, not a destination.
+inline constexpr int kExtensionButtonSize = 26;
+inline constexpr int kExtensionButtonGap = 6;
 inline constexpr int kSpaceChipHeight = 28;
 inline constexpr int kProfileBadgeSize = 20;
 inline constexpr int kContentInset = 8;

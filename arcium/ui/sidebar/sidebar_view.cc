@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "arcium/ui/sidebar/archive_list_view.h"
+#include "arcium/ui/sidebar/extensions_row_view.h"
 #include "arcium/ui/sidebar/favorites_grid_view.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
 #include "arcium/ui/sidebar/section_divider_view.h"
@@ -105,6 +106,9 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   pill_actions.open_site_info = delegate_.open_site_info;
   url_pill_ =
       AddChildView(std::make_unique<UrlPillView>(std::move(pill_actions)));
+  // Between the address and the favourites: an extension is a control you
+  // reach for, which puts it nearer the controls than the destinations.
+  extensions_row_ = AddChildView(std::make_unique<ExtensionsRowView>());
   favorites_ = AddChildView(std::make_unique<FavoritesGridView>(model_));
 
   // Pinned, the divider and Today scroll as one column. Pinned outside the

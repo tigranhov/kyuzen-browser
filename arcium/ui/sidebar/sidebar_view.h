@@ -30,6 +30,7 @@ namespace arcium {
 class ArchiveListView;
 class NavRowView;
 class UrlPillView;
+class ExtensionsRowView;
 class FavoritesGridView;
 class TabListView;
 class SectionDividerView;
@@ -68,6 +69,9 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   // The slot the browser puts the real location bar into (Task 10). Null in
   // the playground, where UrlPillView paints a placeholder.
   UrlPillView* url_pill() { return url_pill_; }
+  // The slot the browser puts Chromium's strip of pinned extension buttons
+  // into. Empty in the playground, where there are no extensions.
+  ExtensionsRowView* extensions_row() { return extensions_row_; }
   NavRowView* nav_row() { return nav_row_; }
   SectionDividerView* divider() { return divider_; }
   // The open archive bubble's delegate, or null when none is open.
@@ -142,6 +146,7 @@ class SidebarView : public views::View, public SidebarModel::Observer {
 
   raw_ptr<NavRowView> nav_row_ = nullptr;
   raw_ptr<UrlPillView> url_pill_ = nullptr;
+  raw_ptr<ExtensionsRowView> extensions_row_ = nullptr;
   raw_ptr<FavoritesGridView> favorites_ = nullptr;
   raw_ptr<TabListView> pinned_ = nullptr;
   raw_ptr<SectionDividerView> divider_ = nullptr;

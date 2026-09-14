@@ -5,12 +5,18 @@
 #ifndef ARCIUM_TEST_BROWSER_SIDEBAR_UI_BROWSERTEST_BASE_H_
 #define ARCIUM_TEST_BROWSER_SIDEBAR_UI_BROWSERTEST_BASE_H_
 
+#include <string>
+
 #include "base/auto_reset.h"
+#include "base/files/scoped_temp_dir.h"
 #include "chrome/test/base/in_process_browser_test.h"
+
+class ExtensionsToolbarDesktop;
 
 namespace arcium {
 
 class BrowserSidebarController;
+class ExtensionsRowView;
 class UrlPillView;
 
 namespace test {
@@ -28,11 +34,23 @@ class SidebarUiTest : public InProcessBrowserTest {
  protected:
   BrowserSidebarController* Controller();
   UrlPillView* Pill();
+  ExtensionsRowView* Row();
+  ExtensionsToolbarDesktop* Container();
+
+  // Writes a minimal extension with a button of its own and loads it
+  // unpacked, so these tests need no store account and no network. Each call
+  // writes a differently named one, which is what the wrapping test needs.
+  std::string LoadTestExtension();
+  void PinExtension(const std::string& id);
+  void UnpinExtension(const std::string& id);
+  void RunLoopUntilIdle();
 
  private:
   // A reveal that fades would make every assertion about what is on screen
   // wait for an animation to land.
   base::AutoReset<bool> no_reveal_animation_;
+  base::ScopedTempDir extensions_dir_;
+  int extensions_written_ = 0;
 };
 
 }  // namespace test

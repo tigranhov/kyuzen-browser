@@ -22,6 +22,8 @@ source_set("sidebar") {
   sources = [
     "archive_list_view.cc",
     "archive_list_view.h",
+    "extensions_row_view.cc",
+    "extensions_row_view.h",
     "favorites_grid_view.cc",
     "favorites_grid_view.h",
     "folder_header_view.cc",

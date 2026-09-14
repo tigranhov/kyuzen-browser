@@ -88,6 +88,7 @@ test("arcium_unittests") {
 # nothing on screen.
 test("arcium_browsertests") {
   sources = [
+    "browser/extensions_row_browsertest.cc",
     "browser/pill_browsertest.cc",
     "browser/profile_browsertest_base.cc",
     "browser/profile_browsertest_base.h",
@@ -108,6 +109,7 @@ test("arcium_browsertests") {
     "//arcium/ui/browser",
     "//arcium/ui/sidebar",
     "//base/test:test_support",
+    "//chrome/browser/extensions",
     "//chrome/browser/ui",
     "//chrome/test:browser_tests_runner",
     "//chrome/test:test_support",

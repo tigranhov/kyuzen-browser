@@ -1,0 +1,30 @@
+Seam: ToolbarView::Init, the extensions container's construction.
+Why: Arcium's sidebar shows pinned extension buttons in a row of their own,
+     with no menu button beside them -- that menu opens from the address pill.
+     Auto-hide mode is the upstream way to ask for exactly that.
+Delegates to: arcium::ExtensionsDisplayMode
+
+diff --git a/chrome/browser/ui/views/toolbar/toolbar_view.cc b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+index 03aedd9edd..b8ba79f3e4 100644
+--- a/chrome/browser/ui/views/toolbar/toolbar_view.cc
++++ b/chrome/browser/ui/views/toolbar/toolbar_view.cc
+@@ -2,6 +2,7 @@
+ // Use of this source code is governed by a BSD-style license that can be
+ // found in the LICENSE file.
+ 
++#include "arcium/ui/browser/browser_sidebar_controller.h"
+ #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
+ 
+ #include <algorithm>
+@@ -389,7 +390,10 @@ void ToolbarView::Init() {
+   // profile (only regular and incognito profiles host extensions).
+   if (!browser_->GetProfile()->IsGuestSession() &&
+       !features::IsWebUIExtensionsContainerEnabled()) {
+-    extensions_container = std::make_unique<ExtensionsToolbarDesktop>(browser_);
++    extensions_container = std::make_unique<ExtensionsToolbarDesktop>(
++        browser_,
++        static_cast<ExtensionsToolbarDesktop::DisplayMode>(
++            arcium::ExtensionsDisplayMode(browser_)));
+ 
+     toolbar_divider = std::make_unique<ToolbarDivider>();
+   }

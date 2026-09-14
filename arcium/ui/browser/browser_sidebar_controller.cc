@@ -12,6 +12,7 @@
 #include "arcium/ui/browser/quick_entry_bubble.h"
 #include "arcium/ui/browser/session_rebuild_nudge.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "arcium/ui/sidebar/extensions_row_view.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
@@ -215,6 +216,24 @@ void BrowserSidebarController::HostLocationBar() {
   view_->url_pill()->SetHostedView(std::move(owned));
 }
 
+void BrowserSidebarController::HostExtensionsContainer() {
+  ToolbarView* toolbar = browser_view_->toolbar();
+  if (!toolbar || !toolbar->extensions_container() ||
+      view_->extensions_row()->has_hosted_view()) {
+    return;
+  }
+  // The toolbar keeps its pointer and its accessor, which is how extension
+  // popups still find their owner; only the view moves. The same trade the
+  // location bar makes one row up.
+  views::View* container = toolbar->extensions_container();
+  if (!container->parent()) {
+    return;
+  }
+  std::unique_ptr<views::View> owned =
+      container->parent()->RemoveChildViewT(container);
+  view_->extensions_row()->SetHostedView(std::move(owned));
+}
+
 void BrowserSidebarController::ShowQuickEntry() {
   if (quick_entry_widget_) {
     quick_entry_->FocusField();
@@ -380,6 +399,14 @@ void BrowserSidebarController::WriteSnapshot(const base::FilePath& path) {
 
 void BrowserSidebarController::ExecuteCommand(int command_id) {
   chrome::ExecuteCommand(browser_view_->browser(), command_id);
+}
+
+int ExtensionsDisplayMode(Browser* browser) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  const bool has_sidebar = browser_view && browser_view->arcium_sidebar();
+  return static_cast<int>(has_sidebar
+                              ? ExtensionsToolbarDesktop::DisplayMode::kAutoHide
+                              : ExtensionsToolbarDesktop::DisplayMode::kNormal);
 }
 
 bool HandleNewTabCommand(Browser* browser) {
