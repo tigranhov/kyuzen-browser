@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# Set up and launch everything the Stage 4a hand acceptance pass needs.
+#
+# The rows are about the address pill, the extensions row and the command box,
+# and most of them need a person: installing the owner's own extensions,
+# signing into a site to make Chrome offer to save a password, answering a
+# microphone prompt. This builds the world around those clicks so the pass is
+# walking a list rather than building one first.
+#
+# THE ONE SUBSTITUTION: A4a.5 wants a site whose connection is not secure. It
+# gets a page served over plain http on loopback rather than a real insecure
+# site on the internet, because "not secure" is a property of the connection
+# and loopback http is exactly that. Everything else is the real thing.
+#
+# NO REAL CREDENTIAL IS EVER TYPED INTO THIS HARNESS. A4a.2 is about where
+# Chrome's save bubble appears, not about a real account: the sign-in form
+# below posts nowhere and any made-up name and password will do.
+#
+# Usage:  scripts/acceptance-4a [--keep]
+#   --keep   reuse the previous run's profile, which is what A4a.1's
+#            "survives a relaunch" half needs.
+source "$(dirname "$0")/lib.sh"
+need_src
+
+config="${ARCIUM_CONFIG:-dev}"
+bin="$SRC/out/$config/Arcium.app/Contents/MacOS/Arcium"
+[ -x "$bin" ] || die "no binary at $bin; run scripts/build $config"
+
+data="${ARCIUM_ACCEPTANCE_DIR:-$HOME/Library/Application Support/Arcium-acceptance-4a}"
+port="${ARCIUM_ACCEPTANCE_PORT:-8901}"
+keep=0
+[ "${1:-}" = "--keep" ] && keep=1
+
+if [ "$keep" = "0" ]; then
+  rm -rf "$data"
+  mkdir -p "$data/Default"
+  log "starting clean in $data"
+else
+  [ -d "$data/Default" ] || die "--keep given but no profile at $data; run without it first"
+  log "reusing the profile at $data"
+fi
+
+# The site. Plain http on purpose (A4a.5), with a sign-in form that posts
+# nowhere (A4a.2) and a button that asks for the microphone (A4a.3).
+server_py="$data/site.py"
+cat > "$server_py" <<'PY'
+import http.server, sys
+
+PAGE = """<!doctype html><meta charset=utf-8>
+<title>Arcium acceptance 4a</title>
+<style>body{font:16px system-ui;margin:3rem;max-width:40rem}
+input,button{font:inherit;padding:.4rem}
+section{margin:2rem 0;padding:1rem;border:1px solid #bbb;border-radius:.5rem}</style>
+<h1>Arcium acceptance 4a</h1>
+
+<section>
+<h2>A4a.5 &mdash; not secure</h2>
+<p>This page is served over plain http. The pill should show a mark without
+   being hovered, and clicking it should open page information that says the
+   connection is not secure.</p>
+</section>
+
+<section>
+<h2>A4a.2 &mdash; the save-password bubble</h2>
+<p>Submitting this posts nowhere. <strong>Type a made-up name and password;
+   never a real one.</strong> Chrome should offer to save it, and the bubble
+   must appear at the pill in the sidebar rather than at the top of the
+   window.</p>
+<form method="post" action="/submitted">
+  <p><input name="username" autocomplete="username" placeholder="made-up name"></p>
+  <p><input name="password" type="password" autocomplete="current-password"
+            placeholder="made-up password"></p>
+  <p><button type="submit">Sign in</button></p>
+</form>
+</section>
+
+<section>
+<h2>A4a.3 &mdash; a permission request</h2>
+<p>The request should appear inside the pill, the pill's own text and buttons
+   should step aside while it is there, and answering it should work.</p>
+<p><button onclick="navigator.mediaDevices.getUserMedia({audio:true}).then(
+     s => { document.getElementById('mic').textContent = 'allowed';
+            s.getTracks().forEach(t => t.stop()); },
+     e => { document.getElementById('mic').textContent = 'refused: ' + e.name; })">
+   Ask for the microphone</button> <span id=mic>not asked yet</span></p>
+</section>
+"""
+
+class Handler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(PAGE.encode())
+
+    def do_POST(self):
+        # Read and discard: the form exists to make Chrome offer to save, and
+        # this harness keeps nothing at all.
+        length = int(self.headers.get("Content-Length") or 0)
+        self.rfile.read(length)
+        self.send_response(303)
+        self.send_header("Location", "/")
+        self.end_headers()
+
+    def log_message(self, *args):
+        pass
+
+# Threaded, for the same reason the Stage 3b harness is: a browser opens
+# sockets before it has anything to send on them, and a single-threaded server
+# blocks inside the first of those while real page loads queue behind it.
+server = http.server.ThreadingHTTPServer(("127.0.0.1", int(sys.argv[1])), Handler)
+server.daemon_threads = True
+server.serve_forever()
+PY
+
+python3 "$server_py" "$port" &
+server_pid=$!
+trap 'kill $server_pid 2>/dev/null' EXIT
+sleep 1
+kill -0 "$server_pid" 2>/dev/null || die "the loopback site did not start on port $port"
+log "site on http://127.0.0.1:$port/ (pid $server_pid)"
+
+cat <<EOF
+
+  Site for the rows that need one:  http://127.0.0.1:$port/
+
+  A4a.1  Install iCloud Passwords and the Claude extension yourself -- this
+         script will not, because they are your accounts and your clicks:
+           https://chromewebstore.google.com/detail/icloud-passwords/pejdijmoenmkgeppbflobdenhhabjlaj
+           https://chromewebstore.google.com/search/claude
+         Pin both from the extensions button in the pill. Both must appear in
+         the row above the favourites, both must open their own surface when
+         clicked, and both must still be there after quitting and running this
+         again with --keep.
+  A4a.2  On the site above, submit the sign-in form with a MADE-UP name and
+         password. Chrome's offer to save must appear at the pill in the
+         sidebar, not at the top of the window.
+  A4a.3  On the same page, ask for the microphone. The request must appear
+         inside the pill, the pill must stand aside while it is there, and
+         answering it must work.
+  A4a.4  Go to https://www.google.com/. The pill must read exactly
+         "google.com". Hover it: two buttons appear on the right. Copy must
+         put the whole address on the clipboard, not the domain.
+  A4a.5  Go back to the http site above. The not-secure mark must be visible
+         without hovering, and clicking it must open page information saying
+         the connection is not secure.
+  A4a.6  Cmd+T, type three letters of a site you have visited: it must be
+         offered and Enter must go there. Then open a tab in another space,
+         come back, Cmd+T and type its title: the row must say it is an open
+         tab, and Enter must switch to it -- and to its space -- rather than
+         loading a second copy.
+  A4a.7  Pin nine extensions. Seven fit on a line, the row wraps to a second,
+         and none are clipped or missing.
+
+  Close the browser to stop the site.
+
+EOF
+
+"$bin" --user-data-dir="$data" --no-first-run --no-default-browser-check \
+  "http://127.0.0.1:$port/"
