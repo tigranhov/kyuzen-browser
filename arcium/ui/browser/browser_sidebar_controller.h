@@ -173,6 +173,11 @@ class BrowserSidebarController : public SidebarModel::Observer,
 // no sidebar, in which case the caller opens a plain new tab.
 bool HandleNewTabCommand(Browser* browser);
 
+// Hook target for IDC_FOCUS_LOCATION (patch 0090). Opens the same box Cmd+T
+// opens, holding the whole address. Returns false when `browser` has no
+// sidebar, in which case Chromium focuses its own address bar.
+bool HandleFocusLocationCommand(Browser* browser);
+
 // Hook target for the extensions container's construction (patch 0210). A
 // window with an Arcium sidebar wants the pinned buttons and not the menu
 // button beside them, which is what auto-hide mode means; every other window

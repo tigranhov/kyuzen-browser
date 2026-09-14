@@ -12,7 +12,9 @@
 #include "arcium/ui/browser/browser_sidebar_controller.h"
 #include "arcium/ui/browser/command_box.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
@@ -118,6 +120,25 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, APinnedPageIsOfferedBeforeAHistoryHit) {
   WaitForRows();
   ASSERT_GT(Box()->row_count_for_testing(), 0u);
   EXPECT_EQ(pinned, Box()->row_for_testing(0).destination);
+}
+
+IN_PROC_BROWSER_TEST_F(CommandBoxTest,
+                       FocusLocationOpensTheBoxHoldingTheAddress) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL url = embedded_test_server()->GetURL("a.test", "/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+
+  chrome::ExecuteCommand(browser(), IDC_FOCUS_LOCATION);
+  ASSERT_TRUE(Box());
+  EXPECT_EQ(base::UTF8ToUTF16(url.spec()), Box()->text_for_testing());
+  // Selected end to end, so typing replaces it, which is what this key is
+  // for.
+  EXPECT_EQ(url.spec().size(), Box()->selected_length_for_testing());
+
+  // The bar behind the pill did not take the focus instead.
+  EXPECT_FALSE(BrowserView::GetBrowserViewForBrowser(browser())
+                   ->GetLocationBarView()
+                   ->HasFocus());
 }
 
 }  // namespace

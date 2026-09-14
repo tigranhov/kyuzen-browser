@@ -84,6 +84,10 @@ std::u16string CommandBox::text_for_testing() const {
   return std::u16string(field_->GetText());
 }
 
+size_t CommandBox::selected_length_for_testing() const {
+  return field_->GetSelectedText().size();
+}
+
 void CommandBox::SetRowsChangedClosureForTesting(
     base::RepeatingClosure closure) {
   rows_changed_for_testing_ = std::move(closure);

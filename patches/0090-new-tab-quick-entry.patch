@@ -1,9 +1,12 @@
-Seam: BrowserCommandController::ExecuteCommandWithDisposition, IDC_NEW_TAB.
-Why: Cmd+T opens the floating quick entry instead of a bare new tab.
-Delegates to: arcium::HandleNewTabCommand
+Seam: BrowserCommandController::ExecuteCommandWithDisposition, IDC_NEW_TAB and
+      IDC_FOCUS_LOCATION.
+Why: both keys open the sidebar's command box -- Cmd+T empty, Cmd+L holding the
+     current address -- rather than opening a bare tab or focusing an address
+     bar that draws nothing.
+Delegates to: arcium::HandleNewTabCommand, arcium::HandleFocusLocationCommand
 
 diff --git a/chrome/browser/ui/browser_command_controller.cc b/chrome/browser/ui/browser_command_controller.cc
-index 2d86241e35..eda5e4cda6 100644
+index 2d86241e35..56318bd5ce 100644
 --- a/chrome/browser/ui/browser_command_controller.cc
 +++ b/chrome/browser/ui/browser_command_controller.cc
 @@ -3,6 +3,7 @@
@@ -14,7 +17,15 @@ index 2d86241e35..eda5e4cda6 100644
  
  #include <stddef.h>
  
-@@ -730,7 +731,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+@@ -139,6 +140,7 @@
+ #include "ui/base/ui_base_features.h"
+ #include "ui/base/window_open_disposition.h"
+ #include "ui/events/keycodes/keyboard_codes.h"
++#include "arcium/ui/browser/tab_commands.h"
+ 
+ #if !BUILDFLAG(IS_ANDROID)
+ #include "chrome/browser/devtools/devtools_policy_dialog.h"
+@@ -730,7 +732,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
        CloseWindow(browser_);
        break;
      case IDC_NEW_TAB: {
@@ -25,3 +36,111 @@ index 2d86241e35..eda5e4cda6 100644
        break;
      }
      case IDC_NEW_TAB_TO_RIGHT: {
+@@ -739,10 +743,16 @@ void BrowserCommandController::HandleCommandWithDisposition(
+     }
+     case IDC_CLOSE_TAB:
+       base::RecordAction(base::UserMetricsAction("CloseTabByKey"));
++      if (arcium::HandleTabCommand(browser_, IDC_CLOSE_TAB)) {
++        break;
++      }
+       CloseTab(browser_);
+       break;
+     case IDC_SELECT_NEXT_TAB:
+       base::RecordAction(base::UserMetricsAction("Accel_SelectNextTab"));
++      if (arcium::HandleTabCommand(browser_, IDC_SELECT_NEXT_TAB)) {
++        break;
++      }
+       SelectNextTab(
+           browser_,
+           TabStripUserGestureDetails(
+@@ -750,12 +760,18 @@ void BrowserCommandController::HandleCommandWithDisposition(
+       break;
+     case IDC_SELECT_PREVIOUS_TAB:
+       base::RecordAction(base::UserMetricsAction("Accel_SelectPreviousTab"));
++      if (arcium::HandleTabCommand(browser_, IDC_SELECT_PREVIOUS_TAB)) {
++        break;
++      }
+       SelectPreviousTab(
+           browser_,
+           TabStripUserGestureDetails(
+               TabStripUserGestureDetails::GestureType::kKeyboard, time_stamp));
+       break;
+     case IDC_CYCLE_TO_NEXT_TAB:
++      if (arcium::HandleTabCommand(browser_, IDC_CYCLE_TO_NEXT_TAB)) {
++        break;
++      }
+       if (IsCtrlTabMruEnabled(browser_)) {
+         base::RecordAction(base::UserMetricsAction("Accel_CycleToNextTab"));
+         CycleToMruTab(browser_,
+@@ -771,6 +787,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+       }
+       break;
+     case IDC_CYCLE_TO_PREV_TAB:
++      if (arcium::HandleTabCommand(browser_, IDC_CYCLE_TO_PREV_TAB)) {
++        break;
++      }
+       if (IsCtrlTabMruEnabled(browser_)) {
+         base::RecordAction(base::UserMetricsAction("Accel_CycleToPrevTab"));
+         CycleToMruTab(browser_,
+@@ -786,9 +805,15 @@ void BrowserCommandController::HandleCommandWithDisposition(
+       }
+       break;
+     case IDC_MOVE_TAB_NEXT:
++      if (arcium::HandleTabCommand(browser_, IDC_MOVE_TAB_NEXT)) {
++        break;
++      }
+       MoveTabNext(browser_);
+       break;
+     case IDC_MOVE_TAB_PREVIOUS:
++      if (arcium::HandleTabCommand(browser_, IDC_MOVE_TAB_PREVIOUS)) {
++        break;
++      }
+       MoveTabPrevious(browser_);
+       break;
+     case IDC_SELECT_TAB_0:
+@@ -800,6 +825,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+     case IDC_SELECT_TAB_6:
+     case IDC_SELECT_TAB_7:
+       base::RecordAction(base::UserMetricsAction("Accel_SelectNumberedTab"));
++      if (arcium::HandleTabCommand(browser_, id)) {
++        break;
++      }
+       SelectNumberedTab(
+           browser_, id - IDC_SELECT_TAB_0,
+           TabStripUserGestureDetails(
+@@ -807,6 +835,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+       break;
+     case IDC_SELECT_LAST_TAB:
+       base::RecordAction(base::UserMetricsAction("Accel_SelectNumberedTab"));
++      if (arcium::HandleTabCommand(browser_, IDC_SELECT_LAST_TAB)) {
++        break;
++      }
+       SelectLastTab(
+           browser_,
+           TabStripUserGestureDetails(
+@@ -1079,6 +1110,9 @@ void BrowserCommandController::HandleCommandWithDisposition(
+       FocusToolbar(browser_);
+       break;
+     case IDC_FOCUS_LOCATION:
++      if (arcium::HandleFocusLocationCommand(browser_)) {
++        break;
++      }
+       if (!window()->IsLocationBarVisible()) {
+         break;
+       }
+@@ -1406,9 +1440,15 @@ void BrowserCommandController::HandleCommandWithDisposition(
+       UnfocusTabGroup(browser_);
+       break;
+     case IDC_WINDOW_CLOSE_TABS_TO_RIGHT:
++      if (arcium::HandleTabCommand(browser_, IDC_WINDOW_CLOSE_TABS_TO_RIGHT)) {
++        break;
++      }
+       CloseTabsToRight(browser_);
+       break;
+     case IDC_WINDOW_CLOSE_OTHER_TABS:
++      if (arcium::HandleTabCommand(browser_, IDC_WINDOW_CLOSE_OTHER_TABS)) {
++        break;
++      }
+       CloseOtherTabs(browser_);
+       break;
+     case IDC_SHOW_MANAGEMENT_PAGE: {

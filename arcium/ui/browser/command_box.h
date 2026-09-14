@@ -53,6 +53,7 @@ class CommandBox : public views::BubbleDialogDelegate,
   }
   size_t selected_row_for_testing() const { return selected_; }
   std::u16string text_for_testing() const;
+  size_t selected_length_for_testing() const;
   void SetRowsChangedClosureForTesting(base::RepeatingClosure closure);
 
   // views::TextfieldController:

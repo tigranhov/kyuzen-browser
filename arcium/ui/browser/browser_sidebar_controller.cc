@@ -437,6 +437,23 @@ void BrowserSidebarController::ExecuteCommand(int command_id) {
   chrome::ExecuteCommand(browser_view_->browser(), command_id);
 }
 
+bool HandleFocusLocationCommand(Browser* browser) {
+  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
+  if (!browser_view || !browser_view->arcium_sidebar()) {
+    return false;
+  }
+  content::WebContents* contents =
+      browser->tab_strip_model()->GetActiveWebContents();
+  // The whole address, not the domain the pill shows: this key exists to
+  // replace or edit what is there, and half an address is neither.
+  std::u16string text;
+  if (contents && contents->GetLastCommittedURL().is_valid()) {
+    text = base::UTF8ToUTF16(contents->GetLastCommittedURL().spec());
+  }
+  browser_view->arcium_sidebar()->ShowCommandBox(std::move(text));
+  return true;
+}
+
 int ExtensionsDisplayMode(Browser* browser) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   const bool has_sidebar = browser_view && browser_view->arcium_sidebar();
