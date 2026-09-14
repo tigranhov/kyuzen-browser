@@ -73,6 +73,12 @@ source_set("browser") {
     "//chrome/browser/sessions",
     "//chrome/browser/ui/color:color_headers",
 
+    # SecurityStateTabHelper, which is what decides whether the pill wears a
+    # warning. //chrome/browser/ui/page_info is reached the same way the
+    # chrome/browser/ui headers above are, through the circular-includes
+    # allowance rather than a dep.
+    "//components/security_state/content",
+
     # prefs::kShouldGarbageCollectStoragePartitions, which a profile's
     # deletion sets when its partition is still in use.
     "//chrome/common:constants",

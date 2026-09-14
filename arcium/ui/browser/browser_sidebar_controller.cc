@@ -24,6 +24,7 @@
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
+#include "base/strings/utf_string_conversions.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/time/time.h"
@@ -33,14 +34,23 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_commands.h"
 #include "chrome/browser/ui/browser_tabstrip.h"
+#include "chrome/browser/ui/bubble_anchor_util.h"
+#include "chrome/browser/ui/page_info/page_info_dialog.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
+#include "chrome/browser/ui/views/extensions/extensions_toolbar_desktop.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/layout/browser_view_layout_params.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
+#include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/security_state/content/security_state_tab_helper.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "ui/base/clipboard/clipboard.h"
+#include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
@@ -105,9 +115,13 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   delegate.edit_url =
       base::BindRepeating(&BrowserSidebarController::ExecuteCommand,
                           base::Unretained(this), IDC_FOCUS_LOCATION);
-  delegate.open_extensions = base::DoNothing();
-  delegate.copy_link = base::DoNothing();
-  delegate.open_site_info = base::DoNothing();
+  delegate.open_extensions =
+      base::BindRepeating(&BrowserSidebarController::OpenExtensionsMenu,
+                          weak_factory_.GetWeakPtr());
+  delegate.copy_link = base::BindRepeating(
+      &BrowserSidebarController::CopyCurrentUrl, weak_factory_.GetWeakPtr());
+  delegate.open_site_info = base::BindRepeating(
+      &BrowserSidebarController::ShowSiteInfo, weak_factory_.GetWeakPtr());
   view_ = browser_view_->AddChildView(
       std::make_unique<SidebarView>(model_.get(), std::move(delegate)));
   model_->AddObserver(this);
@@ -248,6 +262,75 @@ void BrowserSidebarController::DestroyQuickEntry() {
 
 void BrowserSidebarController::OnSidebarModelChanged() {
   UpdateNavButtons();
+  UpdatePillForActiveTab();
+}
+
+void BrowserSidebarController::DidChangeVisibleSecurityState() {
+  UpdatePillSecurity();
+}
+
+void BrowserSidebarController::PrimaryPageChanged(content::Page& page) {
+  UpdatePillForActiveTab();
+}
+
+void BrowserSidebarController::UpdatePillForActiveTab() {
+  content::WebContents* contents =
+      browser_view_->browser()->tab_strip_model()->GetActiveWebContents();
+  // Watch whichever tab is on screen, so a page that turns insecure while it
+  // sits there is not read once at navigation and then trusted forever.
+  if (contents != web_contents()) {
+    Observe(contents);
+  }
+  view_->url_pill()->SetUrl(contents ? contents->GetLastCommittedURL()
+                                     : GURL());
+  UpdatePillSecurity();
+}
+
+void BrowserSidebarController::UpdatePillSecurity() {
+  content::WebContents* contents = web_contents();
+  auto* helper =
+      contents ? SecurityStateTabHelper::FromWebContents(contents) : nullptr;
+  const security_state::SecurityLevel level =
+      helper ? helper->GetSecurityLevel() : security_state::NONE;
+  // NONE is an internal page or a data URL: neither secure nor an accusation.
+  // Only the two levels that exist to be warned about count as insecure.
+  const bool insecure =
+      level == security_state::WARNING || level == security_state::DANGEROUS;
+  view_->url_pill()->SetConnectionSecure(!insecure);
+}
+
+void BrowserSidebarController::OpenExtensionsMenu() {
+  ToolbarView* toolbar = browser_view_->toolbar();
+  if (!toolbar || !toolbar->extensions_container()) {
+    return;
+  }
+  toolbar->extensions_container()
+      ->GetExtensionsButton()
+      ->ToggleExtensionsMenu();
+}
+
+void BrowserSidebarController::CopyCurrentUrl() {
+  content::WebContents* contents =
+      browser_view_->browser()->tab_strip_model()->GetActiveWebContents();
+  if (!contents) {
+    return;
+  }
+  // The pill shows a domain and this gives the whole address, which is the
+  // point of having both.
+  ui::ScopedClipboardWriter(ui::ClipboardBuffer::kCopyPaste)
+      .WriteText(base::UTF8ToUTF16(contents->GetLastCommittedURL().spec()));
+}
+
+void BrowserSidebarController::ShowSiteInfo() {
+  content::WebContents* contents =
+      browser_view_->browser()->tab_strip_model()->GetActiveWebContents();
+  if (!contents) {
+    return;
+  }
+  // Chrome's own page information, not a panel of ours: it is a security
+  // surface Chromium already writes, maintains and translates.
+  ShowPageInfoDialog(contents, base::DoNothing(),
+                     bubble_anchor_util::Anchor::kLocationBar);
 }
 
 void BrowserSidebarController::UpdateNavButtons() {

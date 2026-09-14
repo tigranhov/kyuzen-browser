@@ -14,6 +14,7 @@
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "content/public/browser/web_contents_observer.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/widget/widget.h"
@@ -39,7 +40,8 @@ class SpaceSwitcher;
 
 // Owns the sidebar inside one BrowserView and answers the layout hooks.
 // Created by BrowserView::InitViews when the sidebar feature is on.
-class BrowserSidebarController : public SidebarModel::Observer {
+class BrowserSidebarController : public SidebarModel::Observer,
+                                 public content::WebContentsObserver {
  public:
   static std::unique_ptr<BrowserSidebarController> MaybeCreate(
       BrowserView* browser_view);
@@ -79,6 +81,11 @@ class BrowserSidebarController : public SidebarModel::Observer {
   // SidebarModel::Observer:
   void OnSidebarModelChanged() override;
 
+  // content::WebContentsObserver. The pill's warning follows the page rather
+  // than the navigation, because a page can turn insecure while it sits there.
+  void DidChangeVisibleSecurityState() override;
+  void PrimaryPageChanged(content::Page& page) override;
+
  private:
   explicit BrowserSidebarController(BrowserView* browser_view);
 
@@ -88,6 +95,15 @@ class BrowserSidebarController : public SidebarModel::Observer {
   void MaybeScheduleSnapshot();
   void MaybeShowQuickEntryForDebugging();
   void WriteSnapshot(const base::FilePath& path);
+  // The pill's own buttons.
+  void OpenExtensionsMenu();
+  void CopyCurrentUrl();
+  void ShowSiteInfo();
+  // Points the pill at the tab on screen: its address, and whether its
+  // connection is one to warn about.
+  void UpdatePillForActiveTab();
+  void UpdatePillSecurity();
+
   void OnQuickEntrySubmitted(const std::u16string& text);
   void OnQuickEntryClosed(views::Widget::ClosedReason reason);
   void DestroyQuickEntry();
