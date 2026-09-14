@@ -4,6 +4,8 @@
 
 #include "arcium/test/browser/sidebar_ui_browsertest_base.h"
 
+#include "arcium/browser/arcium_profile_state.h"
+#include "arcium/browser/model/arcium_model.h"
 #include "arcium/ui/browser/browser_sidebar_controller.h"
 #include "arcium/ui/browser/command_box.h"
 #include "arcium/ui/sidebar/extensions_row_view.h"
@@ -147,6 +149,15 @@ void SidebarUiTest::WaitForHistory(const GURL& url) {
     }
     RunLoopUntilIdle();
   }
+}
+
+void SidebarUiTest::PinEntryWithUrl(const GURL& url,
+                                    const std::u16string& title) {
+  ArciumProfileState* state =
+      ArciumProfileState::GetForBrowserContext(browser()->GetProfile());
+  CHECK(state);
+  state->model()->AddEntryForTesting(EntryKind::kPinned, url, title);
+  RunLoopUntilIdle();
 }
 
 std::string SidebarUiTest::LoadTestExtension() {

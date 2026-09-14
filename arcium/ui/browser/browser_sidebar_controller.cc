@@ -12,6 +12,7 @@
 #include "arcium/ui/browser/command_box.h"
 #include "arcium/ui/browser/session_rebuild_nudge.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "arcium/ui/browser/tab_search_service.h"
 #include "arcium/ui/sidebar/extensions_row_view.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
@@ -103,6 +104,9 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
         &archive_clock_, space_switcher_.get());
     model_->SetArchiveService(archive_service_.get());
   }
+  tab_search_ = std::make_unique<TabSearchService>(
+      browser_view->browser()->tab_strip_model(), state->model(),
+      state->binding(), archive_service_.get(), space_switcher_.get());
   SidebarView::Delegate delegate;
   delegate.toggle_sidebar = base::BindRepeating(
       &BrowserSidebarController::ToggleVisibility, base::Unretained(this));
@@ -248,8 +252,8 @@ void BrowserSidebarController::ShowCommandBox(
     }
     return;
   }
-  suggestion_source_ =
-      std::make_unique<SuggestionSource>(browser_view_->GetProfile());
+  suggestion_source_ = std::make_unique<SuggestionSource>(
+      browser_view_->GetProfile(), tab_search_.get());
   command_box_ = std::make_unique<CommandBox>(
       browser_view_, suggestion_source_.get(),
       base::BindOnce(&BrowserSidebarController::OnCommandBoxAccepted,

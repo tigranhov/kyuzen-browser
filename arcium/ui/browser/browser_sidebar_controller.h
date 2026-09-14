@@ -38,6 +38,7 @@ namespace arcium {
 
 class CommandBox;
 class SuggestionSource;
+class TabSearchService;
 class SidebarView;
 class SpaceSwitcher;
 
@@ -152,6 +153,11 @@ class BrowserSidebarController : public SidebarModel::Observer,
   float applied_corner_radius_ = -1.f;
   raw_ptr<ContentsContainerView> last_container_ = nullptr;
 
+  // Searches this window's tabs, the profile's entries and the archive. It
+  // observes nothing and holds no per-tab state, so one that is never asked a
+  // question does no work; it lives here because the strip's lifetime bounds
+  // it, as it bounds the model beside it.
+  std::unique_ptr<TabSearchService> tab_search_;
   // Built when the box opens and destroyed when it closes, so a browser
   // sitting idle carries no autocomplete providers and no timers.
   std::unique_ptr<SuggestionSource> suggestion_source_;

@@ -56,6 +56,9 @@ class SidebarUiTest : public InProcessBrowserTest {
   void WaitForRows();
   void WaitForRowThatIsAnOpenTab();
   void WaitForHistory(const GURL& url);
+  // A pinned entry in the active space, which is one of the three things
+  // this browser knows about and the web does not.
+  void PinEntryWithUrl(const GURL& url, const std::u16string& title);
 
   std::string LoadTestExtension();
   void PinExtension(const std::string& id);

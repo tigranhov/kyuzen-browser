@@ -11,6 +11,7 @@
 
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "components/omnibox/browser/autocomplete_controller.h"
 #include "url/gurl.h"
 
@@ -18,6 +19,9 @@ class AutocompleteResult;
 class Profile;
 
 namespace arcium {
+
+class TabSearchService;
+struct SearchResult;
 
 // A row the command box draws. Everything it needs and nothing it does not:
 // the box never sees an AutocompleteMatch.
@@ -33,6 +37,12 @@ struct SuggestionRow {
 // The pure half: a result in, rows out.
 std::vector<SuggestionRow> RowsForResult(const AutocompleteResult& result);
 
+// What the reader already put somewhere, then what the web remembers. A
+// destination in both halves is offered once, from the first -- which is the
+// half that knows whether it is already open.
+std::vector<SuggestionRow> MergeSuggestions(std::vector<SuggestionRow> mine,
+                                            std::vector<SuggestionRow> web);
+
 // Chrome's own answers -- history, bookmarks, the search engine, open tabs --
 // asked for on behalf of the command box. Nothing here exists until one of
 // these does, which is when the box opens.
@@ -41,7 +51,9 @@ class SuggestionSource : public AutocompleteController::Observer {
   using RowsCallback =
       base::RepeatingCallback<void(std::vector<SuggestionRow>)>;
 
-  explicit SuggestionSource(Profile* profile);
+  // `tabs` may be null -- a window with no sidebar has no such service --
+  // and then only Chrome's answers are offered. It must outlive this.
+  SuggestionSource(Profile* profile, TabSearchService* tabs);
   SuggestionSource(const SuggestionSource&) = delete;
   SuggestionSource& operator=(const SuggestionSource&) = delete;
   ~SuggestionSource() override;
@@ -56,9 +68,20 @@ class SuggestionSource : public AutocompleteController::Observer {
                        bool default_match_changed) override;
 
  private:
+  // Both halves answer whenever they are ready, and each call back with the
+  // merge of the latest of each, so the box fills in as answers arrive
+  // instead of waiting for the slowest one.
+  void OnOwnResults(std::vector<SearchResult> results);
+  void DeliverRows();
+
   raw_ptr<Profile> profile_;
+  raw_ptr<TabSearchService> tabs_;
   std::unique_ptr<AutocompleteController> controller_;
   RowsCallback on_rows_;
+  std::vector<SuggestionRow> mine_;
+  std::vector<SuggestionRow> web_;
+
+  base::WeakPtrFactory<SuggestionSource> weak_factory_{this};
 };
 
 }  // namespace arcium

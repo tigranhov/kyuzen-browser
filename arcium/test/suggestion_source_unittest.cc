@@ -76,5 +76,41 @@ TEST(SuggestionSourceTest, FallsBackToTheAddressWhenThereIsNoTitle) {
   EXPECT_EQ(u"https://a.test/", rows[0].title);
 }
 
+SuggestionRow Row(const std::string& url, bool open_tab) {
+  SuggestionRow row;
+  row.destination = GURL(url);
+  row.title = base::UTF8ToUTF16(url);
+  row.is_open_tab = open_tab;
+  return row;
+}
+
+TEST(MergeSuggestionsTest, WhatYouAlreadyHaveComesFirst) {
+  std::vector<SuggestionRow> mine = {Row("https://tab.test/", true)};
+  std::vector<SuggestionRow> web = {Row("https://history.test/", false)};
+  const std::vector<SuggestionRow> merged =
+      MergeSuggestions(std::move(mine), std::move(web));
+  ASSERT_EQ(2u, merged.size());
+  EXPECT_EQ(GURL("https://tab.test/"), merged[0].destination);
+  EXPECT_EQ(GURL("https://history.test/"), merged[1].destination);
+}
+
+TEST(MergeSuggestionsTest, TheSamePageIsOfferedOnce) {
+  std::vector<SuggestionRow> mine = {Row("https://a.test/", true)};
+  std::vector<SuggestionRow> web = {Row("https://a.test/", false),
+                                    Row("https://b.test/", false)};
+  const std::vector<SuggestionRow> merged =
+      MergeSuggestions(std::move(mine), std::move(web));
+  ASSERT_EQ(2u, merged.size());
+  // And it keeps the half that knows it is open, not the half that does not.
+  EXPECT_TRUE(merged[0].is_open_tab);
+  EXPECT_EQ(GURL("https://b.test/"), merged[1].destination);
+}
+
+TEST(MergeSuggestionsTest, EitherHalfMayBeEmpty) {
+  EXPECT_EQ(1u, MergeSuggestions({Row("https://a.test/", true)}, {}).size());
+  EXPECT_EQ(1u, MergeSuggestions({}, {Row("https://a.test/", false)}).size());
+  EXPECT_TRUE(MergeSuggestions({}, {}).empty());
+}
+
 }  // namespace
 }  // namespace arcium

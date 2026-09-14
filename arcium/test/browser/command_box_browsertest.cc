@@ -103,5 +103,22 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, NothingIsRunningWhileItIsClosed) {
   EXPECT_FALSE(Controller()->suggestion_source_for_testing());
 }
 
+IN_PROC_BROWSER_TEST_F(CommandBoxTest, APinnedPageIsOfferedBeforeAHistoryHit) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL pinned =
+      embedded_test_server()->GetURL("pin.test", "/title1.html");
+  PinEntryWithUrl(pinned, u"A pinned page");
+  const GURL visited =
+      embedded_test_server()->GetURL("pin.test", "/title2.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), visited));
+  WaitForHistory(visited);
+
+  OpenBox();
+  Type(u"pin.test");
+  WaitForRows();
+  ASSERT_GT(Box()->row_count_for_testing(), 0u);
+  EXPECT_EQ(pinned, Box()->row_for_testing(0).destination);
+}
+
 }  // namespace
 }  // namespace arcium::test
