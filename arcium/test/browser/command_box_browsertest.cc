@@ -44,9 +44,16 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, EnterOnATabYouHaveSwitchesToIt) {
   ASSERT_TRUE(embedded_test_server()->Start());
   const GURL url = embedded_test_server()->GetURL("a.test", "/title1.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("b.test", "/title2.html")));
+  // A second tab, so that the first one is still on a.test when the box is
+  // asked about it. Navigating the same tab twice would leave a.test in
+  // history and in no tab at all, and then this test would be waiting for a
+  // row that cannot arrive.
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), embedded_test_server()->GetURL("b.test", "/title2.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
   const int tabs_before = browser()->tab_strip_model()->count();
+  ASSERT_EQ(2, tabs_before);
 
   OpenBox();
   Type(u"a.test");
@@ -87,6 +94,12 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, EscapeLeavesThePageAlone) {
 
 IN_PROC_BROWSER_TEST_F(CommandBoxTest, ClickingThePillOpensIt) {
   ASSERT_FALSE(Box());
+  // A click is delivered to the window under the pointer, so a window that
+  // another test's window has taken the front from never sees it. Alone this
+  // test passed and beside others it did not, which is that and nothing
+  // about the pill.
+  browser()->GetWindow()->Activate();
+  ui_test_utils::WaitForBrowserSetLastActive(browser());
   ClickPillBackground();
   EXPECT_TRUE(Box());
   // And the address bar behind the pill did not take focus: one box, one
@@ -114,6 +127,12 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, APinnedPageIsOfferedBeforeAHistoryHit) {
       embedded_test_server()->GetURL("pin.test", "/title2.html");
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), visited));
   WaitForHistory(visited);
+  // And then away again. Visiting a page is how history gets written, but it
+  // also leaves a tab sitting on it, and a tab the reader already has is
+  // offered before either of the two things this test is comparing -- so
+  // without this the test asks its question of the wrong pair.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("away.test", "/title3.html")));
 
   OpenBox();
   Type(u"pin.test");

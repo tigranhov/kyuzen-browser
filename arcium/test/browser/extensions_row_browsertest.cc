@@ -18,6 +18,7 @@
 #include "chrome/browser/ui/views/toolbar/toolbar_action_view.h"
 #include "content/public/test/browser_test.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/layout/animating_layout_manager_test_util.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
 
@@ -35,6 +36,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionsRowTest,
   const std::string id = LoadTestExtension();
   PinExtension(id);
   RunLoopUntilIdle();
+  views::test::WaitForAnimatingLayoutManager(Container());
 
   EXPECT_GT(Row()->GetPreferredSize(views::SizeBounds()).height(), 0);
   views::View* button = Container()->GetViewForId(id);
@@ -42,18 +44,25 @@ IN_PROC_BROWSER_TEST_F(ExtensionsRowTest,
   EXPECT_TRUE(button->GetVisible());
   EXPECT_TRUE(Row()->Contains(button));
 
-  // The menu button is not in the row; the pill's button opens the menu.
-  EXPECT_FALSE(Container()->GetExtensionsButton()->GetVisible());
+  // The menu button is not in the row; the pill's button opens the menu. It
+  // is not hidden, because the strip decides which of its own buttons show
+  // and takes the pinned ones down with it when that answer is argued with.
+  // The row puts it where its own bounds cut it off instead.
+  EXPECT_FALSE(Row()->GetLocalBounds().Intersects(
+      Container()->GetExtensionsButton()->bounds()))
+      << "the strip's menu button is drawn inside the row";
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionsRowTest, UnpinningTakesItBackOut) {
   const std::string id = LoadTestExtension();
   PinExtension(id);
   RunLoopUntilIdle();
+  views::test::WaitForAnimatingLayoutManager(Container());
   ASSERT_GT(Row()->GetPreferredSize(views::SizeBounds()).height(), 0);
 
   UnpinExtension(id);
   RunLoopUntilIdle();
+  views::test::WaitForAnimatingLayoutManager(Container());
   EXPECT_EQ(0, Row()->GetPreferredSize(views::SizeBounds()).height());
 }
 
@@ -65,6 +74,7 @@ IN_PROC_BROWSER_TEST_F(ExtensionsRowTest,
     PinExtension(ids.back());
   }
   RunLoopUntilIdle();
+  views::test::WaitForAnimatingLayoutManager(Container());
   Row()->SetSize(gfx::Size(metrics::kSidebarWidth, 200));
   views::test::RunScheduledLayout(Row());
 

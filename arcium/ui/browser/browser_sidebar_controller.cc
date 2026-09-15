@@ -259,6 +259,16 @@ void BrowserSidebarController::HostExtensionsContainer() {
   std::unique_ptr<views::View> owned =
       container->parent()->RemoveChildViewT(container);
   view_->extensions_row()->SetHostedView(std::move(owned));
+
+  // The strip carries its own button for opening the extensions menu, and the
+  // pill has one already. Auto-hide mode was expected to take care of that
+  // and does not: it only lets the button drop out when the strip is
+  // squeezed, and in a row of its own it never is. So the row is told to skip
+  // it. Hiding it instead is what does not work -- the strip's layout owns
+  // which of its buttons show, and answering it takes the pinned extensions
+  // down with the one button that was meant to go.
+  view_->extensions_row()->SetSkippedButton(
+      toolbar->extensions_container()->GetExtensionsButton());
 }
 
 void BrowserSidebarController::OnSidebarModelChanged() {

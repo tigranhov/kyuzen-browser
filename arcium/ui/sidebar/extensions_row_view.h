@@ -36,6 +36,14 @@ class ExtensionsRowView : public views::View, public views::ViewObserver {
   views::View* SetHostedView(std::unique_ptr<views::View> view);
   bool has_hosted_view() const { return hosted_ != nullptr; }
 
+  // One button of the strip to leave out: it is neither placed in the row nor
+  // counted towards its height. The strip carries a button for opening the
+  // extensions menu and the pill has that button already, and the strip's own
+  // layout keeps deciding when its button shows -- so the row steps around it
+  // rather than hiding it, which that layout would undo. Named by the host,
+  // because this target must not know what an extensions menu button is.
+  void SetSkippedButton(views::View* button);
+
   // views::View:
   void Layout(PassKey) override;
   gfx::Size CalculatePreferredSize(
@@ -54,6 +62,7 @@ class ExtensionsRowView : public views::View, public views::ViewObserver {
   int VisibleButtonCount() const;
 
   raw_ptr<views::View> hosted_ = nullptr;
+  raw_ptr<views::View> skipped_ = nullptr;
   base::ScopedObservation<views::View, views::ViewObserver> observation_{this};
 };
 

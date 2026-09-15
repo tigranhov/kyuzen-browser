@@ -119,9 +119,18 @@ bool SidebarUiTest::AnyRowIsAnOpenTab() {
 }
 
 void SidebarUiTest::WaitForRowThatIsAnOpenTab() {
-  while (!AnyRowIsAnOpenTab()) {
+  // Bounded: a query that never offers an open tab used to hang here until
+  // the launcher killed the process, which reads as a crash and says nothing
+  // about what went wrong.
+  constexpr int kRounds = 20;
+  for (int round = 0; round < kRounds; ++round) {
+    if (AnyRowIsAnOpenTab()) {
+      return;
+    }
     WaitForRows();
   }
+  ASSERT_TRUE(AnyRowIsAnOpenTab())
+      << "no row was a tab already open after " << kRounds << " answers";
 }
 
 void SidebarUiTest::WaitForHistory(const GURL& url) {

@@ -14,13 +14,16 @@
 #include "arcium/ui/sidebar/url_pill_view.h"
 #include "base/functional/bind.h"
 #include "base/run_loop.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/page_info/page_info_bubble_view.h"
+#include "chrome/browser/ui/views/permissions/chip/chip_controller.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/permissions/permission_request_enums.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/request_type.h"
 #include "components/permissions/test/mock_permission_request.h"
@@ -63,31 +66,50 @@ IN_PROC_BROWSER_TEST_F(PillTest, APermissionRequestStillHasSomewhereToAppear) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL("/title1.html")));
 
+  // The prompt is only raised for a window the user is looking at, so an
+  // inactive window makes this test say the chip is missing when nothing
+  // asked for it yet.
+  browser()->GetWindow()->Activate();
+  ui_test_utils::WaitForBrowserSetLastActive(browser());
+
   content::WebContents* contents =
       browser()->tab_strip_model()->GetActiveWebContents();
   permissions::PermissionRequestManager* manager =
       permissions::PermissionRequestManager::FromWebContents(contents);
   ASSERT_TRUE(manager);
+  // With a gesture, because that is what decides the shape of the prompt: a
+  // request the user asked for is a chip in the bar, and one that arrived on
+  // its own is a bubble that needs no room there. The chip is the case this
+  // test exists for, since the chip is what the bar has to stay drawn to
+  // hold.
   manager->AddRequest(contents->GetPrimaryMainFrame(),
                       std::make_unique<permissions::MockPermissionRequest>(
-                          permissions::RequestType::kGeolocation));
+                          permissions::RequestType::kGeolocation,
+                          permissions::PermissionRequestGestureType::GESTURE));
+  // Raised on a later turn, not inside AddRequest.
   base::RunLoop().RunUntilIdle();
 
   LocationBarView* bar = BarOf(browser());
-  bool chip_visible = false;
-  for (views::View* child : bar->children()) {
-    chip_visible = chip_visible || child->GetVisible();
-  }
-  EXPECT_TRUE(chip_visible) << "the request has nowhere to appear";
+  // Asked of the controller that owns the chip rather than by looking for a
+  // visible child: the chip is the bar's own answer to "where does a request
+  // appear", and a visible child could be anything.
+  EXPECT_TRUE(bar->GetChipController()->IsPermissionPromptChipVisible())
+      << "the request has nowhere to appear";
   // And the pill stands aside for it.
   EXPECT_FALSE(Pill()->extensions_button_for_testing()->GetVisible());
 }
 
 IN_PROC_BROWSER_TEST_F(PillTest, ItSaysWhereYouAre) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(
-      browser(), embedded_test_server()->GetURL("a.test", "/title1.html")));
-  EXPECT_EQ(u"a.test", Pill()->domain_for_testing());
+  const GURL url = embedded_test_server()->GetURL("a.test", "/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  // The port belongs in the pill -- localhost:3000 and localhost:8080 are two
+  // different places -- and the test server picks a fresh one every run, so
+  // the expectation is built from the address that was actually served rather
+  // than written out. PillDomainTest.KeepsAPortAndAnAddress is where the rule
+  // itself is stated.
+  EXPECT_EQ(base::UTF8ToUTF16(base::StrCat({url.host(), ":", url.port()})),
+            Pill()->domain_for_testing());
 }
 
 IN_PROC_BROWSER_TEST_F(PillTest, AnInsecurePageWearsItsWarningUnasked) {

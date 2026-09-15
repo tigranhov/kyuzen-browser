@@ -101,6 +101,11 @@ void UrlPillView::SetHostedBarSpeaking(bool speaking) {
   // question where this text sits, and two lines of writing in one pill is
   // nobody's idea of a question.
   text_->SetVisible(!speaking_);
+  // A question is there to be answered, so the bar takes clicks again for as
+  // long as it is asking one. See SetHostedView.
+  if (hosted_) {
+    hosted_->SetCanProcessEventsWithinSubtree(speaking_);
+  }
   UpdateButtons();
 }
 
@@ -109,6 +114,13 @@ views::View* UrlPillView::SetHostedView(std::unique_ptr<views::View> view) {
   // bar behind it is there to be pointed at by bubbles, not clicked.
   hosted_ = AddChildViewAt(std::move(view), 0);
   hosted_->SetProperty(views::kViewIgnoredByLayoutKey, true);
+  // Order alone is not enough. The bar's address field sits under the pill's
+  // text, which is a label and takes no events, so a click in the middle of
+  // the pill reached the field, focused it and left the box unopened. The bar
+  // takes no events at all while it is silent; SetHostedBarSpeaking gives them
+  // back when it has a question to ask, which is the one time it is meant to
+  // be clicked.
+  hosted_->SetCanProcessEventsWithinSubtree(speaking_);
   InvalidateLayout();
   return hosted_;
 }
