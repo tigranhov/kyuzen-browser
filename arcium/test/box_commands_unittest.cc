@@ -24,8 +24,11 @@ std::vector<int> IdsFor(std::u16string_view query) {
 }
 
 TEST(BoxCommandsTest, TheStartOfAWordOffersItsCommand) {
-  // "closed" starts with "clo" too, so both closing commands are offered.
-  EXPECT_EQ((std::vector<int>{IDC_CLOSE_TAB, IDC_RESTORE_TAB}), IdsFor(u"clo"));
+  // "closed" starts with "clo" too, and so does the "clone" that duplicating
+  // a tab goes by, so all three are offered.
+  EXPECT_EQ(
+      (std::vector<int>{IDC_CLOSE_TAB, IDC_RESTORE_TAB, IDC_DUPLICATE_TAB}),
+      IdsFor(u"clo"));
   EXPECT_EQ(std::vector<int>{IDC_SHOW_DOWNLOADS}, IdsFor(u"downl"));
 }
 

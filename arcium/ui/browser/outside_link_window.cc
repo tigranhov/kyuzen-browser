@@ -23,10 +23,10 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_window.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/referrer.h"
+#include "ui/base/base_window.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/page_transition_types.h"
@@ -138,8 +138,8 @@ END_METADATA
 // down and left by one step per window already open.
 gfx::Rect BoundsForWindow(Browser* browser, size_t cascade_index) {
   gfx::Rect area(0, 0, kWidth + 2 * kScreenMargin, kHeight + 2 * kScreenMargin);
-  if (display::Screen* screen = display::Screen::GetScreen()) {
-    BrowserWindow* window = browser ? browser->window() : nullptr;
+  if (display::Screen* screen = display::Screen::Get()) {
+    ui::BaseWindow* window = browser ? browser->GetWindow() : nullptr;
     area = window ? screen->GetDisplayNearestWindow(window->GetNativeWindow())
                         .work_area()
                   : screen->GetPrimaryDisplay().work_area();
@@ -243,7 +243,7 @@ void OutsideLinkWindow::OpenInSpace() {
     web_view_->SetWebContents(nullptr);
   }
   BringPageToScreen(browser_.get(), page);
-  if (BrowserWindow* window = browser_->window()) {
+  if (ui::BaseWindow* window = browser_->GetWindow()) {
     window->Activate();
   }
   Close();

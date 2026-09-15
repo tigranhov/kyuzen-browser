@@ -603,7 +603,7 @@ TEST_F(SpaceBarTest, AlwaysOpenMakesTheRuleAndThenOffersToStop) {
   ASSERT_NE(-1, always);
   ASSERT_TRUE(menu.IsCommandIdEnabled(always));
   menu.ExecuteCommand(always, 0);
-  EXPECT_TRUE(model.SiteOpensInActiveSpace(GURL("https://gist.github.com/")));
+  EXPECT_TRUE(model.SiteOpensInActiveSpace(GURL("https://github.com/issues")));
 
   menu.BuildForRow(model.rows().front(), base::DoNothing());
   const int stop =
