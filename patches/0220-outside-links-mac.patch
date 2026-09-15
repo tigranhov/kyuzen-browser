@@ -1,0 +1,43 @@
+Seam: -[AppController application:openURLs:] in chrome/browser/app_controller_mac.mm,
+      at the top of the method, before the StartupTabs it builds.
+Why: a link another application hands the running browser opens in a small
+     window of its own (R4.3), in the space a routing rule names, instead of
+     a tab in whatever space happens to be on screen. Taken here because this
+     is the only place macOS delivers such links, and declining is what keeps
+     a cold launch, a `file:` URL and the `chromium://` scheme on Chromium's
+     own path unchanged.
+     No GN wiring: app_controller_mac.mm builds in //chrome/browser:core,
+     which patch 0145 already gave a dep on //arcium/ui/browser.
+Delegates to: arcium::OpenOutsideLinks
+
+diff --git a/chrome/browser/app_controller_mac.mm b/chrome/browser/app_controller_mac.mm
+index a096792799..dec4ee1b66 100644
+--- a/chrome/browser/app_controller_mac.mm
++++ b/chrome/browser/app_controller_mac.mm
+@@ -12,6 +12,7 @@
+ #include <memory>
+ #include <vector>
+ 
++#include "arcium/ui/browser/outside_links.h"
+ #include "base/apple/bridging.h"
+ #include "base/apple/foundation_util.h"
+ #include "base/apple/scoped_cftyperef.h"
+@@ -2053,6 +2054,18 @@ - (Profile*)safeProfileForNewWindows:(Profile*)profile {
+ }
+ 
+ - (void)application:(NSApplication*)sender openURLs:(NSArray<NSURL*>*)urls {
++  // Arcium: a link from another application opens in a small window of its
++  // own, in the space a routing rule names. Declines -- and leaves the tabs
++  // below to open them -- at a cold launch, or for anything that is not a web
++  // page.
++  std::vector<GURL> arciumUrls;
++  for (NSURL* url in urls) {
++    arciumUrls.push_back(net::GURLWithNSURL(url));
++  }
++  if (arcium::OpenOutsideLinks(arciumUrls)) {
++    return;
++  }
++
+   StartupTabs startupTabs;
+   for (NSURL* url in urls) {
+     // Handle the google-chrome:// scheme (and chromium://).
