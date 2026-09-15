@@ -7,6 +7,7 @@ test("arcium_unittests") {
     "arcium_features_unittest.cc",
     "arcium_model_unittest.cc",
     "arcium_profile_state_unittest.cc",
+    "box_commands_unittest.cc",
     "clear_data_warning_unittest.cc",
     "cold_favicon_cache_unittest.cc",
     "folder_tree_unittest.cc",
@@ -23,6 +24,7 @@ test("arcium_unittests") {
     "profile_reopen_unittest.cc",
     "reorder_index_unittest.cc",
     "restored_tab_loading_unittest.cc",
+    "routing_rule_unittest.cc",
     "session_tab_entry_unittest.cc",
     "sidebar_drag_unittest.cc",
     "sidebar_folders_unittest.cc",
@@ -89,8 +91,11 @@ test("arcium_unittests") {
 # nothing on screen.
 test("arcium_browsertests") {
   sources = [
+    "browser/box_commands_browsertest.cc",
     "browser/command_box_browsertest.cc",
     "browser/extensions_row_browsertest.cc",
+    "browser/outside_links_browsertest.cc",
+    "browser/peek_browsertest.cc",
     "browser/pill_browsertest.cc",
     "browser/profile_browsertest_base.cc",
     "browser/profile_browsertest_base.h",
