@@ -10,6 +10,7 @@
 #include "arcium/browser/arcium_profile_state.h"
 #include "arcium/common/arcium_features.h"
 #include "arcium/ui/browser/command_box.h"
+#include "arcium/ui/browser/peek_controller.h"
 #include "arcium/ui/browser/session_rebuild_nudge.h"
 #include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/browser/tab_search_service.h"
@@ -130,12 +131,22 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   view_ = browser_view_->AddChildView(
       std::make_unique<SidebarView>(model_.get(), std::move(delegate)));
   model_->AddObserver(this);
+  // Nothing is built for a peek until one opens: this object holds a pointer
+  // to the window and an entry in the strip's observer list, and allocates
+  // the view and the page only when a link asks for one.
+  if (features::IsPeekEnabled()) {
+    peek_ = std::make_unique<PeekController>(browser_view_);
+  }
   UpdateNavButtons();
   MaybeScheduleSnapshot();
   MaybeShowCommandBoxForDebugging();
 }
 
 BrowserSidebarController::~BrowserSidebarController() {
+  // First: the peek's view is a child of the BrowserView and its page is a
+  // tab in the strip, and both are still whole here. ~BrowserView frees this
+  // controller before it removes its own children.
+  peek_.reset();
   model_->RemoveObserver(this);
   // `model_` outlives `archive_service_` by declaration order, and holds a
   // pointer to it. Break that before the service is freed.
@@ -173,6 +184,23 @@ void BrowserSidebarController::LayoutSidebar(const gfx::Rect& host_bounds) {
   view_->SetBoundsRect(gfx::Rect(host_bounds.x(), host_bounds.y(), width(),
                                  host_bounds.height()));
   UpdateContentCorners();
+  if (peek_) {
+    peek_->Layout(PageArea());
+  }
+}
+
+gfx::Rect BrowserSidebarController::PageArea() const {
+  // The page's own container, in the BrowserView's coordinates: a peek is a
+  // child of the BrowserView, and the area it covers is exactly the area the
+  // page occupies beside the sidebar.
+  ContentsContainerView* container =
+      browser_view_->GetActiveContentsContainerView();
+  if (!container) {
+    return gfx::Rect();
+  }
+  gfx::Point origin;
+  views::View::ConvertPointToTarget(container, browser_view_, &origin);
+  return gfx::Rect(origin, container->size());
 }
 
 void BrowserSidebarController::UpdateContentCorners() {
@@ -231,82 +259,6 @@ void BrowserSidebarController::HostExtensionsContainer() {
   std::unique_ptr<views::View> owned =
       container->parent()->RemoveChildViewT(container);
   view_->extensions_row()->SetHostedView(std::move(owned));
-}
-
-void BrowserSidebarController::ShowCommandBoxWithNoText() {
-  ShowCommandBox(std::nullopt);
-}
-
-void BrowserSidebarController::ShowCommandBox(
-    std::optional<std::u16string> initial_text) {
-  if (command_box_widget_) {
-    command_box_->FocusField();
-    if (initial_text) {
-      command_box_->SetText(*initial_text, /*select_all=*/true);
-    }
-    return;
-  }
-  suggestion_source_ = std::make_unique<SuggestionSource>(
-      browser_view_->GetProfile(), tab_search_.get());
-  command_box_ = std::make_unique<CommandBox>(
-      browser_view_, suggestion_source_.get(),
-      base::BindOnce(&BrowserSidebarController::OnCommandBoxAccepted,
-                     weak_factory_.GetWeakPtr()));
-  command_box_widget_ = views::BubbleDialogDelegate::CreateBubble(
-      command_box_.get(),
-      base::BindOnce(&BrowserSidebarController::OnCommandBoxClosed,
-                     weak_factory_.GetWeakPtr()));
-  command_box_widget_->Show();
-  if (initial_text) {
-    command_box_->SetText(*initial_text, /*select_all=*/true);
-  }
-  command_box_->FocusField();
-}
-
-void BrowserSidebarController::OnCommandBoxAccepted(SuggestionRow row) {
-  if (!row.destination.is_valid()) {
-    return;
-  }
-  // A tab already open is switched to rather than loaded a second time, in
-  // whatever space is holding it.
-  if (row.is_open_tab && ActivateTabWithUrl(row.destination)) {
-    return;
-  }
-  chrome::AddSelectedTabWithURL(browser_view_->browser(), row.destination,
-                                ui::PAGE_TRANSITION_TYPED);
-}
-
-bool BrowserSidebarController::ActivateTabWithUrl(const GURL& url) {
-  TabStripModel* strip = browser_view_->browser()->tab_strip_model();
-  for (int i = 0; i < strip->count(); ++i) {
-    content::WebContents* contents = strip->GetWebContentsAt(i);
-    if (!contents || contents->GetLastCommittedURL() != url) {
-      continue;
-    }
-    // The tab may live in a space this window is not showing; going to the
-    // tab without going to its space would show it under the wrong sidebar.
-    if (space_switcher_) {
-      space_switcher_->SwitchTo(space_switcher_->SpaceOfTabAt(i));
-    }
-    strip->ActivateTabAt(i);
-    return true;
-  }
-  return false;
-}
-
-void BrowserSidebarController::OnCommandBoxClosed(
-    views::Widget::ClosedReason reason) {
-  // Runs synchronously from the close; free them once the stack unwinds.
-  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
-      FROM_HERE, base::BindOnce(&BrowserSidebarController::DestroyCommandBox,
-                                weak_factory_.GetWeakPtr()));
-}
-
-void BrowserSidebarController::DestroyCommandBox() {
-  command_box_widget_.reset();
-  command_box_.reset();
-  // With the box goes everything it was asking on behalf of.
-  suggestion_source_.reset();
 }
 
 void BrowserSidebarController::OnSidebarModelChanged() {
@@ -431,38 +383,12 @@ void BrowserSidebarController::ExecuteCommand(int command_id) {
   chrome::ExecuteCommand(browser_view_->browser(), command_id);
 }
 
-bool HandleFocusLocationCommand(Browser* browser) {
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  if (!browser_view || !browser_view->arcium_sidebar()) {
-    return false;
-  }
-  content::WebContents* contents =
-      browser->tab_strip_model()->GetActiveWebContents();
-  // The whole address, not the domain the pill shows: this key exists to
-  // replace or edit what is there, and half an address is neither.
-  std::u16string text;
-  if (contents && contents->GetLastCommittedURL().is_valid()) {
-    text = base::UTF8ToUTF16(contents->GetLastCommittedURL().spec());
-  }
-  browser_view->arcium_sidebar()->ShowCommandBox(std::move(text));
-  return true;
-}
-
 int ExtensionsDisplayMode(Browser* browser) {
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
   const bool has_sidebar = browser_view && browser_view->arcium_sidebar();
   return static_cast<int>(has_sidebar
                               ? ExtensionsToolbarDesktop::DisplayMode::kAutoHide
                               : ExtensionsToolbarDesktop::DisplayMode::kNormal);
-}
-
-bool HandleNewTabCommand(Browser* browser) {
-  BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  if (!browser_view || !browser_view->arcium_sidebar()) {
-    return false;
-  }
-  browser_view->arcium_sidebar()->ShowCommandBox(std::nullopt);
-  return true;
 }
 
 }  // namespace arcium
