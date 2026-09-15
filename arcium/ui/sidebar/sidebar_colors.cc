@@ -51,13 +51,13 @@ void AddArciumColorMixer(ui::ColorProvider* provider,
   mixer[kColorArciumSpaceAccent] = {kAccent};
   mixer[kColorArciumSpaceChipActiveBackground] = {ui::SetAlpha(kAccent, 0x38)};
 
-  // The window frame, in the sidebar's own colour. Arcium hides the toolbar
-  // and floats the page inside a kContentInset margin, so the frame is not a
-  // title bar here -- it is the strip of window visible above and around the
-  // page, right next to the sidebar. Left at Chromium's default it reads as a
-  // pale line across the top of every tab. The top tint rather than the
-  // bottom one, because the strip that shows most is the one along the top,
-  // where it meets the sidebar's own lightest end.
+  // The window frame, in the sidebar's own colour. Arcium hides the toolbar,
+  // so the frame is not a title bar here -- it is whatever window shows
+  // behind the page, and left at Chromium's default it reads as a pale line
+  // across the top of every tab. The page now covers it, so this shows only
+  // while the window is being resized or a tab has yet to paint; the top
+  // tint rather than the bottom one, because what it borders there is the
+  // sidebar's own lightest end.
   mixer[ui::kColorFrameActive] = {kColorArciumSidebarBackgroundTop};
   mixer[ui::kColorFrameInactive] = {kColorArciumSidebarBackgroundTop};
 }

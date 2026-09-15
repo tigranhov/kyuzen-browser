@@ -14,7 +14,6 @@
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkColor.h"
-#include "ui/gfx/geometry/insets.h"
 #include "ui/views/background.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
@@ -134,10 +133,6 @@ void SidebarExample::CreateExampleView(views::View* container) {
   auto* page = container->AddChildView(std::make_unique<views::View>());
   page->SetBackground(views::CreateRoundedRectBackground(
       SkColorSetRGB(0xFF, 0xFF, 0xFF), metrics::kContentCornerRadius));
-  page->SetProperty(
-      views::kMarginsKey,
-      gfx::Insets::TLBR(metrics::kContentInset, 0, metrics::kContentInset,
-                        metrics::kContentInset));
   page->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::LayoutOrientation::kHorizontal,

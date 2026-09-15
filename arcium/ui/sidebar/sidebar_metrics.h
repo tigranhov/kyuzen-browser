@@ -32,10 +32,12 @@ inline constexpr int kPillRevealMs = 150;
 // tile on purpose: an extension is a control, not a destination.
 inline constexpr int kExtensionButtonSize = 26;
 inline constexpr int kExtensionButtonGap = 6;
+// The page's own corners. It runs to the window's edges, so the two on the
+// window side land on the corners macOS already rounds and read as one
+// curve; the two against the sidebar are where this shows as a choice.
+inline constexpr int kContentCornerRadius = 12;
 inline constexpr int kSpaceChipHeight = 28;
 inline constexpr int kProfileBadgeSize = 20;
-inline constexpr int kContentInset = 8;
-inline constexpr int kContentCornerRadius = 12;
 // Width reserved at the top-left for the macOS traffic lights, plus padding.
 // The browser overrides this from the frame's real exclusion area at runtime.
 inline constexpr int kDefaultCaptionButtonWidth = 70;

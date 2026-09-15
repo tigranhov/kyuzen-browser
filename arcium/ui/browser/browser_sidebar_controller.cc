@@ -54,7 +54,6 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/page_transition_types.h"
-#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -155,7 +154,7 @@ int BrowserSidebarController::TitlebarHeight() const {
 void BrowserSidebarController::AdjustLayoutParams(BrowserLayoutParams& params) {
   // Remember the frame's caption-button area so the nav row leaves room for
   // the traffic lights, then take the sidebar column off the leading edge and
-  // inset the rest so the page floats on the tinted frame.
+  // give the page every pixel that is left.
   // GetBrowserLayoutParams is called several times per layout pass, so only
   // touch the view when the value changes; SetCaptionButtonWidth invalidates
   // layout and would otherwise loop.
@@ -167,11 +166,6 @@ void BrowserSidebarController::AdjustLayoutParams(BrowserLayoutParams& params) {
   }
   params.InsetHorizontal(width(), /*leading=*/true);
   params.leading_exclusion = BrowserLayoutExclusionArea();
-  if (visible_) {
-    params.Inset(gfx::Insets::TLBR(metrics::kContentInset, 0,
-                                   metrics::kContentInset,
-                                   metrics::kContentInset));
-  }
 }
 
 void BrowserSidebarController::LayoutSidebar(const gfx::Rect& host_bounds) {

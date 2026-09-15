@@ -94,7 +94,7 @@ Live model (spaces, profiles, favorites, pinned, folders) is one JSON file per C
 
 ### 4.6 UI composition
 
-The native tab strip and toolbar are hidden. `BrowserView` gains a left `SidebarView` and an inset, rounded `ContentsContainer` on a gradient background. Everything in the sidebar is Views. The command bar is a Views bubble that reuses the omnibox model for suggestions. WebUI surfaces open in a tab or a side panel on demand.
+The native tab strip and toolbar are hidden. `BrowserView` gains a left `SidebarView`, and the `ContentsContainer` takes every pixel beside it (see R1.6). Everything in the sidebar is Views. The command bar is a Views bubble that reuses the omnibox model for suggestions. WebUI surfaces open in a tab or a side panel on demand.
 
 ## 5. Stage requirements
 
@@ -130,7 +130,13 @@ Goal: the complete Arc layout on screen, bound to live tabs, usable as a daily b
 - R1.3 Sidebar reflects the live `TabStripModel`: titles, favicons, loading throbber, audio indicator, active highlight.
 - R1.4 Click selects a tab; hover shows a close button; Cmd+T adds a tab in Today; drag reorders within Today.
 - R1.5 URL pill shows the active tab's URL; clicking it opens the omnibox for editing.
-- R1.6 Content area inset with rounded corners on a gradient background; sidebar width fixed for this stage.
+- R1.6 Content area meets the sidebar and the window's own edges, with no margin, and keeps
+  rounded corners; sidebar width fixed for this stage. It was built inset on a gradient
+  background, and the owner asked for the margin back on 2026-09-14 while using the browser
+  for real work, and for the corners kept on 2026-09-15. The two corners on the window side
+  sit where macOS already rounds the window, so they read as one curve; the two against the
+  sidebar show the window frame behind them, which is one flat colour while the sidebar is a
+  gradient that changes with the space -- so at the lower one the two can differ slightly.
 - R1.7 One default space and one default profile. Favorites and Pinned sections render but may hold only in-session items.
 - R1.8 All Chromium keyboard shortcuts keep working. Session restore keeps working.
 - R1.9 Every sidebar component is also hosted in the Views playground.
