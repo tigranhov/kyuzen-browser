@@ -17,6 +17,7 @@
 #include "arcium/ui/browser/outside_link_window.h"
 #include "arcium/ui/browser/outside_links.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "content/public/browser/web_contents.h"
