@@ -6,7 +6,9 @@
 #define ARCIUM_UI_BROWSER_SUGGESTION_SOURCE_H_
 
 #include <memory>
+#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "base/functional/callback.h"
@@ -17,6 +19,7 @@
 
 class AutocompleteResult;
 class Profile;
+class TemplateURLService;
 
 namespace arcium {
 
@@ -32,10 +35,25 @@ struct SuggestionRow {
   // True when this is a tab the window already has open, possibly in another
   // space. The box switches to it rather than loading a second copy.
   bool is_open_tab = false;
+  // Set when the row is a browser command rather than a page: an IDC_ id, or
+  // one of box_commands.h's own. Such a row has no destination.
+  std::optional<int> command_id;
 };
 
-// The pure half: a result in, rows out.
-std::vector<SuggestionRow> RowsForResult(const AutocompleteResult& result);
+// The pure half: a result in, rows out. With `search_engines`, a row that
+// searches a site other than the default engine says which site it searches.
+std::vector<SuggestionRow> RowsForResult(
+    const AutocompleteResult& result,
+    const TemplateURLService* search_engines = nullptr);
+
+// The command rows `text` names, in box_commands.h's order.
+std::vector<SuggestionRow> RowsForCommands(std::u16string_view text);
+
+// The box's whole list: commands the reader named, then MergeSuggestions.
+// Commands first because typing a command's name is asking for the command.
+std::vector<SuggestionRow> ComposeRows(std::vector<SuggestionRow> commands,
+                                       std::vector<SuggestionRow> mine,
+                                       std::vector<SuggestionRow> web);
 
 // What the reader already put somewhere, then what the web remembers. A
 // destination in both halves is offered once, from the first -- which is the
@@ -78,6 +96,7 @@ class SuggestionSource : public AutocompleteController::Observer {
   raw_ptr<TabSearchService> tabs_;
   std::unique_ptr<AutocompleteController> controller_;
   RowsCallback on_rows_;
+  std::vector<SuggestionRow> commands_;
   std::vector<SuggestionRow> mine_;
   std::vector<SuggestionRow> web_;
 
