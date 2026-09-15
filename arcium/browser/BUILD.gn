@@ -8,6 +8,8 @@ source_set("browser") {
     "arcium_profile_state.h",
     "entry_claim.cc",
     "entry_claim.h",
+    "loose_page.cc",
+    "loose_page.h",
     "model_store.cc",
     "model_store.h",
     "profile_data.cc",

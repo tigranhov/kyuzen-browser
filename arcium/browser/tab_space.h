@@ -76,7 +76,8 @@ void SetTabKey(content::WebContents* web_contents, TabKey key);
 void CarryTabIdentityTo(content::WebContents* from, content::WebContents* to);
 
 // The space `handle` is drawn in. An entry's space wins over the tab's own
-// tag, and a tag naming no space falls back to the model's first.
+// tag, and a tag naming no space falls back to the model's first. A loose
+// page is drawn in no space, and gets an invalid SpaceId.
 SpaceId SpaceOfTab(const ArciumModel& model,
                    const TabBinding& binding,
                    tabs::TabHandle handle);

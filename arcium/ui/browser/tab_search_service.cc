@@ -9,6 +9,7 @@
 #include <utility>
 
 #include "arcium/browser/entry_claim.h"
+#include "arcium/browser/loose_page.h"
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/space.h"
 #include "arcium/browser/model/tab_entry.h"
@@ -133,6 +134,11 @@ std::vector<SearchResult> CollectLocal(TabStripModel* tab_strip_model,
   if (tab_strip_model) {
     for (int i = 0; i < tab_strip_model->count(); ++i) {
       tabs::TabInterface* tab = tab_strip_model->GetTabAtIndex(i);
+      // A peek or an outside link's page is not a tab the reader has, so it
+      // is neither offered nor allowed to hide an archived row.
+      if (IsLoosePage(tab->GetContents())) {
+        continue;
+      }
       TabUIHelper* const ui_helper = TabUIHelper::From(tab);
       const GURL url = ui_helper->GetVisibleURL();
       if (reachable) {
