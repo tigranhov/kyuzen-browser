@@ -99,20 +99,21 @@ found by compiling or by running, and all fixed:
   the narrower question of whether this exact site is routed here, so that it
   never offers to undo a rule belonging to another site.
 
-687 unit tests pass. All thirteen new browser tests pass — peek opening,
-closing, promoting and being put away; an outside link opening a window in the
-rule's space, two links making two windows, non-web links declined, the button
-moving the page into the window; a box address with and without a rule; and
-two box commands.
+675 unit tests pass, and so do all 63 browser tests. The thirteen new ones
+among them cover a peek opening, closing, being promoted and being put away;
+an outside link opening a window in the rule's space, two links making two
+windows, non-web links declined, and the button moving the page into the main
+window; an address in the box with and without a rule; and two box commands.
 
 `gn check` was not run separately: the target builds, which is the thing the
 check was a proxy for.
 
 ## What is still unverified
 
-- Seven Stage 4a browser tests fail or crash on their first ever run — two
-  about the pill, two about the extensions row, three about the command box.
-  None of them touches this stage's code. See the Stage 4a row in `CLAUDE.md`.
+- Nothing here is unverified by a test any more. The seven Stage 4a browser
+  tests that were red on their first ever run were fixed the same day, two of
+  them by fixing the browser rather than the test; see the Stage 4a row in
+  `CLAUDE.md`.
 - No acceptance row has been executed by hand and no perf measurement taken.
 - No home-boundary *browser* test existed to update. The home boundary's unit
   tests use `BrowserWithTestWindowTest`, whose window is not a `BrowserView`,
