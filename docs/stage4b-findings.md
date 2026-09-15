@@ -2,11 +2,10 @@
 
 Design: `docs/superpowers/specs/2026-09-15-stage-4b-navigation-design.md`.
 
-**Nothing here has been compiled or run.** The whole stage was written while a
-forced full Chromium rebuild held the one checkout, at the owner's request, so
-every API below was checked by reading Chromium's headers rather than by
-building against them. Treat the first build as part of the work, not as a
-formality, and read the risk list at the end before starting it.
+The whole stage was written while a forced full Chromium rebuild held the one
+checkout, at the owner's request, so every API below was checked by reading
+Chromium's headers rather than by building against them. It has since been
+built and run: see "What the first build and the first run found" below.
 
 ## What was built
 
@@ -79,17 +78,42 @@ site other than the default engine now says which site it searches.
   found in activation order. That is also whose "space on screen" the fallback
   means.
 
-## What is unverified
+## What the first build and the first run found
 
-Everything, in the literal sense: no compile, no unit test run, no browser test
-run, no acceptance row, no perf measurement. In particular:
+Built and run on 2026-09-15, the same day it was written. Four defects, all
+found by compiling or by running, and all fixed:
 
-- The sixteen browser tests of Stage 4a are still unrun, and the four new files
-  here (`peek_browsertest.cc`, `outside_links_browsertest.cc`,
-  `box_commands_browsertest.cc`, plus the existing ones) add to that backlog.
-- The unit tests written with the model and command code — routing rules,
-  serialiser round trip, the version 4 to 5 migration, command matching, the
-  row menu items, the loose-page marker — have not been run either.
+- The small window asked the browser for its window and asked for the screen
+  through accessors this Chromium no longer has (`Browser::window()`,
+  `display::Screen::GetScreen()`); they are now `Browser::GetWindow()`, which
+  answers a `ui::BaseWindow`, and `display::Screen::Get()`.
+- Three of the new browser tests named the profile type without the
+  declaration that says what it derives from, so the call taking a storage
+  context refused a profile.
+- Typing "clo" also offers duplicating a tab, because that command answers to
+  "clone". The new unit test said two commands; there are three.
+- Six older menu tests listed what a row's right-click menu offers and did not
+  know about the routing item; their expectations now include it. A seventh
+  asked whether a rule on a site is "in this space" through a *subdomain*: a
+  rule covers the pages under its site when a link is routed, but the menu asks
+  the narrower question of whether this exact site is routed here, so that it
+  never offers to undo a rule belonging to another site.
+
+687 unit tests pass. All thirteen new browser tests pass — peek opening,
+closing, promoting and being put away; an outside link opening a window in the
+rule's space, two links making two windows, non-web links declined, the button
+moving the page into the window; a box address with and without a rule; and
+two box commands.
+
+`gn check` was not run separately: the target builds, which is the thing the
+check was a proxy for.
+
+## What is still unverified
+
+- Seven Stage 4a browser tests fail or crash on their first ever run — two
+  about the pill, two about the extensions row, three about the command box.
+  None of them touches this stage's code. See the Stage 4a row in `CLAUDE.md`.
+- No acceptance row has been executed by hand and no perf measurement taken.
 - No home-boundary *browser* test existed to update. The home boundary's unit
   tests use `BrowserWithTestWindowTest`, whose window is not a `BrowserView`,
   so `ShowPeekForNavigation` answers false there and their expectation — a new
@@ -98,17 +122,17 @@ run, no acceptance row, no perf measurement. In particular:
 - Cmd+W in the small window is the spec's own open question and cannot be
   settled without running it (A4b.2).
 
-## Known risks for the first build
+## Known risks, and what the build said about them
 
 - `views::WidgetDelegate` used directly, with `SetTitle`, `SetCanResize` and
   `SetContentsView`, and `views::Widget::InitParams(CLIENT_OWNS_WIDGET,
-  TYPE_WINDOW)`. Read from the headers and from two upstream callers; not
-  compiled.
+  TYPE_WINDOW)`. It compiles and its tests pass, including the one that closes
+  a window and requires the page's tab to go with it.
 - `//arcium/ui/browser` gained `//ui/display` and `//components/search_engines`
   deps, and `suggestion_source.cc` includes
   `chrome/browser/search_engines/template_url_service_factory.h`, which is
   reached the way `FaviconServiceFactory` already is rather than through a dep.
-  `gn check` on the target is the thing to run first.
+  It builds.
 - The peek's view is a child of the `BrowserView` that the browser's layout
   does not know about, positioned from `LayoutSidebar` like the sidebar itself.
   If the layout ever clears unknown children's bounds, the peek is where that
