@@ -10,6 +10,7 @@
 
 #include "arcium/browser/archive_store.h"
 #include "arcium/browser/entry_claim.h"
+#include "arcium/browser/loose_page.h"
 #include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
@@ -259,6 +260,11 @@ bool ArchiveService::MayArchive(tabs::TabHandle handle) const {
   }
   content::WebContents* contents = tab->GetContents();
   if (!contents) {
+    return false;
+  }
+  // A peek or an outside link's page is dismissed, not archived: it was never
+  // put anywhere the reader would look for it again.
+  if (IsLoosePage(contents)) {
     return false;
   }
   // Never the tab a switch to that space would land on. The window's own

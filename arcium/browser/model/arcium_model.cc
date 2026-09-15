@@ -10,6 +10,7 @@
 #include <optional>
 
 #include "base/time/time.h"
+#include "url/gurl.h"
 
 namespace arcium {
 
@@ -155,6 +156,9 @@ void ArciumModel::RemoveSpace(SpaceId id) {
   }
   std::erase_if(entries_, [id](const TabEntry& e) { return e.space_id == id; });
   std::erase_if(folders_, [id](const Folder& f) { return f.space_id == id; });
+  // A rule sending a site to a space that is gone would send it nowhere.
+  std::erase_if(routing_rules_,
+                [id](const RoutingRule& r) { return r.space_id == id; });
   std::erase_if(spaces_, [id](const Space& s) { return s.id == id; });
   for (size_t i = 0; i < spaces_.size(); ++i) {
     spaces_[i].position = static_cast<int>(i);
@@ -506,7 +510,8 @@ void ArciumModel::RemoveObserver(Observer* observer) {
 void ArciumModel::ReplaceAll(std::vector<ArciumProfile> profiles,
                              std::vector<Space> spaces,
                              std::vector<Folder> folders,
-                             std::vector<TabEntry> entries) {
+                             std::vector<TabEntry> entries,
+                             std::vector<RoutingRule> routing_rules) {
   profiles_ = std::move(profiles);
   spaces_ = std::move(spaces);
   folders_ = std::move(folders);
@@ -532,9 +537,55 @@ void ArciumModel::ReplaceAll(std::vector<ArciumProfile> profiles,
   if (!GetSpace(last_active_space_)) {
     last_active_space_ = SpaceId();
   }
+  // Kept only for spaces that survived, and one per site: a hand-edited file
+  // listing a site twice keeps the first, as SetRoutingRule would.
+  routing_rules_.clear();
+  for (RoutingRule& rule : routing_rules) {
+    rule.site = NormaliseRuleSite(rule.site);
+    const bool duplicate = std::any_of(
+        routing_rules_.begin(), routing_rules_.end(),
+        [&rule](const RoutingRule& kept) { return kept.site == rule.site; });
+    if (rule.site.empty() || !GetSpace(rule.space_id) || duplicate) {
+      continue;
+    }
+    routing_rules_.push_back(std::move(rule));
+  }
   NormaliseProfiles();
   NormalisePositions();
   Notify();
+}
+
+void ArciumModel::SetRoutingRule(std::string_view site, SpaceId space_id) {
+  const std::string normalised = NormaliseRuleSite(site);
+  if (normalised.empty() || !GetSpace(space_id)) {
+    return;
+  }
+  for (RoutingRule& rule : routing_rules_) {
+    if (rule.site == normalised) {
+      if (rule.space_id == space_id) {
+        return;
+      }
+      rule.space_id = space_id;
+      Notify();
+      return;
+    }
+  }
+  routing_rules_.push_back({normalised, space_id});
+  Notify();
+}
+
+void ArciumModel::RemoveRoutingRule(std::string_view site) {
+  const std::string normalised = NormaliseRuleSite(site);
+  if (std::erase_if(routing_rules_, [&normalised](const RoutingRule& r) {
+        return r.site == normalised;
+      })) {
+    Notify();
+  }
+}
+
+SpaceId ArciumModel::SpaceForUrl(const GURL& url) const {
+  const RoutingRule* rule = BestRuleForUrl(routing_rules_, url);
+  return rule ? rule->space_id : SpaceId();
 }
 
 TabEntry* ArciumModel::FindEntry(EntryId id) {

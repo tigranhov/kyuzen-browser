@@ -15,6 +15,9 @@
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
 
+#include "arcium/browser/model/routing_rule.h"
+#include "url/gurl.h"
+
 namespace arcium {
 
 std::vector<SidebarSpace> SidebarTabModel::spaces() const {
@@ -98,6 +101,36 @@ void SidebarTabModel::MoveEntryToSpace(EntryId id, SpaceId space_id) {
     switcher_->MoveEntryToSpace(id, space_id);
   } else {
     arcium_model_->MoveEntryToSpace(id, space_id);
+  }
+}
+
+bool SidebarTabModel::SiteOpensInActiveSpace(const GURL& url) const {
+  const std::string site = RuleSiteForUrl(url);
+  if (site.empty()) {
+    return false;
+  }
+  for (const RoutingRule& rule : arcium_model_->routing_rules()) {
+    if (rule.site == site) {
+      return rule.space_id == active_space();
+    }
+  }
+  return false;
+}
+
+void SidebarTabModel::SetSiteOpensInActiveSpace(const GURL& url,
+                                                bool opens_here) {
+  const std::string site = RuleSiteForUrl(url);
+  if (site.empty()) {
+    return;
+  }
+  if (opens_here) {
+    arcium_model_->SetRoutingRule(site, active_space());
+    return;
+  }
+  // Only this space's rule: "stop opening it here" is not "stop sending it
+  // to whichever space another window chose".
+  if (SiteOpensInActiveSpace(url)) {
+    arcium_model_->RemoveRoutingRule(site);
   }
 }
 

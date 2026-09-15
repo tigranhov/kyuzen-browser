@@ -94,6 +94,9 @@ class RowContextMenu : public ui::SimpleMenuModel::Delegate {
   // Appends "Move to space", listing every space but the one on screen, which
   // is the one the row is in. Appends nothing when that leaves none.
   void AddMoveToSpaceSubmenu();
+  // Appends "Always open <site> in this space", or "Stop opening" when that
+  // rule exists. Appends nothing for a row whose page is not on the web.
+  void AddRoutingItem();
 
   raw_ptr<SidebarModel> model_;
   SidebarRow row_;

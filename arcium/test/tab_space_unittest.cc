@@ -8,6 +8,7 @@
 #include <string>
 
 #include "arcium/browser/entry_claim.h"
+#include "arcium/browser/loose_page.h"
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/entry_id.h"
@@ -66,6 +67,38 @@ TEST_F(TabSpaceTest, AClaimedTabIsInItsEntrysSpaceWhateverItsTagSays) {
   SetSpaceTag(tab->GetContents(), model_.default_space_id());
   binding_.Bind(id, tab->GetHandle());
   EXPECT_EQ(work, SpaceOfTab(model_, binding_, tab->GetHandle()));
+}
+
+TEST_F(TabSpaceTest, ALoosePageIsInNoSpaceWhateverItsTagSays) {
+  AddTab(browser(), GURL("https://a.example/"));
+  const SpaceId work = model_.AddSpace(u"Work");
+  content::WebContents* contents = strip()->GetTabAtIndex(0)->GetContents();
+  SetSpaceTag(contents, work);
+  SetLoosePageKind(contents, LoosePageKind::kPeek);
+  EXPECT_FALSE(
+      SpaceOfTab(model_, binding_, strip()->GetTabAtIndex(0)->GetHandle())
+          .is_valid());
+}
+
+// Promotion is only clearing the marker: the tag set when the page was made
+// is what puts it in the space whose storage it already uses.
+TEST_F(TabSpaceTest, APromotedLoosePageIsInTheSpaceItWasTaggedWith) {
+  AddTab(browser(), GURL("https://a.example/"));
+  const SpaceId work = model_.AddSpace(u"Work");
+  content::WebContents* contents = strip()->GetTabAtIndex(0)->GetContents();
+  SetSpaceTag(contents, work);
+  SetLoosePageKind(contents, LoosePageKind::kOutsideLink);
+  SetLoosePageKind(contents, LoosePageKind::kNone);
+  EXPECT_FALSE(IsLoosePage(contents));
+  EXPECT_EQ(work, SpaceOfTab(model_, binding_,
+                             strip()->GetTabAtIndex(0)->GetHandle()));
+}
+
+TEST_F(TabSpaceTest, AnUnmarkedTabIsNotLoose) {
+  AddTab(browser(), GURL("https://a.example/"));
+  content::WebContents* contents = strip()->GetTabAtIndex(0)->GetContents();
+  EXPECT_EQ(LoosePageKind::kNone, LoosePageKindOf(contents));
+  EXPECT_FALSE(IsLoosePage(nullptr));
 }
 
 TEST_F(TabSpaceTest, ATabsKeyIsGeneratedOnceAndKept) {

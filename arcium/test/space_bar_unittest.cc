@@ -38,6 +38,7 @@
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/test/views_test_base.h"
 #include "ui/views/widget/widget.h"
+#include "url/gurl.h"
 
 namespace arcium {
 namespace {
@@ -568,6 +569,59 @@ TEST_F(SpaceBarTest, FolderTargetsStopWhereTheSpaceRangeBegins) {
     highest = std::max(highest, folders->GetCommandIdAt(i));
   }
   EXPECT_LT(highest, RowContextMenu::kMoveToSpaceFirst);
+}
+
+// The command id of the item labelled `label`, or -1.
+int CommandFor(ui::MenuModel* menu, const std::u16string& label) {
+  for (size_t i = 0; i < menu->GetItemCount(); ++i) {
+    if (menu->GetLabelAt(i) == label) {
+      return menu->GetCommandIdAt(i);
+    }
+  }
+  return -1;
+}
+
+TEST_F(SpaceBarTest, ARowOnTheWebOffersToAlwaysOpenItsSiteHere) {
+  FakeSidebarModel model;
+  model.AddTab(u"Hub", "https://www.github.com/x", SidebarSection::kToday,
+               true);
+  RowContextMenu menu(&model);
+  menu.BuildForRow(model.rows().front(), base::DoNothing());
+  EXPECT_NE(-1,
+            CommandFor(menu.menu(), u"Always open github.com in this space"));
+  EXPECT_EQ(-1,
+            CommandFor(menu.menu(), u"Stop opening github.com in this space"));
+}
+
+TEST_F(SpaceBarTest, AlwaysOpenMakesTheRuleAndThenOffersToStop) {
+  FakeSidebarModel model;
+  model.AddTab(u"Hub", "https://github.com/", SidebarSection::kPinned, true);
+  RowContextMenu menu(&model);
+  menu.BuildForRow(model.rows().front(), base::DoNothing());
+  const int always =
+      CommandFor(menu.menu(), u"Always open github.com in this space");
+  ASSERT_NE(-1, always);
+  ASSERT_TRUE(menu.IsCommandIdEnabled(always));
+  menu.ExecuteCommand(always, 0);
+  EXPECT_TRUE(model.SiteOpensInActiveSpace(GURL("https://gist.github.com/")));
+
+  menu.BuildForRow(model.rows().front(), base::DoNothing());
+  const int stop =
+      CommandFor(menu.menu(), u"Stop opening github.com in this space");
+  ASSERT_NE(-1, stop);
+  menu.ExecuteCommand(stop, 0);
+  EXPECT_FALSE(model.SiteOpensInActiveSpace(GURL("https://github.com/")));
+}
+
+TEST_F(SpaceBarTest, ARowNotOnTheWebOffersNoRule) {
+  FakeSidebarModel model;
+  model.AddTab(u"Settings", "chrome://settings/", SidebarSection::kFavorites,
+               true);
+  RowContextMenu menu(&model);
+  menu.BuildForRow(model.rows().front(), base::DoNothing());
+  for (size_t i = 0; i < menu.menu()->GetItemCount(); ++i) {
+    EXPECT_FALSE(menu.menu()->GetLabelAt(i).starts_with(u"Always open"));
+  }
 }
 
 }  // namespace

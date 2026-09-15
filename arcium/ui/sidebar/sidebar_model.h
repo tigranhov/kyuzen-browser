@@ -280,6 +280,12 @@ class SidebarModel {
   // Moving the one you are looking at takes you with it, as Zen does.
   virtual void MoveEntryToSpace(EntryId id, SpaceId space_id) = 0;
 
+  // Routing rules, from a row's menu: whether pages on `url`'s site always
+  // open in the space on screen, and making or removing that rule. A URL
+  // that is not a web page has no site, answers false and changes nothing.
+  virtual bool SiteOpensInActiveSpace(const GURL& url) const = 0;
+  virtual void SetSiteOpensInActiveSpace(const GURL& url, bool opens_here) = 0;
+
   // Profile commands. A profile belongs to the whole browser, so every one
   // of these reaches every window, not only this one.
   //

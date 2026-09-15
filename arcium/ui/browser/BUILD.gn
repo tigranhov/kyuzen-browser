@@ -6,8 +6,11 @@ source_set("browser") {
   sources = [
     "archive_service.cc",
     "archive_service.h",
+    "box_commands.cc",
+    "box_commands.h",
     "browser_sidebar_controller.cc",
     "browser_sidebar_controller.h",
+    "browser_sidebar_controller_box.cc",
     "clear_data_warning.cc",
     "clear_data_warning.h",
     "cold_favicon_cache.cc",
@@ -23,8 +26,18 @@ source_set("browser") {
     "hosted_location_bar.h",
     "new_tab_storage.cc",
     "new_tab_storage.h",
+    "outside_link_window.cc",
+    "outside_link_window.h",
+    "outside_links.cc",
+    "outside_links.h",
+    "page_in_space.cc",
+    "page_in_space.h",
     "partition_guard_throttle.cc",
     "partition_guard_throttle.h",
+    "peek_controller.cc",
+    "peek_controller.h",
+    "peek_view.cc",
+    "peek_view.h",
     "profile_actions.cc",
     "profile_actions.h",
     "profile_reopen.cc",
@@ -96,10 +109,18 @@ source_set("browser") {
     "//components/favicon_base",
     "//components/keyed_service/core",
     "//components/omnibox/browser",
+    "//components/search_engines",
     "//components/tabs:public",
     "//components/vector_icons",
     "//content/public/browser",
     "//third_party/metrics_proto",
+
+    # display::Screen, for placing the outside-link window on the screen the
+    # browser window is on.
+    "//ui/display",
     "//ui/views",
+
+    # views::WebView, for the page inside a peek and an outside link's window.
+    "//ui/views/controls/webview",
   ]
 }

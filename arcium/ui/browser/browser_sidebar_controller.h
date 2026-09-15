@@ -37,6 +37,7 @@ class Widget;
 namespace arcium {
 
 class CommandBox;
+class PeekController;
 class SuggestionSource;
 class TabSearchService;
 class SidebarView;
@@ -90,6 +91,10 @@ class BrowserSidebarController : public SidebarModel::Observer,
   // The same, shaped for the callbacks that carry no text.
   void ShowCommandBoxWithNoText();
 
+  // The window's peek, or null when the feature is off. A link that leaves a
+  // pinned entry's home asks this whether it can be shown over the page.
+  PeekController* peek() { return peek_.get(); }
+
   CommandBox* command_box_for_testing() { return command_box_.get(); }
   SuggestionSource* suggestion_source_for_testing() {
     return suggestion_source_.get();
@@ -107,6 +112,9 @@ class BrowserSidebarController : public SidebarModel::Observer,
   explicit BrowserSidebarController(BrowserView* browser_view);
 
   void UpdateContentCorners();
+  // Where the page is drawn, in this window's coordinates. Empty before the
+  // window has a contents container.
+  gfx::Rect PageArea() const;
   void ExecuteCommand(int command_id);
   void UpdateNavButtons();
   void MaybeScheduleSnapshot();
@@ -122,6 +130,8 @@ class BrowserSidebarController : public SidebarModel::Observer,
   void UpdatePillSecurity();
 
   void OnCommandBoxAccepted(SuggestionRow row);
+  // A command row: an IDC_ command, or one of box_commands.h's own.
+  void RunBoxCommand(int command_id);
   void OnCommandBoxClosed(views::Widget::ClosedReason reason);
   void DestroyCommandBox();
   // Switches to an open tab showing `url`, in whatever space holds it.
@@ -148,6 +158,10 @@ class BrowserSidebarController : public SidebarModel::Observer,
   // the destructor clears before this is freed.
   std::unique_ptr<ArchiveService> archive_service_;
   raw_ptr<SidebarView> view_ = nullptr;
+  // Null while the peek feature is off. The destructor resets it before
+  // anything else, because it holds a view in the BrowserView and a page in
+  // the strip and both must still be whole when it lets go of them.
+  std::unique_ptr<PeekController> peek_;
   bool visible_ = true;
   int caption_button_width_ = -1;
   float applied_corner_radius_ = -1.f;

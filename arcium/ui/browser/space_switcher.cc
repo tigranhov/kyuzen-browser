@@ -8,6 +8,7 @@
 #include <map>
 
 #include "arcium/browser/entry_claim.h"
+#include "arcium/browser/loose_page.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/browser/tab_space.h"
@@ -377,6 +378,11 @@ void SpaceSwitcher::OnTabStripModelChanged(
   }
   if (IsInActiveSpace(index)) {
     RecordActiveTab();
+    return;
+  }
+  // A loose page is never meant to be the tab on screen; it is in no space,
+  // so there is none to adopt. Whoever activates one promotes it first.
+  if (IsLoosePage(tab_strip_model_->GetWebContentsAt(index))) {
     return;
   }
   // §4.4: a tab from another space just became active -- most likely the

@@ -5,6 +5,7 @@
 #ifndef ARCIUM_UI_PLAYGROUND_FAKE_SIDEBAR_MODEL_H_
 #define ARCIUM_UI_PLAYGROUND_FAKE_SIDEBAR_MODEL_H_
 
+#include <map>
 #include <optional>
 #include <string>
 #include <utility>
@@ -148,6 +149,8 @@ class FakeSidebarModel : public SidebarModel {
   void DeleteSpace(SpaceId id) override;
   void MoveTabToSpace(int tab_index, SpaceId space_id) override;
   void MoveEntryToSpace(EntryId id, SpaceId space_id) override;
+  bool SiteOpensInActiveSpace(const GURL& url) const override;
+  void SetSiteOpensInActiveSpace(const GURL& url, bool opens_here) override;
   std::vector<SidebarProfile> profiles() const override;
   void CreateProfileForSpace(SpaceId space,
                              const std::u16string& name,
@@ -166,6 +169,10 @@ class FakeSidebarModel : public SidebarModel {
   void RemoveObserver(Observer* observer) override;
 
  private:
+  // Site to space, the one fact ArciumModel's routing rules keep that the
+  // menu can see.
+  std::map<std::string, SpaceId> site_rules_;
+
   // Name, parent, collapsed state and position; the count is derived from the
   // rows on demand, which is what folders() hands the views precomputed.
   // `position` is here because ArciumModel has it and the flattening orders

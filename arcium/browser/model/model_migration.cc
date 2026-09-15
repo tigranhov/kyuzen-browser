@@ -77,10 +77,17 @@ bool MigrateV3ToV4(base::DictValue& dict) {
   return true;
 }
 
+// Version 4 -> 5: the model gained routing rules. A version 4 file had none,
+// and writes the empty list for MigrateV2ToV3's reason.
+bool MigrateV4ToV5(base::DictValue& dict) {
+  dict.Set("routing_rules", base::ListValue());
+  return true;
+}
+
 // Indexed by source version: kSteps[0] takes a version 1 dict to version 2.
 using MigrationStep = bool (*)(base::DictValue&);
 constexpr MigrationStep kSteps[] = {&MigrateV1ToV2, &MigrateV2ToV3,
-                                    &MigrateV3ToV4};
+                                    &MigrateV3ToV4, &MigrateV4ToV5};
 static_assert(
     std::size(kSteps) == static_cast<size_t>(kModelSchemaVersion) - 1,
     "Bumping kModelSchemaVersion needs a step that gets a file there");

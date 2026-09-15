@@ -26,6 +26,16 @@ BASE_DECLARE_FEATURE(kArciumHomeBoundary);
 // background loading for a side-by-side comparison.
 BASE_DECLARE_FEATURE(kArciumNoLoadAtLaunch);
 
+// A link that leaves a pinned or favourite tab's home opens in a peek over the
+// page instead of a new tab (R4.4). Enabled by default;
+// --disable-features=ArciumPeek brings back the new tab.
+BASE_DECLARE_FEATURE(kArciumPeek);
+
+// A link another application hands the running browser opens in a small
+// window of its own, with one button to move it into a space (R4.3). Enabled
+// by default; --disable-features=ArciumOutsideLinkWindow opens a tab instead.
+BASE_DECLARE_FEATURE(kArciumOutsideLinkWindow);
+
 // Command line switch that turns the sidebar off for one run, for debugging.
 inline constexpr char kNoSidebarSwitch[] = "arcium-no-sidebar";
 
@@ -85,6 +95,11 @@ bool IsHomeBoundaryEnabled();
 // True when restored tabs should wait for a click. Off whenever the sidebar
 // is, because a window without it is stock Chromium, restore included.
 bool IsNoLoadAtLaunchEnabled();
+
+// Both off whenever the sidebar is: a window without it has no spaces for a
+// peek to promote into or an outside link to be moved to.
+bool IsPeekEnabled();
+bool IsOutsideLinkWindowEnabled();
 
 // macOS immersive fullscreen moves top chrome into a separate overlay window.
 // Arcium hides the tab strip and toolbar, so that overlay would be zero-sized,

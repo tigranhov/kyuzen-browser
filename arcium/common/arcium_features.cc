@@ -18,6 +18,10 @@ BASE_FEATURE(kArciumHomeBoundary, base::FEATURE_ENABLED_BY_DEFAULT);
 
 BASE_FEATURE(kArciumNoLoadAtLaunch, base::FEATURE_ENABLED_BY_DEFAULT);
 
+BASE_FEATURE(kArciumPeek, base::FEATURE_ENABLED_BY_DEFAULT);
+
+BASE_FEATURE(kArciumOutsideLinkWindow, base::FEATURE_ENABLED_BY_DEFAULT);
+
 base::TimeDelta FakeClockOffset() {
   const base::CommandLine* command_line =
       base::CommandLine::ForCurrentProcess();
@@ -60,6 +64,15 @@ bool IsHomeBoundaryEnabled() {
 bool IsNoLoadAtLaunchEnabled() {
   return IsSidebarEnabled() &&
          base::FeatureList::IsEnabled(kArciumNoLoadAtLaunch);
+}
+
+bool IsPeekEnabled() {
+  return IsSidebarEnabled() && base::FeatureList::IsEnabled(kArciumPeek);
+}
+
+bool IsOutsideLinkWindowEnabled() {
+  return IsSidebarEnabled() &&
+         base::FeatureList::IsEnabled(kArciumOutsideLinkWindow);
 }
 
 }  // namespace arcium::features

@@ -15,7 +15,8 @@ class NavigationThrottleRegistry;
 namespace arcium {
 
 // Keeps a pinned or favourite entry on its home site: a link click to another
-// host opens a new tab instead of navigating the entry away.
+// host opens in a peek over the entry, or in a new tab where no peek can be
+// shown, instead of navigating the entry away.
 //
 // Carries no policy. The rule is arcium::LinkLeavesHome; this class only
 // decides which navigations the rule is asked about, and performs the

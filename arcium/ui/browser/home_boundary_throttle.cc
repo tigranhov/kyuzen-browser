@@ -15,6 +15,7 @@
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/common/arcium_features.h"
+#include "arcium/ui/browser/peek_controller.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/navigation_throttle_registry.h"
@@ -144,6 +145,12 @@ HomeBoundaryThrottle::WillStartRequest() {
   // without a scripting opener -- OpenURLParams carries no scripting-opener
   // field to begin with, so window.opener is null regardless.
   params.frame_tree_node_id = content::FrameTreeNodeId();
+  // A peek over the entry when the window can show one (R4.4), which is where
+  // Zen's Glance sends the same link; a new tab otherwise, as before peeks.
+  if (features::IsPeekEnabled() &&
+      ShowPeekForNavigation(web_contents, params)) {
+    return content::NavigationThrottle::CANCEL_AND_IGNORE;
+  }
   web_contents->OpenURL(std::move(params),
                         /*navigation_handle_callback=*/{});
   return content::NavigationThrottle::CANCEL_AND_IGNORE;

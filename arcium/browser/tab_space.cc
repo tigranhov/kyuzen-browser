@@ -6,6 +6,7 @@
 
 #include <optional>
 
+#include "arcium/browser/loose_page.h"
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/tab_entry.h"
@@ -95,6 +96,13 @@ void CarryTabIdentityTo(content::WebContents* from, content::WebContents* to) {
 SpaceId SpaceOfTab(const ArciumModel& model,
                    const TabBinding& binding,
                    tabs::TabHandle handle) {
+  // A loose page -- a peek, or the page in an outside link's small window --
+  // is in no space until it is promoted, so nothing that walks a space's tabs
+  // draws it, cycles to it or archives it.
+  if (tabs::TabInterface* loose = handle.Get();
+      loose && IsLoosePage(loose->GetContents())) {
+    return SpaceId();
+  }
   // The entry's space first, and not as an optimisation: moving a pin to
   // another space must carry its open tab, and it does exactly because the
   // tab is never asked.

@@ -126,6 +126,15 @@ first run and skipped clean on the second.
 | `0191-gn-settings-arcium.patch` | `chrome/browser/ui/webui/settings/BUILD.gn`, `source_set("impl")` | nothing: GN wiring for 0192 |
 | `0192-clear-data-warning.patch` | `ClearBrowsingDataHandler::HandleClearBrowsingData` in `chrome/browser/ui/webui/settings/settings_clear_browsing_data_handler.cc` | `arcium::AskWhichProfilesToClear` |
 
+Stage 4b adds one, and needs no GN wiring with it: `app_controller_mac.mm` builds in
+`//chrome/browser:core`, the target patch `0145` already gave a dep on `//arcium/ui/browser`.
+Peek needs no patch at all — the home boundary throttle `0150` registers already diverts the
+navigation, and only where it lands changed.
+
+| Patch | Seam | Delegates to |
+|---|---|---|
+| `0220-outside-links-mac.patch` | `-[AppController application:openURLs:]` in `chrome/browser/app_controller_mac.mm`, at the top of the method | `arcium::OpenOutsideLinks` |
+
 ## Monthly rebase routine
 
 1. Find the new stable tag on https://chromiumdash.appspot.com/releases?platform=Mac
