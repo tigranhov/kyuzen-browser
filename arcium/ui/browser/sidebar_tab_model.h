@@ -124,6 +124,8 @@ class SidebarTabModel : public SidebarModel,
   void DeleteSpace(SpaceId id) override;
   void MoveTabToSpace(int tab_index, SpaceId space_id) override;
   void MoveEntryToSpace(EntryId id, SpaceId space_id) override;
+  bool SiteOpensInActiveSpace(const GURL& url) const override;
+  void SetSiteOpensInActiveSpace(const GURL& url, bool opens_here) override;
   std::vector<SidebarProfile> profiles() const override;
   void CreateProfileForSpace(SpaceId space,
                              const std::u16string& name,

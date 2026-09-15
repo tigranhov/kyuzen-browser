@@ -93,6 +93,15 @@ base::DictValue SerializeModel(const ArciumModel& model) {
   }
   dict.Set("spaces", std::move(spaces));
 
+  base::ListValue routing_rules;
+  for (const RoutingRule& rule : model.routing_rules()) {
+    base::DictValue value;
+    value.Set("site", rule.site);
+    value.Set("space_id", rule.space_id.value());
+    routing_rules.Append(std::move(value));
+  }
+  dict.Set("routing_rules", std::move(routing_rules));
+
   base::ListValue folders;
   for (const Folder& folder : model.folders()) {
     base::DictValue value;
@@ -371,8 +380,26 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
     }
   }
 
+  // Checked against the surviving spaces by ReplaceAll, which drops a rule
+  // naming one that is gone rather than sending its site nowhere.
+  std::vector<RoutingRule> routing_rules;
+  if (const base::ListValue* list = dict.FindList("routing_rules")) {
+    for (const base::Value& item : *list) {
+      const base::DictValue* value = item.GetIfDict();
+      if (!value) {
+        continue;
+      }
+      const std::string* site = value->FindString("site");
+      const std::string* space_id = value->FindString("space_id");
+      if (!site || !space_id) {
+        continue;
+      }
+      routing_rules.push_back({*site, SpaceId::FromString(*space_id)});
+    }
+  }
+
   model->ReplaceAll(std::move(profiles), std::move(spaces), std::move(folders),
-                    std::move(entries));
+                    std::move(entries), std::move(routing_rules));
 
   // After ReplaceAll, so the id is checked against the spaces that survived
   // parsing; last_active_space() falls back to the first space on its own

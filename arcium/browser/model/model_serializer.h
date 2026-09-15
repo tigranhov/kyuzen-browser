@@ -24,7 +24,9 @@ class ArciumModel;
 // 4: the model gained `profiles`, and spaces gained `profile_id`. Bumped so a
 //    build without profiles refuses the file rather than saving every space
 //    back onto Default and losing which logins it used.
-inline constexpr int kModelSchemaVersion = 4;
+// 5: the model gained `routing_rules`. Bumped so a build without them refuses
+//    the file rather than dropping every rule on its next save.
+inline constexpr int kModelSchemaVersion = 5;
 
 base::DictValue SerializeModel(const ArciumModel& model);
 

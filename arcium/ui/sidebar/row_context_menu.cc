@@ -4,6 +4,10 @@
 
 #include "arcium/ui/sidebar/row_context_menu.h"
 
+#include "arcium/browser/model/routing_rule.h"
+#include "base/strings/strcat.h"
+#include "base/strings/utf_string_conversions.h"
+
 #include <memory>
 #include <optional>
 #include <utility>
@@ -39,6 +43,10 @@ enum RowCommand {
   kMoveToFolderParent,
   // "Move to space"'s own item. Only there when another space exists.
   kMoveToSpaceParent,
+  // "Always open <site> in this space" and its undo. Only on a row whose page
+  // is on the web.
+  kOpenSiteHere,
+  kStopOpeningSiteHere,
   // Every folder in the "Move to folder" submenu, in folders() order, up to
   // RowContextMenu::kMoveToSpaceFirst, whose range is tested before this one.
   kMoveToFolderFirst = 100,
@@ -106,6 +114,7 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
       menu_->AddItem(kAddToFavorites, u"Add to Favorites");
       menu_->AddItem(kRename, u"Rename");
       AddMoveToSpaceSubmenu();
+      AddRoutingItem();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
       menu_->AddItem(kCloseTab, u"Close");
       break;
@@ -130,6 +139,7 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
       menu_->AddSubMenu(kMoveToFolderParent, u"Move to folder",
                         move_submenu_.get());
       AddMoveToSpaceSubmenu();
+      AddRoutingItem();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
       menu_->AddItem(kUnpin, u"Unpin");
       menu_->AddItem(kCloseTab, u"Close tab");
@@ -137,6 +147,7 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
     case SidebarSection::kFavorites:
       menu_->AddItem(kRename, u"Rename");
       AddMoveToSpaceSubmenu();
+      AddRoutingItem();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
       menu_->AddItem(kRemoveFromFavorites, u"Remove from Favorites");
       menu_->AddItem(kCloseTab, u"Close tab");
@@ -274,6 +285,21 @@ bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
   }
 }
 
+void RowContextMenu::AddRoutingItem() {
+  const std::string site = RuleSiteForUrl(row_.url);
+  if (site.empty()) {
+    return;
+  }
+  const std::u16string name = base::UTF8ToUTF16(site);
+  if (model_->SiteOpensInActiveSpace(row_.url)) {
+    menu_->AddItem(kStopOpeningSiteHere,
+                   base::StrCat({u"Stop opening ", name, u" in this space"}));
+  } else {
+    menu_->AddItem(kOpenSiteHere,
+                   base::StrCat({u"Always open ", name, u" in this space"}));
+  }
+}
+
 void RowContextMenu::ExecuteCommand(int command_id, int event_flags) {
   if (command_id >= kMoveToSpaceFirst) {
     const size_t index = static_cast<size_t>(command_id - kMoveToSpaceFirst);
@@ -315,6 +341,12 @@ void RowContextMenu::ExecuteCommand(int command_id, int event_flags) {
       return;
     case kReturnToPinnedUrl:
       model_->ReturnToPinnedUrl(row_.entry_id);
+      return;
+    case kOpenSiteHere:
+      model_->SetSiteOpensInActiveSpace(row_.url, true);
+      return;
+    case kStopOpeningSiteHere:
+      model_->SetSiteOpensInActiveSpace(row_.url, false);
       return;
     case kNewFolder:
       model_->CreateFolderWithEntry(row_.entry_id, kNewFolderName);

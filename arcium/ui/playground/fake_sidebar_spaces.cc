@@ -13,6 +13,9 @@
 
 #include "arcium/ui/playground/fake_sidebar_model.h"
 
+#include "arcium/browser/model/routing_rule.h"
+#include "url/gurl.h"
+
 namespace arcium {
 
 SpaceId FakeSidebarModel::ActiveSpaceId() const {
@@ -224,6 +227,25 @@ void FakeSidebarModel::MoveEntryToSpace(EntryId id, SpaceId space_id) {
   Reindex();
   if (follows) {
     MarkActiveSpace(space_id);
+  }
+  Notify();
+}
+
+bool FakeSidebarModel::SiteOpensInActiveSpace(const GURL& url) const {
+  const auto it = site_rules_.find(RuleSiteForUrl(url));
+  return it != site_rules_.end() && it->second == ActiveSpaceId();
+}
+
+void FakeSidebarModel::SetSiteOpensInActiveSpace(const GURL& url,
+                                                 bool opens_here) {
+  const std::string site = RuleSiteForUrl(url);
+  if (site.empty()) {
+    return;
+  }
+  if (opens_here) {
+    site_rules_[site] = ActiveSpaceId();
+  } else if (SiteOpensInActiveSpace(url)) {
+    site_rules_.erase(site);
   }
   Notify();
 }

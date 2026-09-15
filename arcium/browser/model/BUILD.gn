@@ -16,6 +16,8 @@ source_set("model") {
     "model_serializer.h",
     "reorder_index.cc",
     "reorder_index.h",
+    "routing_rule.cc",
+    "routing_rule.h",
     "space.h",
     "tab_entry.h",
   ]

@@ -7,10 +7,12 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/folder.h"
+#include "arcium/browser/model/routing_rule.h"
 #include "arcium/browser/model/space.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "base/observer_list.h"
@@ -130,6 +132,20 @@ class ArciumModel {
   const Folder* GetFolder(FolderId id) const;
   const std::vector<Folder>& folders() const { return folders_; }
 
+  // Routing rules: which space pages on a site open in. Every mutation
+  // normalises the site the way it is matched, so "WWW.GitHub.com" and
+  // "github.com" are one rule. A rule for no site or for a space the model
+  // does not have is refused.
+  const std::vector<RoutingRule>& routing_rules() const {
+    return routing_rules_;
+  }
+  // Sets the space `site` opens in, moving the site's rule if it has one.
+  void SetRoutingRule(std::string_view site, SpaceId space_id);
+  void RemoveRoutingRule(std::string_view site);
+  // The space the most specific matching rule names, or an invalid SpaceId
+  // when no rule covers `url`.
+  SpaceId SpaceForUrl(const GURL& url) const;
+
   void AddObserver(Observer* observer);
   void RemoveObserver(Observer* observer);
 
@@ -138,7 +154,8 @@ class ArciumModel {
   void ReplaceAll(std::vector<ArciumProfile> profiles,
                   std::vector<Space> spaces,
                   std::vector<Folder> folders,
-                  std::vector<TabEntry> entries);
+                  std::vector<TabEntry> entries,
+                  std::vector<RoutingRule> routing_rules = {});
 
   // For tests that predate spaces and only ever meant the first one.
   EntryId AddEntryForTesting(EntryKind kind,
@@ -172,6 +189,7 @@ class ArciumModel {
   SpaceId last_active_space_;
   std::vector<Folder> folders_;
   std::vector<TabEntry> entries_;
+  std::vector<RoutingRule> routing_rules_;
   base::ObserverList<Observer> observers_;
 };
 
