@@ -108,6 +108,41 @@ window; an address in the box with and without a rule; and two box commands.
 `gn check` was not run separately: the target builds, which is the thing the
 check was a proxy for.
 
+## What the first pass with a real pointer found
+
+On 2026-09-16 twenty of the acceptance rows were driven against a running
+browser from this machine's own keyboard and pointer: the sidebar-to-page
+edge, the outside-link window in all four of its behaviours, a local file
+declining that window, routing a site to a space and unrouting it, and five
+of the six command rows. All twenty passed, including the two that only a
+real launch can show: the rule survived a quit and relaunch, and the small
+window named the rule's space rather than the space on screen.
+
+Three defects turned up that no row asked about, and all three are fixed with
+tests that fail without the fix:
+
+- **A blank tab read "Untitled".** Switching to a space with nothing open in
+  it lands the window on a tab that has been nowhere, and Chromium's word for
+  a page with no title of its own is the wrong word for that: it describes a
+  page that failed to name itself. The row now reads "New tab", which is what
+  the tab is, decided by the tab having no committed address at all rather
+  than by its title.
+- **The pill was empty on a page that is not a website.** The design says a
+  page with no host shows a short label rather than an empty pill, and the
+  code returned an empty string for every such page -- with a unit test
+  freezing that as though it were the rule. A local file is now named by its
+  file, a page belonging to the browser says `chrome://settings`, and a tab
+  that has gone nowhere says "New tab". `PillDomain` became `PillLabel`,
+  because it no longer answers only with a domain.
+- **Launching the browser while it was already running opened a second
+  window.** One window holding one strip is the shape the sidebar, the spaces
+  and the archive are built on, so a second window is a second copy of all of
+  it. The launch now raises the window that exists and opens any addresses on
+  its command line as tabs in it, routed the same way an address typed into
+  the box is; a private window, an installed web app and another profile are
+  declined and take Chromium's own path. One new patch,
+  `0230-second-launch-one-window.patch`.
+
 ## What is still unverified
 
 - Nothing here is unverified by a test any more. The seven Stage 4a browser

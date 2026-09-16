@@ -4,6 +4,25 @@ Everything below is built into `out/dev` and passes its automated tests. What
 no test can produce is a real click, a link handed over by another
 application, and a judgement about whether a thing looks right.
 
+## What has already been run, 2026-09-16
+
+Twenty of these rows were driven from this machine's own keyboard and
+pointer against a real browser: 1, 2, 11 to 14, 16 to 25, and 27 to 30. All
+passed. Three things wrong that no row asked
+about were found in the same sitting and are fixed, and each is worth a look
+while walking the rest:
+
+- The blank tab a window lands on when it switches to a space with nothing
+  open read "Untitled". It now reads "New tab".
+- The pill was empty on a local file and on a settings page. It now names the
+  file, and says `chrome://settings` for a page belonging to the browser.
+- Launching the browser while it was already running opened a second window.
+  It now raises the window that exists, and an address on that command line
+  opens as a tab in it.
+
+What is left is rows 3 to 10, 15, 26 and 31 to 34, plus the seven Stage 4a
+rows in `scripts/acceptance-4a`.
+
 Start the browser with your own profile:
 
 ```
