@@ -7,7 +7,7 @@
 #include <memory>
 #include <utility>
 
-#include "arcium/ui/sidebar/pill_domain.h"
+#include "arcium/ui/sidebar/pill_label.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "base/functional/bind.h"
@@ -79,8 +79,8 @@ UrlPillView::UrlPillView(Actions actions) : actions_(std::move(actions)) {
 UrlPillView::~UrlPillView() = default;
 
 void UrlPillView::SetUrl(const GURL& url) {
-  domain_ = PillDomain(url);
-  text_->SetText(domain_);
+  label_ = PillLabel(url);
+  text_->SetText(label_);
 }
 
 void UrlPillView::SetConnectionSecure(bool secure) {

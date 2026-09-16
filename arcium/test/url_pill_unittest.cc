@@ -66,7 +66,7 @@ class UrlPillTest : public views::ViewsTestBase {
 TEST_F(UrlPillTest, AtRestItIsTextAndNothingElse) {
   pill_->SetUrl(GURL("https://www.google.com/"));
   pill_->SetConnectionSecure(true);
-  EXPECT_EQ(u"google.com", pill_->domain_for_testing());
+  EXPECT_EQ(u"google.com", pill_->label_for_testing());
   EXPECT_FALSE(pill_->site_button_for_testing()->GetVisible());
   EXPECT_FALSE(pill_->extensions_button_for_testing()->GetVisible());
   EXPECT_FALSE(pill_->copy_button_for_testing()->GetVisible());

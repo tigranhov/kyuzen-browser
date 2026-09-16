@@ -60,7 +60,7 @@ class UrlPillView : public views::View, public views::FocusChangeListener {
   views::View* SetHostedView(std::unique_ptr<views::View> view);
   bool has_hosted_view() const { return hosted_ != nullptr; }
 
-  const std::u16string& domain_for_testing() const { return domain_; }
+  const std::u16string& label_for_testing() const { return label_; }
   views::ImageButton* site_button_for_testing() { return site_; }
   views::ImageButton* extensions_button_for_testing() { return extensions_; }
   views::ImageButton* copy_button_for_testing() { return copy_; }
@@ -99,7 +99,7 @@ class UrlPillView : public views::View, public views::FocusChangeListener {
   raw_ptr<views::ImageButton> extensions_ = nullptr;
   raw_ptr<views::ImageButton> copy_ = nullptr;
   raw_ptr<views::View> hosted_ = nullptr;
-  std::u16string domain_;
+  std::u16string label_;
   bool secure_ = true;
   bool revealed_ = false;
   bool speaking_ = false;

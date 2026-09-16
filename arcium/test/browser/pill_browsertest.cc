@@ -106,10 +106,10 @@ IN_PROC_BROWSER_TEST_F(PillTest, ItSaysWhereYouAre) {
   // The port belongs in the pill -- localhost:3000 and localhost:8080 are two
   // different places -- and the test server picks a fresh one every run, so
   // the expectation is built from the address that was actually served rather
-  // than written out. PillDomainTest.KeepsAPortAndAnAddress is where the rule
+  // than written out. PillLabelTest.KeepsAPortAndAnAddress is where the rule
   // itself is stated.
   EXPECT_EQ(base::UTF8ToUTF16(base::StrCat({url.host(), ":", url.port()})),
-            Pill()->domain_for_testing());
+            Pill()->label_for_testing());
 }
 
 IN_PROC_BROWSER_TEST_F(PillTest, AnInsecurePageWearsItsWarningUnasked) {

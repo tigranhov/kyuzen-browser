@@ -14,7 +14,7 @@
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/space.h"
 #include "arcium/ui/browser/page_in_space.h"
-#include "arcium/ui/sidebar/pill_domain.h"
+#include "arcium/ui/sidebar/pill_label.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/memory/ptr_util.h"
@@ -194,7 +194,7 @@ OutsideLinkWindow::OutsideLinkWindow(Browser* browser,
     : browser_(browser->AsWeakPtr()) {
   Observe(page);
   auto contents = std::make_unique<OutsideLinkContents>(
-      PillDomain(url), base::StrCat({u"Open in ", space_name}),
+      PillLabel(url), base::StrCat({u"Open in ", space_name}),
       base::BindRepeating(&OutsideLinkWindow::OpenInSpace,
                           weak_factory_.GetWeakPtr()),
       base::BindRepeating(&OutsideLinkWindow::Close,
@@ -202,7 +202,7 @@ OutsideLinkWindow::OutsideLinkWindow(Browser* browser,
   OutsideLinkContents* contents_view = contents.get();
 
   delegate_ = std::make_unique<views::WidgetDelegate>();
-  delegate_->SetTitle(PillDomain(url));
+  delegate_->SetTitle(PillLabel(url));
   delegate_->SetCanResize(true);
   delegate_->SetContentsView(std::move(contents));
 
