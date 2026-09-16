@@ -108,6 +108,29 @@ TEST_F(SidebarTabModelTest, RowsFollowTabOrderAndSections) {
   EXPECT_FALSE(rows[0].entry_id.is_valid());
 }
 
+// The blank tab a window lands on when it switches to a space with nothing
+// open in it has been nowhere, so it reads as a new tab. Chromium's own word
+// for a page with no title is "Untitled", which describes a page that failed
+// to name itself rather than a tab that has not been anywhere.
+TEST_F(SidebarTabModelTest, ATabThatHasGoneNowhereReadsAsANewTab) {
+  std::unique_ptr<content::WebContents> blank = content::WebContents::Create(
+      content::WebContents::CreateParams(profile()));
+  strip()->AppendWebContents(std::move(blank), /*foreground=*/true);
+
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  ASSERT_EQ(1u, model->rows().size());
+  EXPECT_EQ(u"New tab", model->rows()[0].title);
+}
+
+// And a page that has been somewhere keeps whatever it calls itself, so the
+// rule above cannot swallow a real title.
+TEST_F(SidebarTabModelTest, APageKeepsItsOwnTitle) {
+  AddTab(browser(), GURL("https://a.example/"));
+  std::unique_ptr<SidebarTabModel> model = MakeModel();
+  ASSERT_EQ(1u, model->rows().size());
+  EXPECT_NE(u"New tab", model->rows()[0].title);
+}
+
 // R2.4 extended: a Today tab can be named, and the name is not persisted --
 // it dies with the tab, because a Today tab is transient and nothing carries
 // a name past its life.

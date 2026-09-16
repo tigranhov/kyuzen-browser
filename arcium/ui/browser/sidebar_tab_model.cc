@@ -38,6 +38,7 @@
 #include "components/tabs/public/tab_alert.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/tabs/public/tab_network_state.h"
+#include "content/public/browser/web_contents.h"
 #include "ui/gfx/image/image.h"
 
 namespace arcium {
@@ -172,6 +173,14 @@ SidebarRow SidebarTabModel::RowForTab(int index,
   // page's own title -- the same precedence a pinned entry's custom title has.
   const auto named = today_titles_.find(tab->GetHandle());
   row.title = named != today_titles_.end() ? named->second : data.title;
+  // A tab that has gone nowhere is a new tab, and says so. Chromium calls a
+  // page with no title of its own "Untitled", which is the right word for a
+  // page and the wrong one for the blank tab a window lands on when it
+  // switches to a space with nothing open in it.
+  if (named == today_titles_.end() && tab->GetContents() &&
+      tab->GetContents()->GetLastCommittedURL().is_empty()) {
+    row.title = u"New tab";
+  }
   row.favicon = data.favicon;
   row.is_active = index == tab_strip_model_->active_index();
   row.is_unloaded = !row.is_active && IsTabUnloaded(tab->GetContents());
