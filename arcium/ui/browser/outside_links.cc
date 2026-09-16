@@ -8,40 +8,16 @@
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/common/arcium_features.h"
 #include "arcium/ui/browser/browser_sidebar_controller.h"
+#include "arcium/ui/browser/last_sidebar_window.h"
 #include "arcium/ui/browser/outside_link_window.h"
 #include "arcium/ui/browser/space_switcher.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
-#include "chrome/browser/ui/browser_window/public/browser_window_interface_iterator.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "url/gurl.h"
 
 namespace arcium {
-
-namespace {
-
-// The window the reader was last in that has a sidebar, because that is the
-// window a link from another application belongs beside and the window whose
-// space "the space on screen" means. Activation order is the right order
-// here for exactly that reason.
-BrowserView* LastActiveSidebarWindow() {
-  BrowserView* found = nullptr;
-  ForEachCurrentBrowserWindowInterfaceOrderedByActivation(
-      [&found](BrowserWindowInterface* window) {
-        BrowserView* browser_view =
-            BrowserView::GetBrowserViewForBrowser(window);
-        if (browser_view && browser_view->arcium_sidebar()) {
-          found = browser_view;
-          return false;
-        }
-        return true;
-      });
-  return found;
-}
-
-}  // namespace
 
 bool OpenOutsideLinks(const std::vector<GURL>& urls) {
   if (!features::IsOutsideLinkWindowEnabled() || urls.empty()) {

@@ -102,6 +102,7 @@ test("arcium_browsertests") {
     "browser/profile_isolation_browsertest.cc",
     "browser/profile_lifecycle_browsertest.cc",
     "browser/profile_restore_browsertest.cc",
+    "browser/second_launch_browsertest.cc",
     "browser/sidebar_tab_model_profiles_browsertest.cc",
     "browser/sidebar_ui_browsertest_base.cc",
     "browser/sidebar_ui_browsertest_base.h",

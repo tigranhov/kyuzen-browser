@@ -1,0 +1,43 @@
+Seam: StartupBrowserCreator::ProcessCommandLineAlreadyRunning in
+      chrome/browser/ui/startup/startup_browser_creator.cc, at the top, before
+      the profile it looks up and the launch that follows.
+Why: launching a browser that is already running opens a second window in
+     Chromium, and Arcium is one window holding one strip -- the shape the
+     sidebar, the spaces and the archive are all built on. The launch now
+     raises the window that exists and opens any addresses on the command
+     line as tabs in it, routed the way an address typed into the box is.
+     Taken here because this is where every already-running launch arrives,
+     whatever started it, and declining is what keeps a private window, an
+     installed web app and another profile on Chromium's own path unchanged.
+     No GN wiring: startup_browser_creator.cc builds in //chrome/browser/ui,
+     which patch 0010 already gave a dep on //arcium/ui/browser.
+Delegates to: arcium::OpenSecondLaunchInExistingWindow
+
+diff --git a/chrome/browser/ui/startup/startup_browser_creator.cc b/chrome/browser/ui/startup/startup_browser_creator.cc
+index b080481bfd..875c4a2583 100644
+--- a/chrome/browser/ui/startup/startup_browser_creator.cc
++++ b/chrome/browser/ui/startup/startup_browser_creator.cc
+@@ -12,6 +12,7 @@
+ #include <utility>
+ 
+ #include "apps/switches.h"
++#include "arcium/ui/browser/second_launch.h"
+ #include "base/command_line.h"
+ #include "base/debug/dump_without_crashing.h"
+ #include "base/feature_list.h"
+@@ -1504,6 +1505,15 @@ void StartupBrowserCreator::ProcessCommandLineAlreadyRunning(
+     return;
+   }
+ 
++  // Arcium: a launch of a browser that is already running raises the window
++  // it already has, and opens any addresses on the command line as tabs in
++  // it. Declines -- and leaves the launch below to open a window -- when no
++  // window has a sidebar yet, or when the command line asks for a window of
++  // its own.
++  if (arcium::OpenSecondLaunchInExistingWindow(command_line, cur_dir)) {
++    return;
++  }
++
+   Profile* profile = nullptr;
+   if (profile_path_info.mode == StartupProfileMode::kBrowserWindow) {
+     ProfileManager* profile_manager = g_browser_process->profile_manager();
