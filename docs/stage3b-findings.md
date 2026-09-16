@@ -218,12 +218,20 @@ in `arcium/ui/browser/profile_actions.cc`, with
 `DeletingAProfileErasesNoStorageOnceTheBrowserIsGoing` covering the rule on
 the one path that can be watched from outside.
 
-The honest state of it: that new test was seen to fail against a build
-without the fix, and nothing else was run. The build tree went stale mid-way
-through -- it served cached objects for a source that had changed -- and the
-twenty consecutive runs of the two delete-a-profile tests that would tell a
-fix from luck were not done. Until they are, this is a diagnosis with a
-patch attached, not a closed defect.
+The honest state of it at the time: that new test was seen to fail against a
+build without the fix, and nothing else was run. The build tree went stale
+mid-way through -- it served cached objects for a source that had changed --
+and the twenty consecutive runs of the two delete-a-profile tests that would
+tell a fix from luck were not done.
+
+**Those runs were done on 2026-09-16, and this defect is closed.** Twenty-six
+consecutive runs of every delete-a-profile and clear-a-profile test, all
+green, with no occurrence of the check anywhere in their output: four runs one
+test at a time, then twenty-two at two jobs, which is the condition under
+which both of these tests crashed on the first attempt before the fix. The
+machine was loaded to a 1-minute average of 101 across them, and load is what
+used to move the rate, so the twenty-two are a harder bar than the twenty
+asked for rather than an easier one.
 
 ## Two things settled this task, neither by reading alone
 
