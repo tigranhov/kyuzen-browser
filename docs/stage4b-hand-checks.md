@@ -25,13 +25,11 @@ were walked twice, because the first walk found the card drawing with no
 dimming and no buttons: the second walk, after that was fixed, saw the page
 behind go grey and pressed the open-as-tab button by eye.
 
-One thing worth the owner's decision turned up in row 26. The box's rows
-answer the keyboard only: the highlight does not follow the pointer and a
-click on a row does nothing, so a row is chosen with Enter or not at all.
-Plain Chromium's own list, checked the same afternoon with
-`--arcium-no-sidebar`, highlights under the pointer and opens on a click. The
-Stage 4a design describes only up, down, Enter and Escape, so this is a gap
-in what was designed rather than a break in what was built.
+One thing turned up in row 26 that no row asked about, and it is fixed: the
+box's rows answered the keyboard only, so the highlight did not follow the
+pointer and a click on a row did nothing. They now mark themselves under the
+pointer and open on a click, with the row Enter would take keeping its own
+stronger mark.
 
 What is left is rows 10 and 15, plus the seven Stage 4a rows in
 `scripts/acceptance-4a`. Both remaining rows need something no agent on this

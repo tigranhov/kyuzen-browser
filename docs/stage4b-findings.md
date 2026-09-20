@@ -157,15 +157,18 @@ by hand. All passed, and one defect was found and fixed:
   out. The peek now paints to a layer of its own and is stacked above the
   rest. A browser test written first fails without the fix.
 
-One thing was found that the design never promised, and it is the owner's
-call rather than a defect: **the box's rows answer the keyboard only.** The
-highlight does not follow the pointer, and a click on a row does nothing, so
-Enter is the only way to take one. Plain Chromium's list, checked the same
-afternoon through `--arcium-no-sidebar`, both highlights under the pointer
-and opens on a click. The Stage 4a design says "Up and down move, Enter
-opens, Escape closes" and says nothing about the mouse, so what was built
-matches what was written; whether that is what the reader expects of a list
-floating over the page is the question to settle.
+One thing was found that the design never promised, and it is now fixed:
+**the box's rows answered the keyboard only.** Nothing happened under the
+pointer and a click on a row did nothing at all, while plain Chromium's list,
+checked the same afternoon through `--arcium-no-sidebar`, both marks the row
+under the pointer and opens it on a click. A row now marks itself under the
+pointer and takes itself when clicked, with the row Enter would take keeping
+the stronger mark, so moving the mouse never quietly changes what Enter
+opens. Writing the test for it turned up a second thing worth keeping: the
+clicked row has to be copied rather than remembered by its number, because
+answers keep arriving while the box is open and every new set renumbers the
+rows, so a posted click would otherwise open whatever had moved into that
+place.
 
 ## What is still unverified
 
