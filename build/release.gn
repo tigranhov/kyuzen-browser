@@ -9,3 +9,11 @@ blink_symbol_level = 0
 v8_symbol_level = 0
 enable_dsyms = true
 enable_stripping = true
+
+# An official build turns on link-time optimisation, which only lld can do,
+# and lld cannot link against the Xcode 27 SDK on this machine: its stub
+# libraries name targets (arm64e.x1-macos) that the bundled lld does not
+# understand, so every link fails before it starts. That is why the shared
+# config chooses Apple's own linker, and it is why a shipping build here goes
+# without LTO. Revisit when the checkout's toolchain catches up with the SDK.
+use_thin_lto = false
