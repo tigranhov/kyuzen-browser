@@ -16,7 +16,7 @@ namespace arcium {
 namespace {
 
 // Reverse-DNS, the shape every platform's custom drag type wants.
-constexpr char kFormatString[] = "org.arcium.sidebar-row";
+constexpr char kFormatString[] = "io.github.tigranhov.yohaku.sidebar-row";
 
 }  // namespace
 

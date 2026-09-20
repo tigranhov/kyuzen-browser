@@ -18,10 +18,10 @@ source "$(dirname "$0")/lib.sh"
 need_src
 
 config="${ARCIUM_CONFIG:-dev}"
-bin="$SRC/out/$config/Arcium.app/Contents/MacOS/Arcium"
+bin="$SRC/out/$config/Yohaku.app/Contents/MacOS/Yohaku"
 [ -x "$bin" ] || die "no binary at $bin; run scripts/build $config"
 
-data="${ARCIUM_ACCEPTANCE_DIR:-$HOME/Library/Application Support/Arcium-acceptance-3b}"
+data="${ARCIUM_ACCEPTANCE_DIR:-$HOME/Library/Application Support/Yohaku-acceptance-3b}"
 port="${ARCIUM_ACCEPTANCE_PORT:-8899}"
 keep=0
 [ "${1:-}" = "--keep" ] && keep=1
