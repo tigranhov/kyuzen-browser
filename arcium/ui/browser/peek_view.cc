@@ -19,6 +19,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
 #include "ui/color/color_id.h"
+#include "ui/compositor/layer.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/canvas.h"
@@ -70,6 +71,13 @@ PeekView::PeekView(Actions actions) : actions_(std::move(actions)) {
       MakeButton(vector_icons::kOpenInNewFlippableIcon, u"Open as tab",
                  base::BindRepeating(&PeekView::Run, base::Unretained(this),
                                      actions_.open_as_tab)));
+  // A layer of its own, because the page this is drawn over has one: a view
+  // without a layer paints into its parent's, which is beneath every layer
+  // inside it. Without this the card shows -- a WebView carries its own
+  // layer -- and everything painted around it does not, leaving a peek with
+  // no dimming and no buttons.
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
   // Reaches here only when the page leaves Escape unhandled, which is Zen's
   // own condition: a page that uses the key keeps it.
   AddAccelerator(ui::Accelerator(ui::VKEY_ESCAPE, ui::EF_NONE));

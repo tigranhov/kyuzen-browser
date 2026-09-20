@@ -25,6 +25,7 @@
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/compositor/layer.h"
 
 namespace arcium {
 
@@ -72,6 +73,12 @@ bool PeekController::Show(content::WebContents* source,
                                             weak_factory_.GetWeakPtr());
   view_ = browser_view_->AddChildView(
       std::make_unique<PeekView>(std::move(actions)));
+  // Above every other layer in the window, which is what "over the page"
+  // means once both sides draw through layers. Added last is not enough on
+  // its own: the window restacks its own children whenever it lays them out.
+  if (ui::Layer* layer = view_->layer(); layer && layer->parent()) {
+    layer->parent()->StackAtTop(layer);
+  }
   view_->SetBoundsRect(page_area_);
   view_->SetPage(page);
   // The page was created hidden and its tab is never the active one, so
