@@ -4,13 +4,12 @@ Everything below is built into `out/dev` and passes its automated tests. What
 no test can produce is a real click, a link handed over by another
 application, and a judgement about whether a thing looks right.
 
-## What has already been run, 2026-09-16
+## What has already been run
 
-Twenty of these rows were driven from this machine's own keyboard and
+**2026-09-16.** Twenty rows were driven from this machine's own keyboard and
 pointer against a real browser: 1, 2, 11 to 14, 16 to 25, and 27 to 30. All
-passed. Three things wrong that no row asked
-about were found in the same sitting and are fixed, and each is worth a look
-while walking the rest:
+passed. Three things wrong that no row asked about were found in the same
+sitting and are fixed, and each is worth a look while walking the rest:
 
 - The blank tab a window lands on when it switches to a space with nothing
   open read "Untitled". It now reads "New tab".
@@ -20,8 +19,24 @@ while walking the rest:
   It now raises the window that exists, and an address on that command line
   opens as a tab in it.
 
-What is left is rows 3 to 10, 15, 26 and 31 to 34, plus the seven Stage 4a
-rows in `scripts/acceptance-4a`.
+**2026-09-20.** The peek rows 3 to 9, the close-a-tab row 26 and the site
+search rows 31 to 34 were driven the same way, and all passed. The peek rows
+were walked twice, because the first walk found the card drawing with no
+dimming and no buttons: the second walk, after that was fixed, saw the page
+behind go grey and pressed the open-as-tab button by eye.
+
+One thing worth the owner's decision turned up in row 26. The box's rows
+answer the keyboard only: the highlight does not follow the pointer and a
+click on a row does nothing, so a row is chosen with Enter or not at all.
+Plain Chromium's own list, checked the same afternoon with
+`--arcium-no-sidebar`, highlights under the pointer and opens on a click. The
+Stage 4a design describes only up, down, Enter and Escape, so this is a gap
+in what was designed rather than a break in what was built.
+
+What is left is rows 10 and 15, plus the seven Stage 4a rows in
+`scripts/acceptance-4a`. Both remaining rows need something no agent on this
+machine can produce: another application handing over a link, and a judgement
+about which window a keystroke should close.
 
 Start the browser with your own profile:
 

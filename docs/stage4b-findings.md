@@ -143,13 +143,39 @@ tests that fail without the fix:
   declined and take Chromium's own path. One new patch,
   `0230-second-launch-one-window.patch`.
 
+## What the second pass found, 2026-09-20
+
+The peek rows, the close-a-tab row and the four site search rows were driven
+by hand. All passed, and one defect was found and fixed:
+
+- **The peek drew its card and nothing else.** The page underneath draws
+  through a compositor layer of its own, and a view without one paints into
+  its parent's layer, which sits beneath every layer inside it. The card
+  showed, because a web view brings its own layer; the dimming around it and
+  the close and open-as-tab buttons beside it did not, so the peek looked
+  like a page that had simply replaced the one behind it, with no visible way
+  out. The peek now paints to a layer of its own and is stacked above the
+  rest. A browser test written first fails without the fix.
+
+One thing was found that the design never promised, and it is the owner's
+call rather than a defect: **the box's rows answer the keyboard only.** The
+highlight does not follow the pointer, and a click on a row does nothing, so
+Enter is the only way to take one. Plain Chromium's list, checked the same
+afternoon through `--arcium-no-sidebar`, both highlights under the pointer
+and opens on a click. The Stage 4a design says "Up and down move, Enter
+opens, Escape closes" and says nothing about the mouse, so what was built
+matches what was written; whether that is what the reader expects of a list
+floating over the page is the question to settle.
+
 ## What is still unverified
 
 - Nothing here is unverified by a test any more. The seven Stage 4a browser
   tests that were red on their first ever run were fixed the same day, two of
   them by fixing the browser rather than the test; see the Stage 4a row in
   `CLAUDE.md`.
-- No acceptance row has been executed by hand and no perf measurement taken.
+- Thirty-two of the thirty-four hand rows are done. What is left is a link
+  clicked in another application, which needs Arcium to be the default
+  browser, and the Cmd+W question below. No perf measurement has been taken.
 - No home-boundary *browser* test existed to update. The home boundary's unit
   tests use `BrowserWithTestWindowTest`, whose window is not a `BrowserView`,
   so `ShowPeekForNavigation` answers false there and their expectation — a new
