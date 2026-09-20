@@ -52,6 +52,9 @@ class CommandBox : public views::BubbleDialogDelegate,
     return rows_[index];
   }
   size_t selected_row_for_testing() const { return selected_; }
+  CommandBoxRow* row_view_for_testing(size_t index) const {
+    return row_views_[index];
+  }
   std::u16string text_for_testing() const;
   size_t selected_length_for_testing() const;
   void SetRowsChangedClosureForTesting(base::RepeatingClosure closure);
@@ -69,7 +72,9 @@ class CommandBox : public views::BubbleDialogDelegate,
   void OnRows(std::vector<SuggestionRow> rows);
   void RebuildRowViews();
   void Move(int delta);
+  void TakeRowAt(size_t index);
   void TakeSelectedRow();
+  void Take(SuggestionRow chosen);
 
   raw_ptr<BrowserView> browser_view_;
   raw_ptr<SuggestionSource> source_;

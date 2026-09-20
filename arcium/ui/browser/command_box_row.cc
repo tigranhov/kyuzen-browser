@@ -9,6 +9,7 @@
 
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/events/event.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/label.h"
@@ -24,7 +25,9 @@ constexpr int kRowHeight = 36;
 constexpr float kRowCornerRadius = 8;
 }  // namespace
 
-CommandBoxRow::CommandBoxRow(const SuggestionRow& row) {
+CommandBoxRow::CommandBoxRow(const SuggestionRow& row,
+                             base::RepeatingClosure on_chosen)
+    : on_chosen_(std::move(on_chosen)) {
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
@@ -68,15 +71,52 @@ void CommandBoxRow::SetSelected(bool selected) {
     return;
   }
   selected_ = selected;
-  OnThemeChanged();
+  UpdateBackground();
 }
 
 void CommandBoxRow::OnThemeChanged() {
   views::View::OnThemeChanged();
-  SetBackground(selected_
-                    ? views::CreateRoundedRectBackground(
-                          kColorArciumRowHoverBackground, kRowCornerRadius)
-                    : nullptr);
+  UpdateBackground();
+}
+
+bool CommandBoxRow::OnMousePressed(const ui::MouseEvent& event) {
+  // Taken, so that the release comes here too: a row that refuses the press
+  // never hears where the click ended.
+  return event.IsOnlyLeftMouseButton();
+}
+
+void CommandBoxRow::OnMouseReleased(const ui::MouseEvent& event) {
+  // Only a release inside the row counts, so a press that the reader drags
+  // away from is a press they changed their mind about.
+  if (event.IsOnlyLeftMouseButton() && HitTestPoint(event.location()) &&
+      on_chosen_) {
+    on_chosen_.Run();
+  }
+}
+
+void CommandBoxRow::OnMouseEntered(const ui::MouseEvent&) {
+  hovered_ = true;
+  UpdateBackground();
+}
+
+void CommandBoxRow::OnMouseExited(const ui::MouseEvent&) {
+  hovered_ = false;
+  UpdateBackground();
+}
+
+void CommandBoxRow::UpdateBackground() {
+  // Two marks, because the pointer and the keyboard can be on different rows
+  // at once: the row Enter would take is the stronger one, and the row under
+  // the pointer is a lighter wash that goes away when the pointer does.
+  if (selected_) {
+    SetBackground(views::CreateRoundedRectBackground(
+        kColorArciumRowActiveBackground, kRowCornerRadius));
+  } else if (hovered_) {
+    SetBackground(views::CreateRoundedRectBackground(
+        kColorArciumRowHoverBackground, kRowCornerRadius));
+  } else {
+    SetBackground(nullptr);
+  }
 }
 
 BEGIN_METADATA(CommandBoxRow)

@@ -6,6 +6,7 @@
 #define ARCIUM_UI_BROWSER_COMMAND_BOX_ROW_H_
 
 #include "arcium/ui/browser/suggestion_source.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
@@ -22,7 +23,8 @@ class CommandBoxRow : public views::View {
   METADATA_HEADER(CommandBoxRow, views::View)
 
  public:
-  explicit CommandBoxRow(const SuggestionRow& row);
+  // Run when the reader clicks this row.
+  CommandBoxRow(const SuggestionRow& row, base::RepeatingClosure on_chosen);
   CommandBoxRow(const CommandBoxRow&) = delete;
   CommandBoxRow& operator=(const CommandBoxRow&) = delete;
   ~CommandBoxRow() override;
@@ -31,9 +33,17 @@ class CommandBoxRow : public views::View {
 
   // views::View:
   void OnThemeChanged() override;
+  bool OnMousePressed(const ui::MouseEvent& event) override;
+  void OnMouseReleased(const ui::MouseEvent& event) override;
+  void OnMouseEntered(const ui::MouseEvent& event) override;
+  void OnMouseExited(const ui::MouseEvent& event) override;
 
  private:
+  void UpdateBackground();
+
+  base::RepeatingClosure on_chosen_;
   bool selected_ = false;
+  bool hovered_ = false;
 };
 
 }  // namespace arcium

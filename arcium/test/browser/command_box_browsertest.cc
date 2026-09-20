@@ -11,6 +11,7 @@
 #include "arcium/test/browser/sidebar_ui_browsertest_base.h"
 #include "arcium/ui/browser/browser_sidebar_controller.h"
 #include "arcium/ui/browser/command_box.h"
+#include "arcium/ui/browser/command_box_row.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser.h"
@@ -22,11 +23,48 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "net/test/embedded_test_server/embedded_test_server.h"
+#include "ui/events/base_event_utils.h"
+#include "ui/events/event.h"
+#include "ui/gfx/geometry/point.h"
+#include "ui/views/background.h"
+#include "ui/views/test/views_test_utils.h"
+#include "ui/views/view.h"
+#include "ui/views/widget/widget.h"
 
 namespace arcium::test {
 namespace {
 
 using CommandBoxTest = SidebarUiTest;
+
+// Put the pointer over the middle of the row at `index`, and optionally
+// click there. The events go into the box's own widget rather than through
+// the platform, because the box is a second top-level window and a press
+// aimed at the browser window never arrives in it on this platform; what is
+// being asked is whether the row answers a press that reaches it.
+void PointAtRow(CommandBox* box, size_t index, bool click) {
+  CommandBoxRow* row = box->row_view_for_testing(index);
+  views::Widget* widget = row->GetWidget();
+  // A row that has not been laid out yet is a rectangle of no size at the
+  // corner, and every click lands somewhere else.
+  views::test::RunScheduledLayout(widget);
+  gfx::Point point = row->GetBoundsInScreen().CenterPoint();
+  views::View::ConvertPointFromScreen(widget->GetRootView(), &point);
+
+  ui::MouseEvent moved(ui::EventType::kMouseMoved, point, point,
+                       ui::EventTimeForNow(), ui::EF_NONE, ui::EF_NONE);
+  widget->OnMouseEvent(&moved);
+  if (!click) {
+    return;
+  }
+  ui::MouseEvent pressed(ui::EventType::kMousePressed, point, point,
+                         ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
+                         ui::EF_LEFT_MOUSE_BUTTON);
+  widget->OnMouseEvent(&pressed);
+  ui::MouseEvent released(ui::EventType::kMouseReleased, point, point,
+                          ui::EventTimeForNow(), ui::EF_LEFT_MOUSE_BUTTON,
+                          ui::EF_LEFT_MOUSE_BUTTON);
+  widget->OnMouseEvent(&released);
+}
 
 IN_PROC_BROWSER_TEST_F(CommandBoxTest, TypingGetsAnswers) {
   ASSERT_TRUE(embedded_test_server()->Start());
@@ -158,6 +196,74 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest,
   EXPECT_FALSE(BrowserView::GetBrowserViewForBrowser(browser())
                    ->GetLocationBarView()
                    ->HasFocus());
+}
+
+// The list answers the pointer as well as the keyboard: a row draws itself
+// under the pointer, and the row Enter would take keeps its own mark, so the
+// reader can see both what moving the mouse away would go back to and what
+// clicking here would do.
+IN_PROC_BROWSER_TEST_F(CommandBoxTest, ThePointerMarksTheRowItIsOver) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL url = embedded_test_server()->GetURL("a.test", "/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
+  WaitForHistory(url);
+
+  OpenBox();
+  Type(u"a.test");
+  WaitForRows();
+  ASSERT_GT(Box()->row_count_for_testing(), 1u);
+  ASSERT_TRUE(Box()->row_view_for_testing(0)->GetBackground())
+      << "the row Enter would take draws nothing";
+  ASSERT_FALSE(Box()->row_view_for_testing(1)->GetBackground());
+
+  // Asked of the box each time rather than through kept pointers, and with
+  // no run loop in between: answers arrive while the box is open, and every
+  // new set throws the row views away and builds them again.
+  PointAtRow(Box(), 1, /*click=*/false);
+
+  EXPECT_TRUE(Box()->row_view_for_testing(1)->GetBackground())
+      << "nothing happens under the pointer, so a row cannot be found by eye";
+  EXPECT_TRUE(Box()->row_view_for_testing(0)->GetBackground());
+  EXPECT_EQ(0u, Box()->selected_row_for_testing())
+      << "moving the mouse changed what Enter would open";
+}
+
+// And a click takes the row it landed on, not the one Enter would have taken.
+IN_PROC_BROWSER_TEST_F(CommandBoxTest, AClickTakesTheRowItLandsOn) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL first_url =
+      embedded_test_server()->GetURL("a.test", "/title1.html");
+  const GURL second_url =
+      embedded_test_server()->GetURL("a.test", "/title2.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), first_url));
+  WaitForHistory(first_url);
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), second_url));
+  WaitForHistory(second_url);
+  // Away again, so that neither page is a tab the reader already has: such a
+  // row switches to the tab instead of opening one, and this test counts
+  // tabs.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("away.test", "/title3.html")));
+  const int tabs_before = browser()->tab_strip_model()->count();
+
+  OpenBox();
+  Type(u"a.test");
+  WaitForRows();
+  ASSERT_GT(Box()->row_count_for_testing(), 1u);
+  const GURL wanted = Box()->row_for_testing(1).destination;
+  ASSERT_TRUE(wanted.is_valid());
+  ASSERT_NE(Box()->row_for_testing(0).destination, wanted)
+      << "the two rows go to the same place, so this proves nothing";
+
+  PointAtRow(Box(), 1, /*click=*/true);
+  RunLoopUntilIdle();
+
+  EXPECT_FALSE(Box()) << "the click did nothing at all";
+  ASSERT_EQ(tabs_before + 1, browser()->tab_strip_model()->count());
+  EXPECT_EQ(
+      wanted,
+      browser()->tab_strip_model()->GetActiveWebContents()->GetVisibleURL())
+      << "the click opened the selected row rather than the one under it";
 }
 
 }  // namespace

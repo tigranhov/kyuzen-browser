@@ -10,6 +10,8 @@
 
 #include "arcium/ui/browser/command_box_row.h"
 #include "base/functional/bind.h"
+#include "base/location.h"
+#include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
@@ -116,8 +118,9 @@ void CommandBox::RebuildRowViews() {
   row_views_.clear();
   row_container_->RemoveAllChildViews();
   for (size_t i = 0; i < rows_.size(); ++i) {
-    auto* view =
-        row_container_->AddChildView(std::make_unique<CommandBoxRow>(rows_[i]));
+    auto* view = row_container_->AddChildView(std::make_unique<CommandBoxRow>(
+        rows_[i], base::BindRepeating(&CommandBox::TakeRowAt,
+                                      weak_factory_.GetWeakPtr(), i)));
     view->SetSelected(i == selected_);
     row_views_.push_back(view);
   }
@@ -133,6 +136,21 @@ void CommandBox::Move(int delta) {
   for (size_t i = 0; i < row_views_.size(); ++i) {
     row_views_[i]->SetSelected(i == selected_);
   }
+}
+
+void CommandBox::TakeRowAt(size_t index) {
+  if (index >= rows_.size()) {
+    return;
+  }
+  // The row is copied here and not looked up again later, because answers
+  // keep arriving while the box is open and a new set renumbers the rows: a
+  // click would then take whatever had moved into that place. Posted,
+  // because taking a row closes this box and hands the page to the window
+  // while the row view that was clicked is still on the stack handling its
+  // own mouse release.
+  base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+      FROM_HERE, base::BindOnce(&CommandBox::Take, weak_factory_.GetWeakPtr(),
+                                rows_[index]));
 }
 
 void CommandBox::TakeSelectedRow() {
@@ -158,6 +176,10 @@ void CommandBox::TakeSelectedRow() {
     chosen.destination = match.destination_url;
     chosen.title = text;
   }
+  Take(std::move(chosen));
+}
+
+void CommandBox::Take(SuggestionRow chosen) {
   GetWidget()->Close();
   if (on_open_) {
     std::move(on_open_).Run(std::move(chosen));
