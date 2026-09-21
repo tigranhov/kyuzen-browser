@@ -1,0 +1,44 @@
+# Copyright 2026 The Kyuzen Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# The product's own version, read from KYUZEN_VERSION rather than written
+# here, so that making a release changes one line in one file and everything
+# that has to agree -- the About page, the application bundle and the entry an
+# updater compares -- reads it from the same place.
+
+_lines = read_file("//arcium/KYUZEN_VERSION", "list lines")
+
+kyuzen_product_version = ""
+kyuzen_build_number = ""
+
+foreach(_line, _lines) {
+  # Emptied first because GN refuses to replace one non-empty list with
+  # another, and this one is rebuilt on every line.
+  _pair = []
+  _pair = string_split(_line, "=")
+  if (_pair[0] == "VERSION") {
+    kyuzen_product_version = _pair[1]
+  } else if (_pair[0] == "BUILD") {
+    kyuzen_build_number = _pair[1]
+  }
+}
+
+assert(kyuzen_product_version != "", "KYUZEN_VERSION has no VERSION line")
+assert(kyuzen_build_number != "", "KYUZEN_VERSION has no BUILD line")
+
+# Split for the application bundle, whose two version keys are built from four
+# numbers. The bundle's own version -- the one an update compares, and the one
+# macOS requires to keep increasing -- is made of the last two, so the build
+# number goes third, where it never resets, and the product's patch number
+# goes last. That is the same shape Chromium's own version has.
+_parts = string_split(kyuzen_product_version, ".")
+assert(_parts[0] != "" && _parts[1] != "" && _parts[2] != "",
+       "KYUZEN_VERSION's VERSION must be major.minor.patch")
+
+kyuzen_version_overrides = [
+  "MAJOR=" + _parts[0],
+  "MINOR=" + _parts[1],
+  "BUILD=" + kyuzen_build_number,
+  "PATCH=" + _parts[2],
+]

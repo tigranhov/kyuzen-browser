@@ -1,9 +1,17 @@
+import("//arcium/kyuzen_version.gni")
+
 source_set("common") {
   sources = [
     "arcium_features.cc",
     "arcium_features.h",
     "branding_hooks.cc",
     "branding_hooks.h",
+    "product_version.cc",
+    "product_version.h",
+  ]
+  defines = [
+    "KYUZEN_PRODUCT_VERSION=\"$kyuzen_product_version\"",
+    "KYUZEN_BUILD_NUMBER=$kyuzen_build_number",
   ]
   deps = [ "//base" ]
 }
