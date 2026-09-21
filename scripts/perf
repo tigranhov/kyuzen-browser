@@ -12,7 +12,7 @@ CHROMIUM_ROOT = pathlib.Path(os.environ.get("CHROMIUM_ROOT", "/Volumes/Texternal
 
 
 def app_path(config):
-    return CHROMIUM_ROOT / "src" / "out" / config / "Yohaku.app"
+    return CHROMIUM_ROOT / "src" / "out" / config / "Kyuzen.app"
 
 
 def processes(app):

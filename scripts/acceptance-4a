@@ -23,10 +23,10 @@ source "$(dirname "$0")/lib.sh"
 need_src
 
 config="${ARCIUM_CONFIG:-dev}"
-bin="$SRC/out/$config/Yohaku.app/Contents/MacOS/Yohaku"
+bin="$SRC/out/$config/Kyuzen.app/Contents/MacOS/Kyuzen"
 [ -x "$bin" ] || die "no binary at $bin; run scripts/build $config"
 
-data="${ARCIUM_ACCEPTANCE_DIR:-$HOME/Library/Application Support/Yohaku-acceptance-4a}"
+data="${ARCIUM_ACCEPTANCE_DIR:-$HOME/Library/Application Support/Kyuzen-acceptance-4a}"
 port="${ARCIUM_ACCEPTANCE_PORT:-8901}"
 keep=0
 [ "${1:-}" = "--keep" ] && keep=1

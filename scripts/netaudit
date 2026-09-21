@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Run Yohaku with a fresh profile for N seconds (default 60), record a net-log, list contacted hosts,
+# Run Kyuzen with a fresh profile for N seconds (default 60), record a net-log, list contacted hosts,
 # and diff against docs/netaudit-allowlist.txt. Exit code 1 if unexpected hosts were contacted.
 source "$(dirname "$0")/lib.sh"
 need_src
 seconds="${1:-60}"
 config="${ARCIUM_CONFIG:-dev}"
-bin="$SRC/out/$config/Yohaku.app/Contents/MacOS/Yohaku"
+bin="$SRC/out/$config/Kyuzen.app/Contents/MacOS/Kyuzen"
 [ -x "$bin" ] || die "no binary at $bin"
 
 work="$(mktemp -d /tmp/arcium-netaudit.XXXXXX)"
@@ -15,7 +15,7 @@ log "running $seconds s with fresh profile; net-log at $netlog"
   --log-net-log="$netlog" --net-log-capture-mode=Default "about:blank" >/dev/null 2>&1 &
 pid=$!
 sleep "$seconds"
-osascript -e 'tell application "Yohaku" to quit' >/dev/null 2>&1 || kill "$pid"
+osascript -e 'tell application "Kyuzen" to quit' >/dev/null 2>&1 || kill "$pid"
 for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
 
 # Extract hosts with a regex so a truncated log still parses.
