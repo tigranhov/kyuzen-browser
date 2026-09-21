@@ -9,3 +9,5 @@ out/
 docs/perf/raw/
 __pycache__/
 .superpowers/
+# fetched by scripts/fetch-sparkle, not committed
+/arcium/third_party/sparkle/

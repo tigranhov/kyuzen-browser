@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# Put the update framework where the build expects it, at one pinned version.
+#
+# The framework is not committed: it is 30 MB of somebody else's binary, and a
+# repository is a poor place to keep one. It is fetched instead, and refused
+# unless it hashes to exactly what was published, because this is the code
+# that will later be allowed to replace the application on disk.
+source "$(dirname "$0")/lib.sh"
+
+VERSION="2.10.0"
+SHA256="c2bf58aa8387266ac179357b1415d6f2635f044da8be41042af32425dae6da0c"
+URL="https://github.com/sparkle-project/Sparkle/releases/download/$VERSION/Sparkle-$VERSION.tar.xz"
+
+dest="$ARCIUM_ROOT/arcium/third_party/sparkle"
+stamp="$dest/VERSION"
+
+if [ -d "$dest/Sparkle.framework" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$VERSION" ]; then
+  exit 0
+fi
+
+log "fetching Sparkle $VERSION"
+# Unpacked in a directory of its own and moved into place only once it has
+# been checked, so a refusal never leaves half a framework behind for the
+# build to find and use.
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+
+archive="$work/sparkle.tar.xz"
+curl --fail --location --silent --show-error --output "$archive" "$URL" ||
+  die "could not download $URL"
+
+actual="$(shasum -a 256 "$archive" | cut -d' ' -f1)"
+[ "$actual" = "$SHA256" ] ||
+  die "Sparkle $VERSION hashes to $actual, expected $SHA256; refusing it"
+
+mkdir -p "$work/unpacked"
+tar -xJf "$archive" -C "$work/unpacked"
+[ -d "$work/unpacked/Sparkle.framework" ] ||
+  die "the archive holds no Sparkle.framework"
+
+rm -rf "$dest"
+mkdir -p "$(dirname "$dest")"
+mv "$work/unpacked" "$dest"
+printf '%s\n' "$VERSION" > "$stamp"
+log "Sparkle $VERSION is in arcium/third_party/sparkle"

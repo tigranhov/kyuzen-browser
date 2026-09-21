@@ -9,5 +9,6 @@ actual="$(git -C "$SRC" describe --tags --exact-match 2>/dev/null || echo none)"
 
 ensure_symlinks
 check_deps
+"$ARCIUM_ROOT/scripts/fetch-sparkle"
 apply_patches
 log "sync complete"
