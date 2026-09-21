@@ -1,0 +1,30 @@
+Seam: chrome/app/app-Info.plist, the outer application's property list, beside
+      the keys that already carry the bundle identifier and the short name.
+Why: the folder under ~/Library/Application Support that holds a profile is
+     named by the CrProductDirName key in the outer bundle, and with the key
+     absent an unbranded build falls back to the literal name "Chromium" --
+     so this browser stored everything a reader does in a folder any other
+     Chromium build on the machine reads and writes too. Chromium writes the
+     key during packaging rather than at build time, which is no help to a
+     build that is run straight out of the output directory, and it is a
+     branding fact rather than a packaging one. Taken here because this is
+     the only file the key can live in: the code reads it from the outer
+     application, and the value comes from the same branding variable that
+     already names the app.
+Delegates to: nothing. This patch carries no call -- it is a branding value
+     substituted by GN, of the same kind as the bundle identifier two keys
+     above it.
+
+diff --git a/chrome/app/app-Info.plist b/chrome/app/app-Info.plist
+index 6fada0a2b1..9422e3b563 100644
+--- a/chrome/app/app-Info.plist
++++ b/chrome/app/app-Info.plist
+@@ -161,6 +161,8 @@
+ 	<string>APPL</string>
+ 	<key>CFBundleSignature</key>
+ 	<string>${CHROMIUM_CREATOR}</string>
++	<key>CrProductDirName</key>
++	<string>${CHROMIUM_SHORT_NAME}</string>
+ 	<key>NSAppleScriptEnabled</key>
+ 	<true/>
+ 	<key>OSAScriptingDefinition</key>
