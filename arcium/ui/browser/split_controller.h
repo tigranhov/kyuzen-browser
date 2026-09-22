@@ -131,11 +131,12 @@ class SplitController : public TabStripModelObserver,
   bool reforming_ = false;
   bool reform_scheduled_ = false;
 
-  base::WeakPtrFactory<SplitController> weak_factory_{this};
   // The tab that was on screen before the one that is. A handle, because the
   // tab it names can be closed or moved between one activation and the next,
   // and a handle reads as null rather than as somebody else.
   tabs::TabHandle previously_active_;
+
+  base::WeakPtrFactory<SplitController> weak_factory_{this};
 };
 
 }  // namespace arcium

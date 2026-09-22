@@ -262,6 +262,11 @@ class SidebarViewsTest : public views::ViewsTestBase {
   std::vector<std::string> ChildClasses() const {
     std::vector<std::string> names;
     for (const views::View* child : list_->children()) {
+      // The split bracket is a child for painting only: it is never a row
+      // and never takes a place in the order these tests are about.
+      if (child == list_->split_bracket_for_testing()) {
+        continue;
+      }
       names.push_back(std::string(child->GetClassName()));
     }
     return names;

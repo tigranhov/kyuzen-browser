@@ -150,7 +150,7 @@ TEST(RoutingRuleMigrationTest, AVersionFourFileGainsAnEmptyRuleList) {
   std::optional<base::DictValue> migrated = MigrateModelDict(std::move(dict));
 
   ASSERT_TRUE(migrated.has_value());
-  EXPECT_EQ(5, migrated->FindInt("version"));
+  EXPECT_EQ(kModelSchemaVersion, migrated->FindInt("version"));
   const base::ListValue* rules = migrated->FindList("routing_rules");
   ASSERT_TRUE(rules);
   EXPECT_TRUE(rules->empty());
