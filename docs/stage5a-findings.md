@@ -6,17 +6,15 @@ Plan: `docs/superpowers/plans/2026-09-22-stage-5a-split-view.md`. Hand rows:
 
 ## Where this stage stands
 
-**Written, not built.** Every line of it was written against headers and
-implementations read in the Chromium checkout, in one pass, with no compile
-and no test run — the machine was in use for the whole of it and the owner
-asked that nothing be run until they said otherwise. Nothing here is verified.
-The count of tests below is a count of tests written; none has been watched to
-fail, and none has been watched to pass. Read every claim in this file as "the
-code says", not "the browser does".
+**Built and green, hand rows not walked.** The stage was written in one pass
+against headers read in the Chromium checkout, with no compile and no test run,
+because the machine was in use. It was built and run for the first time on
+2026-09-22, once the owner said the machine was free. The first build and run
+found seven more things, listed below, and all seven are fixed. 741 unit tests
+pass, and all 87 browser tests passed in one sitting three times running, two
+of those runs needing a retry each (see the section on flakes).
 
-What is owed before this stage can be called done: build `arcium_unittests`
-and `arcium_browsertests`, run both, walk the ten hand rows, and measure with
-`scripts/perf --label stage5a`.
+What is still owed: the ten hand rows in `docs/stage5a-hand-checks.md`.
 
 ## What Chromium already had
 
@@ -121,14 +119,51 @@ a fifth of the same kind would not have been caught.
    exists and would have failed on it, which is the point: nothing here has
    been run.
 
-## Tests written
+## Seven things found by the first build and run
 
-Counted, not run. 15 in `split_controller_unittest.cc`, 9 in
-`split_rows_unittest.cc`, 6 in `split_view_browsertest.cc`, plus additions to
-`box_commands_unittest.cc`, `sidebar_views_unittest.cc` (two new, five
-existing menu expectations updated because the menu gained a row) and
-`command_box_browsertest.cc` (three), and four serialiser tests and one
-migration test for the new schema version.
+Two stopped the build, one was a product defect a hand pass would have hit,
+and four were defects in the tests.
+
+1. **The page drop target did not compile.** It used four types it never
+   included: the compositor layer, the layer tree owner, the drag operation
+   and `base::NullCallback`. Reading headers checks that a function exists,
+   not that the file including it can see it (`9079948`).
+2. **The controller's weak pointer factory was not its last member**, which
+   Chromium's style check flags because a factory destroyed after the members
+   it guards can hand out a pointer into a half-destroyed object (`9079948`).
+3. **The box's split question was overwritten by late answers.** Taking
+   "Split the screen" lists the tabs you could split with, but the ordinary
+   suggestions for "split" were still arriving -- Chromium's slower providers
+   answer last -- and each late batch replaced the tabs on offer, so Enter took
+   a history row instead of a tab. The box now ignores its source while it
+   asks, and stops the source when the question opens. Both box split tests
+   failed on this in the first run (`798266f`).
+4. **The version 4 migration test pinned the result to version 5**, and this
+   stage made the current version 6. It now compares against the current
+   version, as the other migration tests do (`9079948`).
+5. **Six folder tests counted the split bracket as a row.** The bracket is a
+   hidden child of the tab list, kept last and outside layout. Nothing in the
+   product walks those children, so the test helper skips the bracket rather
+   than the list dropping it (`9079948`).
+6. **Both relaunch tests compared whole addresses**, and the test server takes
+   a new port on every launch. The split had come back correctly in both --
+   including in the space the window was not showing, with the window left
+   where it was -- so they now compare host and query (`798266f`).
+7. **The window drag test's full-screen case never went full screen.** It was
+   written earlier the same day, outside this stage, and waited for a real
+   macOS full-screen animation, which the system finishes only for a window
+   it has in front; the wait timed out whether the test ran alone or in the
+   suite. It now fakes the transition with `ScopedFakeNSWindowFullscreen`, as
+   Chromium's own full-screen tests do (`f3170c8`).
+
+## Tests
+
+15 in `split_controller_unittest.cc`, 9 in `split_rows_unittest.cc`, 6 in
+`split_view_browsertest.cc`, plus additions to `box_commands_unittest.cc`,
+`sidebar_views_unittest.cc` (two new, five existing menu expectations updated
+because the menu gained a row) and `command_box_browsertest.cc` (three), and
+four serialiser tests and one migration test for the new schema version. All
+pass.
 
 The browser tests cover a split ending when one half leaves its space, a
 split surviving a quit, a split coming back in a space the window is not
@@ -138,10 +173,32 @@ with that space's storage.
 Two of them carry their own control, because what they assert is mostly that
 nothing happened. The space-move test asks that the moved tab is in the other
 space, which is what the move was for. The relaunch-into-another-space test
-asks that the window is still in the space it was quit in — re-forming has to
+asks that the window is still in the space it was quit in -- re-forming has to
 activate one of the split's two tabs, and every other assertion in it would
 read the same on a browser that had simply been dragged into the other space
-and left there.
+and left there. That control passed in the first run, before the port fix,
+which is how the relaunch half is known to have worked from the start.
+
+Watched to fail: the two box split tests (before the late-answers fix), the
+two relaunch tests (on the port, with everything else in them passing), and
+the full-screen test. The controller's constructor defect from the writing
+pass was fixed before anything was built, so the keyboard test was never seen
+to fail on it.
+
+## Flakes
+
+Two runs out of three needed one retry each, and the tests involved differ.
+
+- **Two of the box's split tests** found the box closed straight after Enter
+  in the first run of the suite, in its first batch, when ten browsers start at
+  once and every test took 14 s instead of 5. Taking "split" closes the box
+  for three reasons only: the top row was not the command, no tab could share
+  the screen, or the box lost focus, which closes it by design. The tests now
+  print all three if it happens again (`be48a98`). Twenty-four parallel runs of
+  the three tests and two more full runs did not bring it back, so the cause
+  is not known.
+- **`PillTest.APermissionRequestStillHasSomewhereToAppear`** timed out once
+  and passed on retry. It is Stage 4a's and nothing here touches it.
 
 ## Deviation
 
@@ -154,10 +211,7 @@ flag if they are ever built.
 
 ## Owed
 
-- Build and run: `arcium_unittests` and `arcium_browsertests`. Nothing in this
-  stage has been compiled.
 - The ten hand rows in `docs/stage5a-hand-checks.md`.
-- `scripts/perf --label stage5a`, recorded in `docs/perf/`.
 - One risk with no test: `AddToNewSplit` reorders the strip so the two tabs
   are contiguous, which moves a Today row in the sidebar. The design accepts
   this and no test freezes the resulting order, because that order is

@@ -27,7 +27,7 @@ def processes(app):
 
 def one_run(app, idle):
     profile = tempfile.mkdtemp(prefix="arcium-perf-")
-    binary = app / "Contents" / "MacOS" / "Arcium"
+    binary = app / "Contents" / "MacOS" / "Kyuzen"
     start = time.monotonic()
     # --remote-debugging-port=0 makes Chromium pick a free port and write it to
     # <profile>/DevToolsActivePort once the browser is serving, so no fixed port can collide.
@@ -51,8 +51,9 @@ def one_run(app, idle):
     time.sleep(idle)
     rows = processes(app)
     rss_mb = round(sum(r for _, r in rows) / 1024)
-    subprocess.run(["osascript", "-e", 'tell application "Arcium" to quit'],
-                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    # The process this run started, and nothing else: quitting by application
+    # name would also quit an installed copy the owner has open.
+    proc.terminate()
     try:
         proc.wait(timeout=30)
     except subprocess.TimeoutExpired:
