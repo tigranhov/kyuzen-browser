@@ -7,11 +7,15 @@
 // it leaves the page exactly where it was.
 
 #include <optional>
+#include <string>
 
 #include "arcium/test/browser/sidebar_ui_browsertest_base.h"
+#include "arcium/ui/browser/box_commands.h"
 #include "arcium/ui/browser/browser_sidebar_controller.h"
 #include "arcium/ui/browser/command_box.h"
 #include "arcium/ui/browser/command_box_row.h"
+#include "arcium/ui/browser/split_controller.h"
+#include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/ui/browser.h"
@@ -35,6 +39,27 @@ namespace arcium::test {
 namespace {
 
 using CommandBoxTest = SidebarUiTest;
+
+// The three things that decide whether taking "split" asks which tab or
+// closes the box, read before Enter: a box that closes anyway then says
+// which of them it was. The box closes itself when it loses focus, and a
+// suite starting ten browsers at once can take focus from it.
+std::string SplitQuestionState(Browser* browser, CommandBox* box) {
+  const bool top_is_split = box->row_count_for_testing() > 0 &&
+                            box->row_for_testing(0).command_id ==
+                                std::optional<int>(kBoxCommandSplit);
+  SplitController* split =
+      BrowserView::GetBrowserViewForBrowser(browser)->arcium_sidebar()->split();
+  TabStripModel* strip = browser->tab_strip_model();
+  bool a_partner = false;
+  for (int i = 0; i < strip->count(); ++i) {
+    a_partner = a_partner || split->CanSplit(strip->active_index(), i);
+  }
+  return base::StrCat(
+      {"top row is split: ", top_is_split ? "yes" : "no",
+       "; a partner exists: ", a_partner ? "yes" : "no",
+       "; the box has focus: ", box->GetWidget()->IsActive() ? "yes" : "no"});
+}
 
 // Put the pointer over the middle of the row at `index`, and optionally
 // click there. The events go into the box's own widget rather than through
@@ -130,9 +155,11 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, TakingSplitAsksWhichTab) {
   OpenBox();
   Type(u"split");
   WaitForRows();
+  const std::string before = SplitQuestionState(browser(), Box());
   PressEnter();
 
-  ASSERT_TRUE(Box()) << "the box closed instead of asking which tab";
+  ASSERT_TRUE(Box()) << "the box closed instead of asking which tab; "
+                     << before;
   EXPECT_EQ(CommandBox::Mode::kSplitPartner, Box()->mode_for_testing());
   EXPECT_EQ(u"", Box()->text_for_testing());
   ASSERT_GT(Box()->row_count_for_testing(), 0u);
@@ -153,8 +180,9 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest,
   OpenBox();
   Type(u"split");
   WaitForRows();
+  const std::string before = SplitQuestionState(browser(), Box());
   PressEnter();
-  ASSERT_TRUE(Box());
+  ASSERT_TRUE(Box()) << before;
   PressEnter();
 
   EXPECT_FALSE(Box());
@@ -177,8 +205,9 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, EscapeLeavesTheQuestionBeforeTheBox) {
   OpenBox();
   Type(u"split");
   WaitForRows();
+  const std::string before = SplitQuestionState(browser(), Box());
   PressEnter();
-  ASSERT_TRUE(Box());
+  ASSERT_TRUE(Box()) << before;
 
   PressEscape();
   ASSERT_TRUE(Box()) << "the first Escape closed the box";
