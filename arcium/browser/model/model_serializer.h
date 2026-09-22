@@ -26,7 +26,7 @@ class ArciumModel;
 //    back onto Default and losing which logins it used.
 // 5: the model gained `routing_rules`. Bumped so a build without them refuses
 //    the file rather than dropping every rule on its next save.
-inline constexpr int kModelSchemaVersion = 5;
+inline constexpr int kModelSchemaVersion = 6;
 
 base::DictValue SerializeModel(const ArciumModel& model);
 

@@ -49,6 +49,27 @@ TEST(ModelMigrationTest, AVersionOneFileComesBackAtTheCurrentVersion) {
   EXPECT_TRUE(migrated->FindList("folders"));
 }
 
+TEST(ModelMigrationTest, AVersionFiveSpaceComesBackSharingNoScreen) {
+  // Version 6 let a space record two of its tabs sharing the screen. A file
+  // written before that records none, and an absent key is what that means.
+  base::DictValue dict = DictAtVersion(5);
+  base::DictValue space;
+  space.Set("id", SpaceId::Generate().value());
+  space.Set("name", "Space");
+  base::ListValue spaces;
+  spaces.Append(std::move(space));
+  dict.Set("spaces", std::move(spaces));
+
+  std::optional<base::DictValue> migrated = MigrateModelDict(std::move(dict));
+
+  ASSERT_TRUE(migrated.has_value());
+  EXPECT_EQ(kModelSchemaVersion, migrated->FindInt("version"));
+  const base::ListValue* list = migrated->FindList("spaces");
+  ASSERT_TRUE(list);
+  ASSERT_EQ(1u, list->size());
+  EXPECT_FALSE((*list)[0].GetDict().contains("split"));
+}
+
 TEST(ModelMigrationTest, AFileAlreadyAtTheCurrentVersionIsPassedThrough) {
   base::DictValue dict = DictAtVersion(kModelSchemaVersion);
   dict.Set("marker", "kept");

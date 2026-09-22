@@ -20,6 +20,21 @@ enum class ArchiveTimeout { kTwelveHours, kOneDay, kSevenDays, kNever };
 // Returns std::nullopt for kNever, which means no expiry is ever scheduled.
 std::optional<base::TimeDelta> ArchiveTimeoutToDelta(ArchiveTimeout timeout);
 
+// Two of a space's tabs sharing the screen, named the way a tab is named
+// across a restart. Chromium's own ids do not survive one (Stage 2 finding
+// 1), which is why `last_active_tab` below is a TabKey too, and why this is.
+struct SpaceSplit {
+  TabKey first;
+  TabKey second;
+  // Side by side unless this says otherwise: Chromium's SplitTabLayout has
+  // these two and no others.
+  bool stacked = false;
+  // The first pane's share of the width, as SplitTabVisualData keeps it.
+  double ratio = 0.5;
+
+  friend bool operator==(const SpaceSplit&, const SpaceSplit&) = default;
+};
+
 // A space owns its favourites, pins, folders and Today. Stage 3a made it
 // several; the id travelled through the model from Stage 2 so this was a UI
 // change rather than a data migration.
@@ -38,6 +53,9 @@ struct Space {
   // Chromium's tab ids do not survive a restart (Stage 2 finding 1) and this
   // has to name a Today tab across one.
   TabKey last_active_tab;
+  // Two of this space's tabs sharing the screen, absent when each has the
+  // screen to itself. Re-formed at the next launch once both tabs are back.
+  std::optional<SpaceSplit> split;
   // The profile whose logins this space's tabs use. Defaulted in the struct,
   // not by callers: Space() is default-constructed to read defaults from
   // (ArchiveService::TimeoutForTab), and an invalid id there would be a space

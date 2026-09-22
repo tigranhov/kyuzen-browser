@@ -145,7 +145,7 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   // split view exists to answer questions, and Chromium owns the panes.
   split_ = std::make_unique<SplitController>(
       browser_view_->browser()->tab_strip_model(), space_switcher_.get(),
-      model_.get());
+      model_.get(), state->model());
   model_->SetSplitController(split_.get());
   if (space_switcher_) {
     space_switcher_->SetSplitController(split_.get());

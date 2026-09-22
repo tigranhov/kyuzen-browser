@@ -116,6 +116,15 @@ void ArciumModel::SetLastActiveTab(SpaceId id, TabKey key) {
   Notify();
 }
 
+void ArciumModel::SetSpaceSplit(SpaceId id, std::optional<SpaceSplit> split) {
+  Space* space = FindSpace(id);
+  if (!space || space->split == split) {
+    return;
+  }
+  space->split = std::move(split);
+  Notify();
+}
+
 void ArciumModel::SetLastActiveSpace(SpaceId id) {
   if (last_active_space_ == id) {
     return;

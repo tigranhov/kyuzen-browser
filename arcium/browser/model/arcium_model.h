@@ -61,6 +61,8 @@ class ArciumModel {
   void SetSpaceIcon(SpaceId id, const std::u16string& icon);
   void SetSpaceGradient(SpaceId id, int gradient);
   void SetLastActiveTab(SpaceId id, TabKey key);
+  // The two tabs of `id` sharing the screen, or nothing when none are.
+  void SetSpaceSplit(SpaceId id, std::optional<SpaceSplit> split);
   void SetLastActiveSpace(SpaceId id);
   void ReorderSpace(SpaceId id, int new_position);
   // Removes the space with its entries and folders. Refuses the last space:

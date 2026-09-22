@@ -10,6 +10,7 @@
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/arcium_profile.h"
 #include "arcium/browser/model/folder.h"
+#include "arcium/browser/model/space.h"
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/time/time.h"
@@ -54,6 +55,63 @@ TEST(ModelSerializerTest, RoundTripPreservesEntriesFoldersAndSpaces) {
       1u,
       restored.EntriesForKind(restored.default_space_id(), EntryKind::kFavorite)
           .size());
+}
+
+TEST(ModelSerializerTest, ASpaceRemembersTheTwoTabsSharingItsScreen) {
+  ArciumModel original;
+  const TabKey first = TabKey::Generate();
+  const TabKey second = TabKey::Generate();
+  original.SetSpaceSplit(original.default_space_id(),
+                         SpaceSplit{first, second, /*stacked=*/true, 0.4});
+
+  ArciumModel restored;
+  ASSERT_TRUE(DeserializeModel(SerializeModel(original), &restored));
+
+  ASSERT_EQ(1u, restored.spaces().size());
+  const std::optional<SpaceSplit>& split = restored.spaces()[0].split;
+  ASSERT_TRUE(split.has_value());
+  EXPECT_EQ(first, split->first);
+  EXPECT_EQ(second, split->second);
+  EXPECT_TRUE(split->stacked);
+  EXPECT_DOUBLE_EQ(0.4, split->ratio);
+}
+
+TEST(ModelSerializerTest, ASpaceWithNothingSharingItsScreenWritesNoSplit) {
+  ArciumModel original;
+  const std::string json = base::WriteJson(SerializeModel(original)).value();
+  EXPECT_EQ(std::string::npos, json.find("split"));
+}
+
+TEST(ModelSerializerTest, ASplitNamingOnlyOneTabIsDropped) {
+  // Half a record would ask for a split of a tab with itself, and a whole
+  // model file is not refused over a convenience.
+  ArciumModel original;
+  original.SetSpaceSplit(original.default_space_id(),
+                         SpaceSplit{TabKey::Generate(), TabKey::Generate()});
+  base::DictValue dict = SerializeModel(original);
+  base::ListValue* spaces = dict.FindList("spaces");
+  ASSERT_TRUE(spaces);
+  (*spaces)[0].GetDict().FindDict("split")->Remove("second");
+
+  ArciumModel restored;
+  ASSERT_TRUE(DeserializeModel(dict, &restored));
+  ASSERT_EQ(1u, restored.spaces().size());
+  EXPECT_FALSE(restored.spaces()[0].split.has_value());
+}
+
+TEST(ModelSerializerTest, ASplitNamingOneTabTwiceIsDropped) {
+  ArciumModel original;
+  const TabKey only = TabKey::Generate();
+  original.SetSpaceSplit(original.default_space_id(),
+                         SpaceSplit{only, TabKey::Generate()});
+  base::DictValue dict = SerializeModel(original);
+  base::ListValue* spaces = dict.FindList("spaces");
+  ASSERT_TRUE(spaces);
+  (*spaces)[0].GetDict().FindDict("split")->Set("second", only.value());
+
+  ArciumModel restored;
+  ASSERT_TRUE(DeserializeModel(dict, &restored));
+  EXPECT_FALSE(restored.spaces()[0].split.has_value());
 }
 
 TEST(ModelSerializerTest, RoundTripPreservesPositionsAndCollapsedState) {

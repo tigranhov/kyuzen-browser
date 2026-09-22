@@ -89,6 +89,14 @@ base::DictValue SerializeModel(const ArciumModel& model) {
     if (space.last_active_tab.is_valid()) {
       value.Set("last_active_tab", space.last_active_tab.value());
     }
+    if (space.split) {
+      base::DictValue split;
+      split.Set("first", space.split->first.value());
+      split.Set("second", space.split->second.value());
+      split.Set("layout", space.split->stacked ? "stacked" : "side");
+      split.Set("ratio", space.split->ratio);
+      value.Set("split", std::move(split));
+    }
     spaces.Append(std::move(value));
   }
   dict.Set("spaces", std::move(spaces));
@@ -220,6 +228,21 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
       const std::string* last_tab = value->FindString("last_active_tab");
       space.last_active_tab =
           last_tab ? TabKey::FromString(*last_tab) : TabKey();
+      if (const base::DictValue* split = value->FindDict("split")) {
+        const std::string* first = split->FindString("first");
+        const std::string* second = split->FindString("second");
+        const TabKey a = first ? TabKey::FromString(*first) : TabKey();
+        const TabKey b = second ? TabKey::FromString(*second) : TabKey();
+        // Half a record is no record: it would ask for a split of a tab with
+        // itself. Dropped rather than refused, because a split is a
+        // convenience and must never be a reason a model file is rejected --
+        // everything else in it is somebody's pins, folders and spaces.
+        if (a.is_valid() && b.is_valid() && a != b) {
+          const std::string* layout = split->FindString("layout");
+          space.split = SpaceSplit{a, b, layout && *layout == "stacked",
+                                   split->FindDouble("ratio").value_or(0.5)};
+        }
+      }
       space_ids.insert(space.id);
       spaces.push_back(std::move(space));
     }

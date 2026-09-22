@@ -84,10 +84,19 @@ bool MigrateV4ToV5(base::DictValue& dict) {
   return true;
 }
 
+// Version 5 -> 6: a space may record two of its tabs sharing the screen. A
+// version 5 file records none, and an absent key is exactly what that means,
+// so there is nothing to write -- unlike MigrateV2ToV3, whose key had to
+// exist before anything could read it.
+bool MigrateV5ToV6(base::DictValue&) {
+  return true;
+}
+
 // Indexed by source version: kSteps[0] takes a version 1 dict to version 2.
 using MigrationStep = bool (*)(base::DictValue&);
 constexpr MigrationStep kSteps[] = {&MigrateV1ToV2, &MigrateV2ToV3,
-                                    &MigrateV3ToV4, &MigrateV4ToV5};
+                                    &MigrateV3ToV4, &MigrateV4ToV5,
+                                    &MigrateV5ToV6};
 static_assert(
     std::size(kSteps) == static_cast<size_t>(kModelSchemaVersion) - 1,
     "Bumping kModelSchemaVersion needs a step that gets a file there");
