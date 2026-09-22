@@ -10,6 +10,7 @@
 #include <vector>
 
 #include "arcium/browser/model/arcium_model.h"
+#include "arcium/browser/profile_partition.h"
 #include "arcium/test/browser/profile_browsertest_base.h"
 #include "arcium/ui/browser/browser_sidebar_controller.h"
 #include "arcium/ui/browser/space_switcher.h"
@@ -18,11 +19,17 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_drop_target_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view_delegate.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
+#include "content/public/test/test_navigation_observer.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/dragdrop/drag_drop_types.h"
+#include "ui/base/dragdrop/drop_target_event.h"
+#include "ui/base/dragdrop/os_exchange_data.h"
 #include "url/gurl.h"
 
 namespace arcium::test {
@@ -154,6 +161,42 @@ IN_PROC_BROWSER_TEST_F(SplitViewTest, ASplitComesBackInASpaceNotOnScreen) {
   EXPECT_EQ(home, switcher()->active_space())
       << "re-forming the split left the window in the other space";
   EXPECT_EQ(home, switcher()->SpaceOfTabAt(strip()->active_index()));
+}
+
+// The one way into a split that Arcium does not own: Chromium's own drop
+// target, which takes a link dragged to the edge of the page, opens it in a
+// new tab and splits that with the one already there. Nothing else in this
+// stage would notice it breaking, and the tab it makes has to come out of
+// Arcium's new-tab path or it would carry the wrong profile's logins.
+IN_PROC_BROWSER_TEST_F(SplitViewTest,
+                       ALinkDroppedAtTheEdgeJoinsTheSpaceOnScreen) {
+  ProfileId work_profile;
+  const SpaceId work = AddSpaceOnNewProfile(u"Work", &work_profile);
+  ASSERT_NE(DefaultProfileId(), work_profile);
+  OpenTab(browser(), PageUrl("a.test", "left"));
+  ASSERT_EQ(work, switcher()->SpaceOfTabAt(strip()->active_index()));
+
+  // Built here rather than reached through the window, exactly as Chromium's
+  // own browser test for this controller does: the delegate holds nothing but
+  // references to the browser and its strip.
+  MultiContentsViewDelegateImpl delegate(*browser());
+  const GURL dropped = PageUrl("b.test", "right");
+  ui::OSExchangeData data;
+  data.SetURL(dropped, u"right");
+  const ui::DropTargetEvent event(data, gfx::PointF(), gfx::PointF(),
+                                  ui::DragDropTypes::DRAG_COPY);
+
+  content::TestNavigationObserver observer(dropped);
+  observer.StartWatchingNewWebContents();
+  delegate.HandleLinkDrop(MultiContentsDropTargetView::DropSide::END, event);
+  observer.Wait();
+
+  ASSERT_EQ(2u, strip()->GetForegroundTabs().size());
+  content::WebContents* const dropped_tab = FindTab(dropped);
+  ASSERT_TRUE(dropped_tab);
+  EXPECT_EQ(work, switcher()->SpaceOfTabAt(
+                      strip()->GetIndexOfWebContents(dropped_tab)));
+  EXPECT_EQ(PartitionDomainForProfile(work_profile), PartitionOf(dropped_tab));
 }
 
 }  // namespace
