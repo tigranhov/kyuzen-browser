@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# Make a release: build it, sign it, wrap it in a disk image, sign that with
+# Sparkle's key, and write the entry an installed copy reads. Publishing to
+# GitHub happens only with --publish; everything before it is local and can be
+# run as often as you like.
+#
+#   scripts/release <version> [--notes FILE] [--feed-dir DIR] [--publish]
+#
+# The version must be the one in arcium/KYUZEN_VERSION, so that raising a
+# version is a commit somebody made on purpose rather than a flag on a script.
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+VERSION_ARG=""
+NOTES_FILE=""
+FEED_DIR="$CHROMIUM_ROOT/releases"
+PUBLISH=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --notes) NOTES_FILE="$2"; shift 2 ;;
+    --feed-dir) FEED_DIR="$2"; shift 2 ;;
+    --publish) PUBLISH=1; shift ;;
+    -*) die "unknown option $1" ;;
+    *) [ -z "$VERSION_ARG" ] || die "one version, not two"; VERSION_ARG="$1"; shift ;;
+  esac
+done
+[ -n "$VERSION_ARG" ] || die "usage: scripts/release <version> [--notes FILE] [--feed-dir DIR] [--publish]"
+
+VERSION_FILE="$ARCIUM_ROOT/arcium/KYUZEN_VERSION"
+VERSION="$(sed -n 's/^VERSION=//p' "$VERSION_FILE" | tr -d '[:space:]')"
+BUILD="$(sed -n 's/^BUILD=//p' "$VERSION_FILE" | tr -d '[:space:]')"
+[ "$VERSION_ARG" = "$VERSION" ] || die "asked for $VERSION_ARG but arcium/KYUZEN_VERSION says $VERSION; raise it there and commit first"
+
+FEED="$FEED_DIR/appcast.xml"
+APP_NAME="Kyuzen"
+TAG="v$VERSION"
+DMG_NAME="$APP_NAME-$VERSION.dmg"
+DMG="$FEED_DIR/$DMG_NAME"
+REPO="tigranhov/kyuzen-browser"
+DOWNLOAD_URL="https://github.com/$REPO/releases/download/$TAG/$DMG_NAME"
+SPARKLE_ACCOUNT="kyuzen"
+SPARKLE_BIN="$ARCIUM_ROOT/arcium/third_party/sparkle/bin"
+MINIMUM_SYSTEM="13.0"
+
+# 1. Refuse rather than overwrite.
+[ -z "$(git -C "$ARCIUM_ROOT" status --porcelain --untracked-files=no)" ] ||
+  die "the tree has uncommitted changes; a release has to name a commit"
+! git -C "$ARCIUM_ROOT" rev-parse -q --verify "refs/tags/$TAG" >/dev/null ||
+  die "$TAG exists already; raise the version rather than replacing a release"
+[ -x "$SPARKLE_BIN/sign_update" ] || die "no Sparkle tools; run scripts/sync"
+if [ "$PUBLISH" = 1 ]; then
+  command -v gh >/dev/null || die "--publish needs the gh command"
+  ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1 ||
+    die "$TAG is already published; raise the version"
+fi
+
+mkdir -p "$FEED_DIR"
+log "releasing $APP_NAME $VERSION (build $BUILD)"
+
+# 2. Build.
+"$ARCIUM_ROOT/scripts/build" release chrome
+
+APP="$SRC/out/release/$APP_NAME.app"
+[ -d "$APP" ] || die "no $APP after the build"
+
+# 3. Apple's signature: Developer ID when the machine has one, ad-hoc if not.
+# Ad-hoc is enough for updating -- Sparkle's own signature is what decides
+# whether an update is ours -- but a reader who downloads it by hand meets
+# Gatekeeper, which only a Developer ID satisfies.
+IDENTITY="$(security find-identity -v -p codesigning 2>/dev/null |
+  sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -1)"
+if [ -n "$IDENTITY" ]; then
+  log "signing with $IDENTITY"
+  codesign --force --deep --timestamp --options runtime --sign "$IDENTITY" "$APP"
+else
+  log "no Developer ID on this machine: signing ad-hoc, which updates accept and Gatekeeper does not"
+  codesign --force --deep --sign - "$APP"
+fi
+codesign --verify --deep --strict "$APP" || die "the signature did not verify"
+
+# 4. A disk image holding the application and a way to install it.
+STAGE="$(mktemp -d)"
+trap 'rm -rf "$STAGE"' EXIT
+cp -R "$APP" "$STAGE/"
+ln -s /Applications "$STAGE/Applications"
+rm -f "$DMG"
+hdiutil create -quiet -volname "$APP_NAME $VERSION" -srcfolder "$STAGE" \
+  -ov -format UDZO "$DMG"
+
+# 5. Sparkle's signature, made with the key in this machine's login keychain.
+SIGNATURE_LINE="$("$SPARKLE_BIN/sign_update" --account "$SPARKLE_ACCOUNT" "$DMG")"
+SIGNATURE="$(printf '%s' "$SIGNATURE_LINE" | sed -n 's/.*sparkle:edSignature="\([^"]*\)".*/\1/p')"
+LENGTH="$(printf '%s' "$SIGNATURE_LINE" | sed -n 's/.*length="\([^"]*\)".*/\1/p')"
+[ -n "$SIGNATURE" ] && [ -n "$LENGTH" ] || die "sign_update said: $SIGNATURE_LINE"
+
+# 6. The entry, added to the feed.
+NOTES="$(cat "${NOTES_FILE:-/dev/null}")"
+[ -n "$NOTES" ] || NOTES="<p>Kyuzen $VERSION.</p>"
+NOTES="$NOTES" PYTHONPATH="$ARCIUM_ROOT/scripts" python3 - \
+  "$FEED" "$VERSION" "$BUILD" "$DOWNLOAD_URL" "$LENGTH" "$SIGNATURE" \
+  "$MINIMUM_SYSTEM" <<'PY' || die "the feed refused this release"
+import os
+import sys
+
+import release_entry
+
+feed_path, version, build, url, length, signature, minimum = sys.argv[1:8]
+current = None
+if os.path.exists(feed_path):
+    with open(feed_path) as feed:
+        current = feed.read()
+item = release_entry.entry(version=version, build=build, url=url,
+                           length=int(length), signature=signature,
+                           notes=os.environ['NOTES'], minimum_system=minimum)
+try:
+    updated = release_entry.feed_with(current, item)
+except release_entry.RefusedError as refusal:
+    sys.exit('refused: %s' % refusal)
+with open(feed_path, 'w') as feed:
+    feed.write(updated)
+PY
+
+log "disk image: $DMG"
+log "feed: $FEED"
+
+# 7. Publishing, and only if asked.
+if [ "$PUBLISH" != 1 ]; then
+  log "not published (no --publish). Nothing left this machine."
+  exit 0
+fi
+
+git -C "$ARCIUM_ROOT" tag -a "$TAG" -m "$APP_NAME $VERSION (build $BUILD)"
+gh release create "$TAG" "$DMG" --repo "$REPO" --title "$APP_NAME $VERSION" \
+  --notes "$NOTES"
+
+# The feed lives on a branch of its own holding nothing else, so publishing a
+# release never publishes this repository's working documents.
+WORKTREE="$(mktemp -d)"
+if git -C "$ARCIUM_ROOT" ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+  git -C "$ARCIUM_ROOT" fetch origin gh-pages
+  git -C "$ARCIUM_ROOT" worktree add "$WORKTREE" origin/gh-pages --detach
+  git -C "$WORKTREE" checkout -B gh-pages
+else
+  git -C "$ARCIUM_ROOT" worktree add --detach "$WORKTREE"
+  git -C "$WORKTREE" checkout --orphan gh-pages
+  git -C "$WORKTREE" rm -rq --cached . 2>/dev/null || true
+  rm -rf "${WORKTREE:?}"/* 2>/dev/null || true
+fi
+cp "$FEED" "$WORKTREE/appcast.xml"
+git -C "$WORKTREE" add appcast.xml
+git -C "$WORKTREE" commit -q -m "$APP_NAME $VERSION (build $BUILD)"
+git -C "$WORKTREE" push origin gh-pages
+git -C "$ARCIUM_ROOT" worktree remove --force "$WORKTREE"
+git -C "$ARCIUM_ROOT" push origin "$TAG"
+
+log "published $TAG"
