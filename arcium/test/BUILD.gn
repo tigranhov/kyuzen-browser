@@ -2,6 +2,7 @@ import("//testing/test.gni")
 
 test("arcium_unittests") {
   sources = [
+    "about_version_updater_unittest.cc",
     "archive_service_unittest.cc",
     "archive_store_unittest.cc",
     "arcium_features_unittest.cc",
@@ -10,6 +11,7 @@ test("arcium_unittests") {
     "box_commands_unittest.cc",
     "clear_data_warning_unittest.cc",
     "cold_favicon_cache_unittest.cc",
+    "fake_update_status.h",
     "fake_updater_backend.h",
     "folder_tree_unittest.cc",
     "home_boundary_throttle_unittest.cc",
@@ -68,6 +70,7 @@ test("arcium_unittests") {
     "//arcium/browser",
     "//arcium/browser/model",
     "//arcium/browser/update",
+    "//arcium/browser/update:about_page",
     "//arcium/common",
     "//arcium/ui/browser",
     "//arcium/ui/playground:fake_model",
@@ -113,6 +116,8 @@ test("arcium_browsertests") {
     "browser/sidebar_tab_model_profiles_browsertest.cc",
     "browser/sidebar_ui_browsertest_base.cc",
     "browser/sidebar_ui_browsertest_base.h",
+    "browser/update_browsertest.cc",
+    "fake_update_status.h",
   ]
 
   # As browser_tests and sync_performance_tests set it.
@@ -121,6 +126,8 @@ test("arcium_browsertests") {
   deps = [
     "//arcium/browser",
     "//arcium/browser/model",
+    "//arcium/browser/update",
+    "//arcium/common",
     "//arcium/ui/browser",
     "//arcium/ui/sidebar",
     "//base/test:test_support",

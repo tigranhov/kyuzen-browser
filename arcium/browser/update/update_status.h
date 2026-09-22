@@ -5,6 +5,9 @@
 #ifndef ARCIUM_BROWSER_UPDATE_UPDATE_STATUS_H_
 #define ARCIUM_BROWSER_UPDATE_UPDATE_STATUS_H_
 
+#include "base/callback_list.h"
+#include "base/functional/callback.h"
+
 namespace arcium {
 
 // What the browser knows about newer versions of itself, and the one thing a
@@ -38,6 +41,11 @@ class UpdateStatus {
   // Look now, whatever the setting says. Asking is not the same as being
   // looked for, so this works even when automatic checking is off.
   virtual void CheckNow() = 0;
+
+  // `on_change` runs after every change of state until the returned
+  // subscription is destroyed.
+  virtual base::CallbackListSubscription Subscribe(
+      base::RepeatingClosure on_change) = 0;
 };
 
 }  // namespace arcium

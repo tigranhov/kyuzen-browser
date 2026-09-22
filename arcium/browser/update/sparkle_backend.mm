@@ -162,7 +162,12 @@ class SparkleBackend : public UpdaterBackend {
   }
   void CheckByHand() override {
     Start();
-    [controller_ checkForUpdates:nil];
+    // The quiet check, not Sparkle's "Check for Updates" window: the About
+    // page asks every time it opens and shows the answer itself, and Sparkle
+    // still opens its window when there is a version to offer.
+    if (!controller_.updater.sessionInProgress) {
+      [controller_.updater checkForUpdatesInBackground];
+    }
   }
 
  private:

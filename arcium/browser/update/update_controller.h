@@ -31,6 +31,8 @@ class UpdateController : public UpdateStatus {
   State CurrentState() const override;
   bool RelaunchIsPending() const override;
   void CheckNow() override;
+  base::CallbackListSubscription Subscribe(
+      base::RepeatingClosure on_change) override;
 
   // Stops following the setting. Called at shutdown, before the setting's
   // store goes away, because the controller itself is kept to the end.
@@ -44,6 +46,7 @@ class UpdateController : public UpdateStatus {
   std::unique_ptr<UpdaterBackend> backend_;
   PrefChangeRegistrar registrar_;
   State state_ = State::kIdle;
+  base::RepeatingClosureList listeners_;
   base::WeakPtrFactory<UpdateController> weak_factory_{this};
 };
 

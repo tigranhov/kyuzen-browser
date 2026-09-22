@@ -41,6 +41,11 @@ void UpdateController::CheckNow() {
   backend_->CheckByHand();
 }
 
+base::CallbackListSubscription UpdateController::Subscribe(
+    base::RepeatingClosure on_change) {
+  return listeners_.Add(std::move(on_change));
+}
+
 void UpdateController::Shutdown() {
   registrar_.RemoveAll();
 }
@@ -59,6 +64,7 @@ void UpdateController::ApplySetting() {
 
 void UpdateController::OnStateChanged(State state) {
   state_ = state;
+  listeners_.Notify();
 }
 
 }  // namespace arcium

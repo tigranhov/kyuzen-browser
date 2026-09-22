@@ -6,6 +6,7 @@
 
 #include <string>
 
+#include "base/strings/utf_string_conversions.h"
 #include "base/version.h"
 #include "components/version_info/version_info.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -31,6 +32,21 @@ TEST(ProductVersionTest, TheBuildNumberCounts) {
   // The one number an update compares. Zero would mean "older than every
   // build", including itself.
   EXPECT_GE(BuildNumber(), 1);
+}
+
+TEST(ProductVersionTest, TheAboutPageNamesBothVersions) {
+  // Ours first, because it is the one a reader reports and an update
+  // compares; Chromium's after it, because it is the one a web page sees.
+  const std::string text = base::UTF16ToUTF8(AboutVersionText());
+  const size_t ours = text.find(std::string(ProductVersion()));
+  const size_t chromium =
+      text.find(std::string(version_info::GetVersionNumber()));
+  ASSERT_NE(std::string::npos, ours) << text;
+  ASSERT_NE(std::string::npos, chromium) << text;
+  EXPECT_LT(ours, chromium) << text;
+  EXPECT_NE(std::string::npos,
+            text.find("(" + std::to_string(BuildNumber()) + ")"))
+      << text;
 }
 
 }  // namespace

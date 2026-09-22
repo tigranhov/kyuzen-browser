@@ -1,0 +1,46 @@
+Seam: VersionUpdater::Create in chrome/browser/ui/webui/help/version_updater_mac.mm,
+      and that file's target in chrome/browser/ui/webui/help/BUILD.gn.
+Why: the About page asks an updater what it knows and offers a Relaunch
+     button when a new version is staged. On macOS Chromium answers from
+     Google's updater, which Kyuzen does not ship: left alone, the page would
+     try to install it. Kyuzen answers from Sparkle instead, which is also how
+     a reader checks by hand. Chromium's own implementation stays in the file,
+     unused, so the hook is one line.
+
+     The GN half adds the dependency the hook needs. No cycle: the adapter's
+     target depends only on //arcium/browser/update and //base.
+Delegates to: arcium/browser/update/about_version_updater.cc
+     (arcium::MakeAboutVersionUpdater).
+
+diff --git a/chrome/browser/ui/webui/help/BUILD.gn b/chrome/browser/ui/webui/help/BUILD.gn
+index 17d8d3e283..dc32ebaaf2 100644
+--- a/chrome/browser/ui/webui/help/BUILD.gn
++++ b/chrome/browser/ui/webui/help/BUILD.gn
+@@ -38,6 +38,7 @@ source_set("help") {
+   if (is_mac) {
+     sources = [ "version_updater_mac.mm" ]
+     deps += [
++      "//arcium/browser/update:about_page",
+       "//base:i18n",
+       "//chrome/app:branded_strings",
+       "//chrome/app:generated_resources_grit",
+diff --git a/chrome/browser/ui/webui/help/version_updater_mac.mm b/chrome/browser/ui/webui/help/version_updater_mac.mm
+index 57648956fa..5c828f6a97 100644
+--- a/chrome/browser/ui/webui/help/version_updater_mac.mm
++++ b/chrome/browser/ui/webui/help/version_updater_mac.mm
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/ui/webui/help/version_updater.h"
+ 
++#include "arcium/browser/update/about_version_updater.h"
++
+ #import <Foundation/Foundation.h>
+ 
+ #include <algorithm>
+@@ -133,5 +135,5 @@ void CheckForUpdate(StatusCallback status_callback,
+ 
+ std::unique_ptr<VersionUpdater> VersionUpdater::Create(
+     content::WebContents* /* web_contents */) {
+-  return base::WrapUnique(new VersionUpdaterMac());
++  return arcium::MakeAboutVersionUpdater();
+ }

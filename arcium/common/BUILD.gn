@@ -13,5 +13,8 @@ source_set("common") {
     "KYUZEN_PRODUCT_VERSION=\"$kyuzen_product_version\"",
     "KYUZEN_BUILD_NUMBER=$kyuzen_build_number",
   ]
-  deps = [ "//base" ]
+  deps = [
+    "//base",
+    "//components/version_info",
+  ]
 }

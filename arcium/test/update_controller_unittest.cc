@@ -10,6 +10,7 @@
 #include "arcium/browser/update/update_preference.h"
 #include "arcium/browser/update/update_status.h"
 #include "arcium/test/fake_updater_backend.h"
+#include "base/callback_list.h"
 #include "components/prefs/testing_pref_service.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -103,6 +104,24 @@ TEST_F(UpdateControllerTest, ItReportsWhatTheUpdaterIsDoing) {
   backend()->ReportState(UpdateStatus::State::kReadyToRelaunch);
   EXPECT_TRUE(controller->RelaunchIsPending())
       << "a staged version is the only thing that makes relaunching an offer";
+}
+
+TEST_F(UpdateControllerTest, ItTellsWhoeverIsListeningWhenTheStateChanges) {
+  // The About page stays open while a check runs, so it has to hear the
+  // answer rather than ask once.
+  SetMode(UpdateMode::kAsk);
+  std::unique_ptr<UpdateController> controller = MakeController();
+  int changes = 0;
+  base::CallbackListSubscription subscription = controller->Subscribe(
+      base::BindRepeating([](int* n) { ++*n; }, &changes));
+
+  backend()->ReportState(UpdateStatus::State::kChecking);
+  backend()->ReportState(UpdateStatus::State::kUpdateAvailable);
+  EXPECT_EQ(2, changes);
+
+  subscription = {};
+  backend()->ReportState(UpdateStatus::State::kDownloading);
+  EXPECT_EQ(2, changes) << "a page that has closed hears nothing more";
 }
 
 }  // namespace

@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "arcium/browser/update/browser_update_status.h"
 #include "arcium/browser/update/sparkle_backend.h"
 #include "arcium/browser/update/update_controller.h"
 #include "base/debug/leak_annotations.h"
@@ -28,11 +29,6 @@ UpdateController* g_controller = nullptr;
 
 BrowserUpdates::BrowserUpdates() = default;
 BrowserUpdates::~BrowserUpdates() = default;
-
-// static
-UpdateStatus* BrowserUpdates::Get() {
-  return g_controller;
-}
 
 void BrowserUpdates::PostBrowserStart() {
   // After startup rather than now: nothing about updating is needed to draw
@@ -70,6 +66,7 @@ void BrowserUpdates::OnFrameworkLoaded(bool loaded) {
   g_controller = new UpdateController(g_browser_process->local_state(),
                                       std::move(backend));
   ANNOTATE_LEAKING_OBJECT_PTR(g_controller);
+  SetBrowserUpdateStatus(g_controller);
 }
 
 }  // namespace arcium

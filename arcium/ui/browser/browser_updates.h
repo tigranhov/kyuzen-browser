@@ -10,21 +10,15 @@
 
 namespace arcium {
 
-class UpdateStatus;
-
-// Starts the browser's one updater once startup is over, and lets go of the
-// setting's store at shutdown. Added to Chromium's startup parts by patch
-// 0248.
+// Starts the browser's one updater once startup is over, registers it for the
+// About page, and lets go of the setting's store at shutdown. Added to
+// Chromium's startup parts by patch 0248.
 class BrowserUpdates : public ChromeBrowserMainExtraParts {
  public:
   BrowserUpdates();
   BrowserUpdates(const BrowserUpdates&) = delete;
   BrowserUpdates& operator=(const BrowserUpdates&) = delete;
   ~BrowserUpdates() override;
-
-  // What the updater knows. Null until it is running, which in a build that
-  // carries no Sparkle -- every build but a release -- is never.
-  static UpdateStatus* Get();
 
   // ChromeBrowserMainExtraParts:
   void PostBrowserStart() override;

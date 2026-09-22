@@ -2,6 +2,8 @@
 # looking found. Nothing here knows about the framework that does the work.
 source_set("update") {
   sources = [
+    "browser_update_status.cc",
+    "browser_update_status.h",
     "sparkle_event.cc",
     "sparkle_event.h",
     "update_controller.cc",
@@ -14,6 +16,20 @@ source_set("update") {
   public_deps = [
     "//base",
     "//components/prefs",
+  ]
+}
+
+# Answers Chromium's About page. It includes the page's VersionUpdater header
+# without depending on its target, because that target depends on this one
+# (patch 0260) and the header needs nothing linked.
+source_set("about_page") {
+  sources = [
+    "about_version_updater.cc",
+    "about_version_updater.h",
+  ]
+  deps = [
+    ":update",
+    "//base",
   ]
 }
 

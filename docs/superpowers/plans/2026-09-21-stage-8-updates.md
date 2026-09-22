@@ -341,7 +341,18 @@ Expected: fails -- Chromium's own implementation answers, reporting no updater.
 
 - [ ] **Step 3: Write the adapter and the patch**
 
-- [ ] **Step 4: Run it and watch it pass, then sync and count patches (45)**
+- [ ] **Step 4: Run it and watch it pass, then sync and count patches (46)**
+
+**Note, added while executing.** Three things the steps above did not say.
+Opening the About page is itself a check -- Chromium asks every time -- so a
+check by hand is Sparkle's quiet check, not its "Check for Updates" window,
+which would otherwise pop up each time the page opened; Sparkle still opens a
+window when it finds a version. The page stays open while a check runs, so
+`UpdateStatus` gained `Subscribe()`. And the page named Chromium's version
+alone, so `patches/0262-about-version-text.patch` makes it lead with Kyuzen's
+(`arcium::AboutVersionText`), which is one patch more than planned. The
+browser's updater is found through `arcium::GetBrowserUpdateStatus()`, which
+tests set to a fake.
 
 - [ ] **Step 5: Commit**
 
@@ -372,7 +383,7 @@ A row in the About section of Chromium's settings resources, bound to the
 preference. Header says it carries no call: it is a resource table keyed by
 file name.
 
-- [ ] **Step 3: Sync and count patches (46), then verify by hand**
+- [ ] **Step 3: Sync and count patches (47), then verify by hand**
 
 Open the settings page, change the value three times, quit and relaunch, and
 confirm the value held and that the About page behaves accordingly.

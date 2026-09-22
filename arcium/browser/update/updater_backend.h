@@ -31,7 +31,8 @@ class UpdaterBackend {
   // Look now, quietly: nothing is shown if there is nothing to offer.
   virtual void CheckInBackground() = 0;
 
-  // Look now because a reader asked, which means saying so either way.
+  // Look now because a reader asked, whatever the setting says. The answer
+  // comes back through the state callback, for the page that asked to show.
   virtual void CheckByHand() = 0;
 };
 
