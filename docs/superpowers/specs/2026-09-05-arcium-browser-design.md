@@ -463,6 +463,20 @@ whose page is not in memory. The state itself reaches the model as R7.5 requires
 beside `is_cold`), so a third look remains a change to the views alone if it is ever wanted. See
 `docs/superpowers/specs/2026-09-11-no-load-at-launch-design.md`.
 
+### Stage 5
+
+**D5-1. Split view ships with two panes, not two to four.** R5.1 asks for "2-4 panes". Chromium's
+split is exactly two and says so in three places: `SplitTabLayout` has `kSideBySide` and `kStacked`
+and nothing else, `SplitTabVisualData` holds a single ratio, and `MultiContentsView` is documented
+as showing "up to two contents web views side by side" with `SetActiveIndex` taking "either 0 or 1
+as we currently only support two contents". Three panes therefore means replacing
+`MultiContentsView` with an Arcium container, and that view is reached by fullscreen, devtools,
+find-in-page, picture-in-picture, the capture border and tab dragging — the largest piece of
+upstream surface in the project, to be defended on every rebase, against a requirement whose
+common case is two. Three and four stay open: if they are ever built, the way in is an Arcium
+container behind a feature flag rather than a patch to Chromium's. See
+`docs/superpowers/specs/2026-09-22-stage-5a-split-view-design.md`.
+
 ## 8. Testing strategy
 
 - Unit tests for every model and service in `arcium/test/`, run with Chromium's test runner.
