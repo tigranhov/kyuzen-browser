@@ -16,6 +16,9 @@ namespace arcium {
 inline constexpr int kBoxCommandNewSpace = -1;
 inline constexpr int kBoxCommandToggleSidebar = -2;
 inline constexpr int kBoxCommandSiteSearch = -3;
+// The box's one command that names something else before it can act: taking
+// it asks which tab to share the screen with rather than closing the box.
+inline constexpr int kBoxCommandSplit = -4;
 
 // At most this many command rows, so a short word cannot push every page the
 // reader was looking for out of the box.

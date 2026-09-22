@@ -15,6 +15,7 @@
 #include "arcium/ui/browser/command_box.h"
 #include "arcium/ui/browser/page_in_space.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "arcium/ui/browser/split_controller.h"
 #include "arcium/ui/browser/tab_search_service.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -24,6 +25,7 @@
 #include "chrome/browser/ui/browser_tabstrip.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "components/tabs/public/tab_interface.h"
 #include "content/public/browser/web_contents.h"
 #include "ui/base/page_transition_types.h"
 #include "ui/views/widget/widget.h"
@@ -49,7 +51,12 @@ void BrowserSidebarController::ShowCommandBox(
   command_box_ = std::make_unique<CommandBox>(
       browser_view_, suggestion_source_.get(),
       base::BindOnce(&BrowserSidebarController::OnCommandBoxAccepted,
-                     weak_factory_.GetWeakPtr()));
+                     weak_factory_.GetWeakPtr()),
+      // Unretained rather than weak: a callback that returns something
+      // cannot be bound to a weak pointer, and this controller owns the box
+      // and outlives it.
+      base::BindRepeating(&BrowserSidebarController::SplitPartnerRows,
+                          base::Unretained(this)));
   command_box_widget_ = views::BubbleDialogDelegate::CreateBubble(
       command_box_.get(),
       base::BindOnce(&BrowserSidebarController::OnCommandBoxClosed,
@@ -62,6 +69,16 @@ void BrowserSidebarController::ShowCommandBox(
 }
 
 void BrowserSidebarController::OnCommandBoxAccepted(SuggestionRow row) {
+  if (row.split_with_tab_index) {
+    // A tab chosen in the box's second stage. Posted for the same reason
+    // every command is: the box is still closing, and splitting moves the
+    // focus into a page.
+    base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
+        FROM_HERE,
+        base::BindOnce(&BrowserSidebarController::SplitWithTabAt,
+                       weak_factory_.GetWeakPtr(), *row.split_with_tab_index));
+    return;
+  }
   if (row.command_id) {
     // Once the box has finished closing, so a command that moves focus --
     // Find -- takes it from the page rather than from the box on its way out.
@@ -79,6 +96,32 @@ void BrowserSidebarController::OnCommandBoxAccepted(SuggestionRow row) {
     return;
   }
   OpenUrlInRoutedSpace(browser_view_->browser(), row.destination);
+}
+
+std::vector<SuggestionRow> BrowserSidebarController::SplitPartnerRows() {
+  std::vector<SuggestionRow> partners;
+  TabStripModel* const strip = browser_view_->browser()->tab_strip_model();
+  const int active = strip->active_index();
+  if (!split_ || active < 0) {
+    return partners;
+  }
+  for (int i = 0; i < strip->count(); ++i) {
+    if (!split_->CanSplit(active, i)) {
+      continue;
+    }
+    SuggestionRow row;
+    row.title = strip->GetTabAtIndex(i)->GetContents()->GetTitle();
+    row.subtitle = u"Split with this tab";
+    row.split_with_tab_index = i;
+    partners.push_back(std::move(row));
+  }
+  return partners;
+}
+
+void BrowserSidebarController::SplitWithTabAt(int tab_index) {
+  if (split_) {
+    split_->SplitWithActive(tab_index);
+  }
 }
 
 void BrowserSidebarController::RunBoxCommand(int command_id) {

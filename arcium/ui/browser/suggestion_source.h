@@ -38,6 +38,11 @@ struct SuggestionRow {
   // Set when the row is a browser command rather than a page: an IDC_ id, or
   // one of box_commands.h's own. Such a row has no destination.
   std::optional<int> command_id;
+  // Set on the rows the box offers after "Split the screen" is taken: the
+  // strip index of the tab that would share the screen. Such a row has no
+  // destination either -- the page is already open, and what happens to it is
+  // a split rather than a visit.
+  std::optional<int> split_with_tab_index;
 };
 
 // The pure half: a result in, rows out. With `search_engines`, a row that

@@ -32,6 +32,13 @@ TEST(BoxCommandsTest, TheStartOfAWordOffersItsCommand) {
   EXPECT_EQ(std::vector<int>{IDC_SHOW_DOWNLOADS}, IdsFor(u"downl"));
 }
 
+TEST(BoxCommandsTest, SplittingTheScreenIsOffered) {
+  EXPECT_EQ(std::vector<int>{kBoxCommandSplit}, IdsFor(u"split"));
+  // And by what the thing is called rather than what it does, which is how a
+  // reader who has seen the panes but not the command will reach for it.
+  EXPECT_EQ(std::vector<int>{kBoxCommandSplit}, IdsFor(u"pane"));
+}
+
 TEST(BoxCommandsTest, CaseIsIgnored) {
   EXPECT_EQ(std::vector<int>{IDC_SHOW_DOWNLOADS}, IdsFor(u"DoWnL"));
 }

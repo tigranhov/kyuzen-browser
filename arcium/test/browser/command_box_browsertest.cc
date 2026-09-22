@@ -116,6 +116,78 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, EnterOnATabYouHaveSwitchesToIt) {
   EXPECT_EQ(tabs_before + 1, browser()->tab_strip_model()->count());
 }
 
+// Splitting is the box's one command that has to name something else before
+// it can act, so taking it asks rather than closing.
+IN_PROC_BROWSER_TEST_F(CommandBoxTest, TakingSplitAsksWhichTab) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("a.test", "/title1.html")));
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), embedded_test_server()->GetURL("b.test", "/title2.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  OpenBox();
+  Type(u"split");
+  WaitForRows();
+  PressEnter();
+
+  ASSERT_TRUE(Box()) << "the box closed instead of asking which tab";
+  EXPECT_EQ(CommandBox::Mode::kSplitPartner, Box()->mode_for_testing());
+  EXPECT_EQ(u"", Box()->text_for_testing());
+  ASSERT_GT(Box()->row_count_for_testing(), 0u);
+  EXPECT_TRUE(Box()->row_for_testing(0).split_with_tab_index.has_value());
+}
+
+IN_PROC_BROWSER_TEST_F(CommandBoxTest,
+                       TakingATabInThatQuestionSplitsTheScreen) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("a.test", "/title1.html")));
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), embedded_test_server()->GetURL("b.test", "/title2.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  const int tabs_before = browser()->tab_strip_model()->count();
+
+  OpenBox();
+  Type(u"split");
+  WaitForRows();
+  PressEnter();
+  ASSERT_TRUE(Box());
+  PressEnter();
+
+  EXPECT_FALSE(Box());
+  EXPECT_EQ(tabs_before, browser()->tab_strip_model()->count())
+      << "splitting opened a tab instead of sharing the screen with one";
+  EXPECT_EQ(2u, browser()->tab_strip_model()->GetForegroundTabs().size());
+}
+
+// The first Escape leaves the question, not the box: a reader who has been
+// asked which tab has somewhere to go back to.
+IN_PROC_BROWSER_TEST_F(CommandBoxTest, EscapeLeavesTheQuestionBeforeTheBox) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(
+      browser(), embedded_test_server()->GetURL("a.test", "/title1.html")));
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), embedded_test_server()->GetURL("b.test", "/title2.html"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  OpenBox();
+  Type(u"split");
+  WaitForRows();
+  PressEnter();
+  ASSERT_TRUE(Box());
+
+  PressEscape();
+  ASSERT_TRUE(Box()) << "the first Escape closed the box";
+  EXPECT_EQ(CommandBox::Mode::kAnything, Box()->mode_for_testing());
+
+  PressEscape();
+  EXPECT_FALSE(Box());
+}
+
 IN_PROC_BROWSER_TEST_F(CommandBoxTest, EscapeLeavesThePageAlone) {
   ASSERT_TRUE(embedded_test_server()->Start());
   const GURL url = embedded_test_server()->GetURL("a.test", "/title1.html");

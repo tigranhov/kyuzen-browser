@@ -153,6 +153,10 @@ class BrowserSidebarController : public SidebarModel::Observer,
   void UpdatePillSecurity();
 
   void OnCommandBoxAccepted(SuggestionRow row);
+  // The open tabs that could share the screen with the page on it, which the
+  // box asks for when "Split the screen" is taken.
+  std::vector<SuggestionRow> SplitPartnerRows();
+  void SplitWithTabAt(int tab_index);
   // A command row: an IDC_ command, or one of box_commands.h's own.
   void RunBoxCommand(int command_id);
   void OnCommandBoxClosed(views::Widget::ClosedReason reason);

@@ -35,10 +35,16 @@ class CommandBox : public views::BubbleDialogDelegate,
  public:
   // What the window does with the row the reader chose.
   using OpenCallback = base::OnceCallback<void(SuggestionRow)>;
+  // The open tabs that could share the screen with the page on it, asked for
+  // when "Split the screen" is taken. The window knows which those are; the
+  // box only draws them.
+  using PartnerRowsCallback =
+      base::RepeatingCallback<std::vector<SuggestionRow>()>;
 
   CommandBox(BrowserView* browser_view,
              SuggestionSource* source,
-             OpenCallback on_open);
+             OpenCallback on_open,
+             PartnerRowsCallback partner_rows = PartnerRowsCallback());
   CommandBox(const CommandBox&) = delete;
   CommandBox& operator=(const CommandBox&) = delete;
   ~CommandBox() override;
@@ -46,6 +52,13 @@ class CommandBox : public views::BubbleDialogDelegate,
   // Call once the Widget is shown.
   void FocusField();
   void SetText(const std::u16string& text, bool select_all);
+
+  // What the box is answering. Normally anything the reader types; in
+  // kSplitPartner only the open tabs that could share the screen, because
+  // splitting is the box's one command that has to name something else
+  // before it can act.
+  enum class Mode { kAnything, kSplitPartner };
+  Mode mode_for_testing() const { return mode_; }
 
   size_t row_count_for_testing() const { return rows_.size(); }
   const SuggestionRow& row_for_testing(size_t index) const {
@@ -70,6 +83,13 @@ class CommandBox : public views::BubbleDialogDelegate,
 
  private:
   void OnRows(std::vector<SuggestionRow> rows);
+  // Asks which tab to share the screen with: the field is cleared, the rows
+  // become the open tabs, and the box stays open.
+  void EnterSplitPartnerMode();
+  // Back to answering anything, with whatever the field held before.
+  void LeaveSplitPartnerMode();
+  // The partner rows the typed text names, by title.
+  void ShowMatchingPartners();
   void RebuildRowViews();
   void Move(int delta);
   void TakeRowAt(size_t index);
@@ -79,6 +99,12 @@ class CommandBox : public views::BubbleDialogDelegate,
   raw_ptr<BrowserView> browser_view_;
   raw_ptr<SuggestionSource> source_;
   OpenCallback on_open_;
+  PartnerRowsCallback partner_rows_;
+  Mode mode_ = Mode::kAnything;
+  // Every tab that could share the screen, asked for once when the mode is
+  // entered: the strip cannot change while the box has the keyboard, and
+  // re-asking on every keystroke would renumber the rows under a click.
+  std::vector<SuggestionRow> partners_;
   raw_ptr<views::Textfield> field_ = nullptr;
   raw_ptr<views::View> row_container_ = nullptr;
   std::vector<SuggestionRow> rows_;

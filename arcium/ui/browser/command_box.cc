@@ -8,8 +8,10 @@
 #include <memory>
 #include <utility>
 
+#include "arcium/ui/browser/box_commands.h"
 #include "arcium/ui/browser/command_box_row.h"
 #include "base/functional/bind.h"
+#include "base/i18n/case_conversion.h"
 #include "base/location.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
@@ -38,12 +40,14 @@ constexpr int kFieldHeight = 40;
 
 CommandBox::CommandBox(BrowserView* browser_view,
                        SuggestionSource* source,
-                       OpenCallback on_open)
+                       OpenCallback on_open,
+                       PartnerRowsCallback partner_rows)
     : views::BubbleDialogDelegate(/*anchor_view=*/nullptr,
                                   views::BubbleBorder::Arrow::NONE),
       browser_view_(browser_view),
       source_(source),
-      on_open_(std::move(on_open)) {
+      on_open_(std::move(on_open)),
+      partner_rows_(std::move(partner_rows)) {
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   SetShowCloseButton(false);
   set_margins(gfx::Insets(12));
@@ -97,6 +101,13 @@ void CommandBox::SetRowsChangedClosureForTesting(
 
 void CommandBox::ContentsChanged(views::Textfield* sender,
                                  const std::u16string& new_contents) {
+  if (mode_ == Mode::kSplitPartner) {
+    // The answer is already in hand: which tab, narrowed by what is typed.
+    // Nothing is asked of history or the web, because neither can be a
+    // partner -- a split is between two tabs that already exist.
+    ShowMatchingPartners();
+    return;
+  }
   source_->Start(new_contents, base::BindRepeating(&CommandBox::OnRows,
                                                    weak_factory_.GetWeakPtr()));
 }
@@ -180,10 +191,57 @@ void CommandBox::TakeSelectedRow() {
 }
 
 void CommandBox::Take(SuggestionRow chosen) {
+  // The one command that names something else before it can act: taking it
+  // asks which tab rather than closing the box. Every other row, including a
+  // partner chosen in that second stage, closes it.
+  if (mode_ == Mode::kAnything && chosen.command_id &&
+      *chosen.command_id == kBoxCommandSplit) {
+    EnterSplitPartnerMode();
+    return;
+  }
   GetWidget()->Close();
   if (on_open_) {
     std::move(on_open_).Run(std::move(chosen));
   }
+}
+
+void CommandBox::EnterSplitPartnerMode() {
+  partners_ =
+      partner_rows_ ? partner_rows_.Run() : std::vector<SuggestionRow>();
+  if (partners_.empty()) {
+    // Nothing to share the screen with -- one tab, or every other one in
+    // another space. Asking a question with no answers would be a box that
+    // will not close, so the command simply does nothing.
+    GetWidget()->Close();
+    return;
+  }
+  mode_ = Mode::kSplitPartner;
+  // Clears the field without asking the source anything: ContentsChanged sees
+  // the mode and shows the partners instead.
+  field_->SetText(std::u16string());
+  ShowMatchingPartners();
+}
+
+void CommandBox::LeaveSplitPartnerMode() {
+  mode_ = Mode::kAnything;
+  partners_.clear();
+  field_->SetText(std::u16string());
+  source_->Start(
+      std::u16string(),
+      base::BindRepeating(&CommandBox::OnRows, weak_factory_.GetWeakPtr()));
+}
+
+void CommandBox::ShowMatchingPartners() {
+  const std::u16string typed =
+      base::i18n::ToLower(std::u16string(field_->GetText()));
+  std::vector<SuggestionRow> matching;
+  for (const SuggestionRow& row : partners_) {
+    if (typed.empty() ||
+        base::i18n::ToLower(row.title).find(typed) != std::u16string::npos) {
+      matching.push_back(row);
+    }
+  }
+  OnRows(std::move(matching));
 }
 
 bool CommandBox::HandleKeyEvent(views::Textfield* sender,
@@ -202,6 +260,12 @@ bool CommandBox::HandleKeyEvent(views::Textfield* sender,
       TakeSelectedRow();
       return true;
     case ui::VKEY_ESCAPE:
+      // The first Escape leaves the question, not the box: a reader who has
+      // been asked which tab has somewhere to go back to.
+      if (mode_ == Mode::kSplitPartner) {
+        LeaveSplitPartnerMode();
+        return true;
+      }
       GetWidget()->Close();
       return true;
     default:

@@ -59,6 +59,7 @@ const std::vector<BoxCommand>& AllBoxCommands() {
       {IDC_TASK_MANAGER, u"Task manager", u"memory processes"},
       {kBoxCommandNewSpace, u"New space", u"add create"},
       {kBoxCommandToggleSidebar, u"Hide or show sidebar", u"toggle"},
+      {kBoxCommandSplit, u"Split the screen", u"side pane panes"},
       {kBoxCommandSiteSearch, u"Site search shortcuts", u"keywords engines"},
   });
   return *commands;
