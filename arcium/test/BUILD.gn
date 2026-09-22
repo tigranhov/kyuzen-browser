@@ -10,6 +10,7 @@ test("arcium_unittests") {
     "box_commands_unittest.cc",
     "clear_data_warning_unittest.cc",
     "cold_favicon_cache_unittest.cc",
+    "fake_updater_backend.h",
     "folder_tree_unittest.cc",
     "home_boundary_throttle_unittest.cc",
     "home_boundary_unittest.cc",
@@ -47,6 +48,7 @@ test("arcium_unittests") {
     "tab_space_unittest.cc",
     "test_app_activation.h",
     "unloaded_rows_unittest.cc",
+    "update_controller_unittest.cc",
     "update_preference_unittest.cc",
     "url_pill_unittest.cc",
   ]

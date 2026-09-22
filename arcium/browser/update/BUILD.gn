@@ -2,10 +2,15 @@
 # looking found. Nothing here knows about the framework that does the work.
 source_set("update") {
   sources = [
+    "update_controller.cc",
+    "update_controller.h",
     "update_preference.cc",
     "update_preference.h",
     "update_status.h",
+    "updater_backend.h",
   ]
-  public_deps = [ "//components/prefs" ]
-  deps = [ "//base" ]
+  public_deps = [
+    "//base",
+    "//components/prefs",
+  ]
 }
