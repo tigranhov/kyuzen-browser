@@ -2,7 +2,7 @@ Seam: chrome/app/app-Info.plist, the outer application's property list, and
       in chrome/BUILD.gn the tweak_info_plist("chrome_app_plist") target
       that stamps the version keys into it and the chrome_app target's
       substitutions that fill the others.
-Why: three things the application has to say about itself and could not.
+Why: four things the application has to say about itself and could not.
 
      The folder under ~/Library/Application Support that holds a profile is
      named by the CrProductDirName key in the outer bundle, and with the key
@@ -25,6 +25,12 @@ Why: three things the application has to say about itself and could not.
      The values live in arcium/kyuzen_updates.gni and reach the list the way
      the bundle identifier does, as substitutions on the application target.
 
+     A development build and a release sit in the Dock beside each other and
+     wore the same icon, so there was no telling which was which. Only a
+     release is an official build, so only a release gets the coloured icon;
+     everything else wears the grey pair in arcium/branding/theme/mac/dev,
+     drawn from it by scripts/make-dev-icon.
+
      Taken here because this is the only file those keys can live in: the
      code reads them from the outer application, and the values come from
      the same branding, version and update files everything else reads.
@@ -33,19 +39,20 @@ Delegates to: nothing. This patch carries no call -- it is branding, version
      identifier beside them.
 
 diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
-index a33fe738ba..1de2e169df 100644
+index a33fe738ba..500f14ff80 100644
 --- a/chrome/BUILD.gn
 +++ b/chrome/BUILD.gn
-@@ -3,6 +3,8 @@
+@@ -3,6 +3,9 @@
  # found in the LICENSE file.
  
  import("//build/config/chrome_build.gni")
 +import("//arcium/kyuzen_version.gni")
 +import("//arcium/kyuzen_updates.gni")
++import("//arcium/kyuzen_icons.gni")
  import("//build/config/chromeos/args.gni")
  import("//build/config/compiler/compiler.gni")
  import("//build/config/compiler/pgo/pgo.gni")
-@@ -508,6 +510,9 @@ if (is_win) {
+@@ -508,6 +511,9 @@ if (is_win) {
        "--scm=1",
        "--bundle_id=$chrome_mac_bundle_id",
      ]
@@ -55,7 +62,7 @@ index a33fe738ba..1de2e169df 100644
      if (enable_updater) {
        args += [ "--privileged_helper_id=$privileged_helper_name" ]
        if (is_chrome_branded) {
-@@ -531,6 +536,8 @@ if (is_win) {
+@@ -531,6 +537,8 @@ if (is_win) {
        "CHROMIUM_BUNDLE_ID=$chrome_mac_bundle_id",
        "CHROMIUM_SHORT_NAME=$chrome_product_short_name",
        "CHROMIUM_CREATOR=$chrome_mac_creator_code",
@@ -64,6 +71,30 @@ index a33fe738ba..1de2e169df 100644
      ]
  
      sources = [ "app/chrome_exe_main_mac.cc" ]
+@@ -541,6 +549,7 @@ if (is_win) {
+       ":chrome_app_strings_bundle_data",
+       ":chrome_resources",
+       ":chrome_versioned_bundle_data",
++      "//arcium/browser/update:sparkle_in_bundle",
+       "//base:compiler_specific",
+       "//base/allocator:early_zone_registration_apple",
+       "//build:branding_buildflags",
+@@ -649,12 +658,13 @@ if (is_win) {
+   }
+ 
+   bundle_data("chrome_app_icon") {
+-    sources = [ "app/theme/$branding_path_component/mac/app.icns" ]
++    sources = [ "app/theme/$branding_path_component/$kyuzen_icon_dir/app.icns" ]
+     outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+   }
+ 
+   bundle_data("chrome_asset_catalog") {
+-    sources = [ "app/theme/$branding_path_component/mac/Assets.car" ]
++    sources =
++        [ "app/theme/$branding_path_component/$kyuzen_icon_dir/Assets.car" ]
+     outputs = [ "{{bundle_resources_dir}}/{{source_file_part}}" ]
+   }
+ 
 diff --git a/chrome/app/app-Info.plist b/chrome/app/app-Info.plist
 index 6fada0a2b1..2361e30b56 100644
 --- a/chrome/app/app-Info.plist
