@@ -64,6 +64,9 @@ Put such changes in one patch, or far enough apart to clear the three lines of c
 5. Verify before claiming done: build passes, tests pass, the stage's acceptance list executed by
    hand, perf result recorded. Report failures with output, not summaries.
 6. Commit small. Commit messages say why. Do not commit Chromium sources or build output.
+7. Releases are made only when the owner asks for one. `scripts/release` publishes nothing
+   without `--publish`, and nothing is ever published on an agent's own judgement, however ready
+   the work looks. See docs/releasing.md.
 
 ### Upstream cadence
 
