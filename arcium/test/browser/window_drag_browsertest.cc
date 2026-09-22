@@ -14,6 +14,7 @@
 #include "arcium/test/browser/sidebar_ui_browsertest_base.h"
 #include "arcium/ui/browser/browser_sidebar_controller.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
+#include "build/build_config.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -21,6 +22,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/hit_test.h"
 #include "ui/gfx/geometry/point.h"
+
+#if BUILDFLAG(IS_MAC)
+#include "ui/base/test/scoped_fake_nswindow_fullscreen.h"
+#endif
 
 namespace arcium::test {
 namespace {
@@ -55,6 +60,13 @@ IN_PROC_BROWSER_TEST_F(WindowDragTest, ThePageItselfStillTakesItsClicks) {
 
 IN_PROC_BROWSER_TEST_F(WindowDragTest, AFullScreenWindowHasNothingToMove) {
   // Nothing to drag and nowhere to drag it, so the page keeps every pixel.
+#if BUILDFLAG(IS_MAC)
+  // The real transition is an animation macOS finishes only for a window it
+  // has on screen and in front, which a test run cannot promise, so the wait
+  // below timed out without the window ever going full screen. Chromium's own
+  // full-screen tests stand in for the animation the same way.
+  ui::test::ScopedFakeNSWindowFullscreen fake_fullscreen;
+#endif
   ui_test_utils::ToggleFullscreenModeAndWait(browser());
   ASSERT_TRUE(View()->IsFullscreen());
   EXPECT_NE(HTCAPTION, HitTestAt(PageX(), 0));

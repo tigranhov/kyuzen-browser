@@ -146,6 +146,7 @@ test("arcium_browsertests") {
     "//content/test:test_support",
     "//net:test_support",
     "//testing/gtest",
+    "//ui/base:test_support",
   ]
 
   data_deps = [ "//chrome:packed_resources" ]
