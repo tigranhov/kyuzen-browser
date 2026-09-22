@@ -1,0 +1,113 @@
+Seam: the allowlist in
+      chrome/browser/extensions/api/settings_private/prefs_util.cc and its
+      target's deps in chrome/browser/extensions/BUILD.gn, and the About
+      page's element and template in
+      chrome/browser/resources/settings/about_page/.
+Why: the reader has to be able to choose how updates arrive. The setting
+     belongs to the whole browser rather than to a profile, and the settings
+     page may only read and write a setting that is named in the allowlist.
+     The row itself is a dropdown bound to that setting by name, placed under
+     the update status it governs; its label and choices come from the
+     browser, through patch 0262.
+Delegates to: arcium/browser/update/update_preference.h for the setting's
+     name. The page's markup is a resource keyed by file name and the
+     allowlist is a registration table of the same kind, so neither can be
+     moved into arcium/; the row's text and values are built in
+     arcium/ui/browser/update_settings.cc.
+
+diff --git a/chrome/browser/extensions/BUILD.gn b/chrome/browser/extensions/BUILD.gn
+index d3f740db99..e45335b209 100644
+--- a/chrome/browser/extensions/BUILD.gn
++++ b/chrome/browser/extensions/BUILD.gn
+@@ -487,6 +487,9 @@ source_set("extensions") {
+     "//chrome/browser/supervised_user",
+   ]
+   deps = [
++    # Arcium: prefs_util.cc names the update setting so the settings page may
++    # read and write it.
++    "//arcium/browser/update",
+     "//base",
+     "//chrome/app:command_ids",
+     "//chrome/app/theme:chrome_unscaled_resources",
+diff --git a/chrome/browser/extensions/api/settings_private/prefs_util.cc b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+index 43ba004cc6..32d25d5a04 100644
+--- a/chrome/browser/extensions/api/settings_private/prefs_util.cc
++++ b/chrome/browser/extensions/api/settings_private/prefs_util.cc
+@@ -4,6 +4,8 @@
+ 
+ #include "chrome/browser/extensions/api/settings_private/prefs_util.h"
+ 
++#include "arcium/browser/update/update_preference.h"
++
+ #include <memory>
+ 
+ #include "ash/constants/ash_pref_names.h"
+@@ -1222,6 +1224,7 @@ const PrefsUtil::TypedPrefMap& PrefsUtil::GetAllowlistedKeys() {
+       settings_api::PrefType::kBoolean;
+   (*s_allowlist)[::prefs::kHardwareAccelerationModeEnabled] =
+       settings_api::PrefType::kBoolean;
++  (*s_allowlist)[arcium::prefs::kUpdateMode] = settings_api::PrefType::kNumber;
+ #if BUILDFLAG(IS_WIN)
+   (*s_allowlist)[::prefs::kForegroundLaunchOnLogin] =
+       settings_api::PrefType::kBoolean;
+diff --git a/chrome/browser/resources/settings/about_page/about_page.html.ts b/chrome/browser/resources/settings/about_page/about_page.html.ts
+index b9ac4e634f..c6eeb3736c 100644
+--- a/chrome/browser/resources/settings/about_page/about_page.html.ts
++++ b/chrome/browser/resources/settings/about_page/about_page.html.ts
+@@ -67,6 +67,16 @@ export function getHtml(this: SettingsAboutPageElement) {
+     </span>
+ </if>
+   </div>
++  <div class="cr-row">
++    <div class="flex cr-padded-text" aria-hidden="true">
++      $i18n{kyuzenUpdateLabel}
++    </div>
++    <settings-dropdown-menu id="kyuzenUpdateMode"
++        label="$i18n{kyuzenUpdateLabel}"
++        pref-key="arcium.update_mode"
++        .menuOptions="${this.kyuzenUpdateOptions_}">
++    </settings-dropdown-menu>
++  </div>
+ <if expr="_google_chrome and is_macosx">
+   ${!this.promoteUpdaterStatus_.hidden ? html`
+     <div id="promoteUpdater"
+diff --git a/chrome/browser/resources/settings/about_page/about_page.ts b/chrome/browser/resources/settings/about_page/about_page.ts
+index dd9d93e518..99cb0b81bb 100644
+--- a/chrome/browser/resources/settings/about_page/about_page.ts
++++ b/chrome/browser/resources/settings/about_page/about_page.ts
+@@ -11,6 +11,7 @@ import '/shared/settings/prefs/prefs.js';
+ // <if expr="not is_chromeos">
+ import '../relaunch_confirmation_dialog.js';
+ // </if>
++import '../controls/settings_dropdown_menu.js';
+ import '../settings_page/settings_section.js';
+ import 'chrome://resources/cr_elements/cr_button/cr_button.js';
+ import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.js';
+@@ -29,6 +30,7 @@ import {sanitizeInnerHtml} from 'chrome://resources/js/parse_html_subset.js';
+ import {CrLitElement} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+ import type {PropertyValues} from 'chrome://resources/lit/v3_0/lit.rollup.js';
+ 
++import type {DropdownMenuOptionList} from '../controls/settings_dropdown_menu.js';
+ import {loadTimeData} from '../i18n_setup.js';
+ import {RelaunchMixinLit, RestartType} from '../relaunch_mixin_lit.js';
+ import type {SettingsPlugin} from '../settings_main/settings_plugin.js';
+@@ -80,6 +82,7 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
+     return {
+       currentUpdateStatusEvent_: {type: Object},
+       isManaged_: {type: Boolean},
++      kyuzenUpdateOptions_: {type: Array},
+       managedByIcon_: {type: String},
+ 
+       // <if expr="_google_chrome and is_macosx">
+@@ -102,6 +105,11 @@ export class SettingsAboutPageElement extends SettingsAboutPageElementBase
+     progress: 0,
+     status: UpdateStatus.DISABLED,
+   };
++  // Kyuzen: the three values of the update setting, made by the browser from
++  // the setting's own values rather than written out again here.
++  protected accessor kyuzenUpdateOptions_: DropdownMenuOptionList =
++      JSON.parse(loadTimeData.getString('kyuzenUpdateModeOptions'));
++
+   protected accessor isManaged_: boolean = loadTimeData.getBoolean('isManaged');
+   protected accessor managedByIcon_: string =
+       loadTimeData.getString('managedByIcon');

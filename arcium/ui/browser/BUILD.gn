@@ -65,6 +65,8 @@ source_set("browser") {
     "tab_search_service.h",
     "tab_selection.cc",
     "tab_selection.h",
+    "update_settings.cc",
+    "update_settings.h",
   ]
 
   # Public: this target's own headers include tab_binding.h, archive_store.h
@@ -82,6 +84,7 @@ source_set("browser") {
   # dep. Depending on //chrome/browser/favicon drags in the profile and
   # history graphs and is the dependency direction patch 0010 exists to avoid.
   deps = [
+    "//arcium/browser/update",
     "//arcium/common",
     "//arcium/ui/sidebar",
     "//base",
@@ -135,9 +138,6 @@ source_set("browser") {
       "browser_updates.cc",
       "browser_updates.h",
     ]
-    deps += [
-      "//arcium/browser/update",
-      "//arcium/browser/update:sparkle",
-    ]
+    deps += [ "//arcium/browser/update:sparkle" ]
   }
 }

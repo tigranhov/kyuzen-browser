@@ -53,6 +53,7 @@ test("arcium_unittests") {
     "unloaded_rows_unittest.cc",
     "update_controller_unittest.cc",
     "update_preference_unittest.cc",
+    "update_settings_unittest.cc",
     "url_pill_unittest.cc",
   ]
 

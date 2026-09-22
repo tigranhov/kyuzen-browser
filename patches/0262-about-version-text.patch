@@ -1,30 +1,35 @@
 Seam: AddAboutStrings in
       chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc,
-      where the About page's version line is made, and the settings impl
-      target in chrome/browser/ui/webui/settings/BUILD.gn.
-Why: the About page named Chromium's version alone, so a reader reporting a
-     problem, or checking that an update took, saw nothing that told two
-     Kyuzen releases on the same Chromium apart. It now leads with Kyuzen's
-     version and build number and names Chromium's after it.
+      where the About page's text is made.
+Why: two things the page could not say for itself. It named Chromium's
+     version alone, so a reader reporting a problem, or checking that an
+     update took, saw nothing that told two Kyuzen releases on the same
+     Chromium apart; it now leads with Kyuzen's version and build number. And
+     the update setting's row needs a label and three choices, which the
+     browser builds from the setting's own values so that the row and the
+     browser cannot come to disagree about what was chosen.
 
-     The GN half adds the dependency the hook needs. No cycle: //arcium/common
-     depends only on //base and //components/version_info.
-Delegates to: arcium/common/product_version.cc (arcium::AboutVersionText).
+     Both are taken here, in one patch, because two patches adding lines to
+     the same part of a file cannot afterwards be told apart from a conflict.
+Delegates to: arcium/common/product_version.cc (arcium::AboutVersionText) and
+     arcium/ui/browser/update_settings.cc (arcium::AddUpdateSettingStrings).
+     The GN deps both need are in patch 0191.
 
 diff --git a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-index c4d16f1490..3ddfcf406c 100644
+index c4d16f1490..7670f2c5cc 100644
 --- a/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
 +++ b/chrome/browser/ui/webui/settings/settings_localized_strings_provider.cc
-@@ -4,6 +4,8 @@
+@@ -4,6 +4,9 @@
  
  #include "chrome/browser/ui/webui/settings/settings_localized_strings_provider.h"
  
 +#include "arcium/common/product_version.h"
++#include "arcium/ui/browser/update_settings.h"
 +
  #include <string>
  
  #include "base/command_line.h"
-@@ -339,7 +341,7 @@ void AddAboutStrings(content::WebUIDataSource* html_source, Profile* profile) {
+@@ -339,9 +342,10 @@ void AddAboutStrings(content::WebUIDataSource* html_source, Profile* profile) {
        l10n_util::GetStringUTF16(IDS_SETTINGS_UPGRADE_UP_TO_DATE));
  #endif
  
@@ -32,18 +37,7 @@ index c4d16f1490..3ddfcf406c 100644
 +  std::u16string browser_version = arcium::AboutVersionText();
  
    html_source->AddString("aboutBrowserVersion", browser_version);
++  arcium::AddUpdateSettingStrings(html_source);
    html_source->AddString(
-diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
---- a/chrome/browser/ui/webui/settings/BUILD.gn
-+++ b/chrome/browser/ui/webui/settings/BUILD.gn
-@@ -183,6 +183,10 @@ source_set("impl") {
-     # Arcium: settings_clear_browsing_data_handler.cc calls
-     # arcium/ui/browser/clear_data_warning.h.
-     "//arcium/ui/browser",
-+
-+    # Arcium: settings_localized_strings_provider.cc calls
-+    # arcium/common/product_version.h for the About page's version line.
-+    "//arcium/common",
-     "//chrome/app:command_ids",
-     "//chrome/app:generated_resources",
-     "//chrome/app/vector_icons",
+       "aboutProductCopyright",
+       base::i18n::MessageFormatter::FormatWithNumberedArgs(

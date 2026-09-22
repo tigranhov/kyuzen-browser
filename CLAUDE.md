@@ -45,7 +45,10 @@ lexical order. A patch starts with a plain-text header naming the seam, the reas
 `arcium/` function it delegates to, before the first `diff --git` line. A hook is a few lines that
 call into `arcium/`; if a patch starts to carry logic, move the logic into `arcium/`. Two kinds of
 patch carry no call at all and say so in their header: GN wiring and registration tables that
-Chromium keys by file name.
+Chromium keys by file name. No two patches may add lines to the same part of a file:
+`scripts/sync` decides a patch is already applied by reversing it, and a patch whose context
+holds another's additions can no longer be told apart from a conflict, so every run reports one.
+Put such changes in one patch, or far enough apart to clear the three lines of context.
 
 ### Development workflow
 

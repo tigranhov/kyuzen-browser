@@ -11,16 +11,20 @@
 #include <string>
 
 #include "arcium/browser/update/browser_update_status.h"
+#include "arcium/browser/update/update_preference.h"
 #include "arcium/browser/update/update_status.h"
 #include "arcium/common/product_version.h"
 #include "arcium/test/fake_update_status.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/run_loop.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/webui/help/version_updater.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
+#include "components/prefs/pref_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -85,6 +89,57 @@ IN_PROC_BROWSER_TEST_F(UpdateTest, TheAboutPageNamesKyuzensVersion) {
           .ExtractString();
   EXPECT_NE(std::string::npos, shown.find(std::string(ProductVersion())))
       << shown;
+}
+
+// Driven through the settings page itself rather than the preference, because
+// what is claimed is that a reader can reach the setting: the row has to be
+// in the page, the page has to be allowed to write a setting the whole
+// browser shares, and the value has to land where the updater reads it.
+IN_PROC_BROWSER_TEST_F(UpdateTest, TheSettingCanBeChangedFromTheSettingsPage) {
+  ASSERT_EQ(UpdateMode::kAsk, GetUpdateMode(g_browser_process->local_state()));
+  ASSERT_TRUE(
+      ui_test_utils::NavigateToURL(browser(), GURL("chrome://settings/help")));
+
+  static constexpr char kFindRow[] = R"(
+    (async () => {
+      const ui = document.querySelector('settings-ui');
+      const main = ui.shadowRoot.querySelector('settings-main');
+      const about = main.shadowRoot.querySelector('settings-about-page');
+      await about.updateComplete;
+      const row = about.shadowRoot.querySelector('#kyuzenUpdateMode');
+      if (!row) {
+        return 'no row';
+      }
+      await row.updateComplete;
+      const select = row.shadowRoot.querySelector('select');
+      // The last option is the element's own disabled "Custom" entry.
+      const ours = [...select.options].map(o => o.value)
+                       .filter(v => /^[0-9]+$/.test(v));
+      return ours.join(',') + ' showing ' + select.value;
+    })()
+  )";
+  EXPECT_EQ("0,1,2 showing 0", content::EvalJs(web_contents(), kFindRow))
+      << "three choices, and a new reader is on the first of them";
+
+  static constexpr char kChooseNeverCheck[] = R"(
+    (async () => {
+      const ui = document.querySelector('settings-ui');
+      const main = ui.shadowRoot.querySelector('settings-main');
+      const about = main.shadowRoot.querySelector('settings-about-page');
+      const row = about.shadowRoot.querySelector('#kyuzenUpdateMode');
+      const select = row.shadowRoot.querySelector('select');
+      select.value = '2';
+      select.dispatchEvent(new Event('change'));
+      return true;
+    })()
+  )";
+  ASSERT_EQ(true, content::EvalJs(web_contents(), kChooseNeverCheck));
+
+  // The page writes through an asynchronous call, so wait for the value.
+  while (GetUpdateMode(g_browser_process->local_state()) != UpdateMode::kOff) {
+    base::RunLoop().RunUntilIdle();
+  }
+  EXPECT_EQ(UpdateMode::kOff, GetUpdateMode(g_browser_process->local_state()));
 }
 
 }  // namespace

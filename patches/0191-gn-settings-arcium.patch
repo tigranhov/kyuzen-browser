@@ -1,19 +1,26 @@
 Seam: chrome/browser/ui/webui/settings/BUILD.gn, source_set("impl") -- the
-      target settings_clear_browsing_data_handler.cc builds in.
-Why: GN wiring for patch 0192. The hook includes an //arcium/ui/browser
-     header, and this target has no dep, direct or transitive, on any Arcium
-     target or on //chrome/browser/ui, so `gn check` rejects the include
-     outright.
+      target settings_clear_browsing_data_handler.cc and
+      settings_localized_strings_provider.cc build in.
+Why: GN wiring for patches 0192, 0262 and 0270. Those hooks include
+     //arcium/ui/browser and //arcium/common headers, and this target has no
+     dep, direct or transitive, on any Arcium target or on //chrome/browser/ui,
+     so `gn check` rejects the includes outright.
 
-     No cycle: //arcium/ui/browser depends on nothing that reaches back into
-     this target, so `gn gen` accepts the graph with this dep added.
+     Every Arcium dep this target needs is added here rather than beside the
+     hook that needs it, so that no two patches touch this file: a patch whose
+     added lines sit inside another's context cannot be told apart from a
+     conflict once both are applied, and scripts/sync then reports one on
+     every run.
+
+     No cycle: //arcium/ui/browser and //arcium/common depend on nothing that
+     reaches back into this target, so `gn gen` accepts the graph.
 Delegates to: nothing. GN wiring carries no call.
 
 diff --git a/chrome/browser/ui/webui/settings/BUILD.gn b/chrome/browser/ui/webui/settings/BUILD.gn
-index fc65badb87..e8e1c140bf 100644
+index fc65badb87..6fb37de1d7 100644
 --- a/chrome/browser/ui/webui/settings/BUILD.gn
 +++ b/chrome/browser/ui/webui/settings/BUILD.gn
-@@ -179,6 +179,10 @@ source_set("impl") {
+@@ -179,6 +179,14 @@ source_set("impl") {
  
    deps = [
      ":settings",
@@ -21,6 +28,10 @@ index fc65badb87..e8e1c140bf 100644
 +    # Arcium: settings_clear_browsing_data_handler.cc calls
 +    # arcium/ui/browser/clear_data_warning.h.
 +    "//arcium/ui/browser",
++
++    # Arcium: settings_localized_strings_provider.cc calls
++    # arcium/common/product_version.h for the About page's version line.
++    "//arcium/common",
      "//chrome/app:command_ids",
      "//chrome/app:generated_resources",
      "//chrome/app/vector_icons",

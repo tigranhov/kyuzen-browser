@@ -385,6 +385,16 @@ file name.
 
 - [ ] **Step 3: Sync and count patches (47), then verify by hand**
 
+**Note, added while executing.** The row took more than the settings page's own
+resources. The setting belongs to the whole browser rather than to a profile,
+so the settings page may only touch it once it is named in the allowlist in
+`prefs_util.cc`, which is the third place patch 0270 reaches. Its label and its
+three choices are built by `arcium::UpdateModeOptionsJson` from the setting's
+own values and reach the page as strings, through patch 0262 -- which meant
+regrouping 0191, 0262 and 0270 so that no two of them touch the same file, or
+`scripts/sync` would report a conflict on every run. A browser test drives the
+row in the page and reads the value back out of the browser's own settings.
+
 Open the settings page, change the value three times, quit and relaunch, and
 confirm the value held and that the About page behaves accordingly.
 
