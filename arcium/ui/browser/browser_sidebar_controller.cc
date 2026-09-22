@@ -13,6 +13,7 @@
 #include "arcium/ui/browser/peek_controller.h"
 #include "arcium/ui/browser/session_rebuild_nudge.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "arcium/ui/browser/split_controller.h"
 #include "arcium/ui/browser/tab_search_service.h"
 #include "arcium/ui/sidebar/extensions_row_view.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
@@ -137,6 +138,10 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   if (features::IsPeekEnabled()) {
     peek_ = std::make_unique<PeekController>(browser_view_);
   }
+  // Two pointers and no allocation until something is split: the window's
+  // split view exists to answer questions, and Chromium owns the panes.
+  split_ = std::make_unique<SplitController>(
+      browser_view_->browser()->tab_strip_model(), space_switcher_.get());
   UpdateNavButtons();
   MaybeScheduleSnapshot();
   MaybeShowCommandBoxForDebugging();
@@ -147,6 +152,7 @@ BrowserSidebarController::~BrowserSidebarController() {
   // tab in the strip, and both are still whole here. ~BrowserView frees this
   // controller before it removes its own children.
   peek_.reset();
+  split_.reset();
   model_->RemoveObserver(this);
   // `model_` outlives `archive_service_` by declaration order, and holds a
   // pointer to it. Break that before the service is freed.

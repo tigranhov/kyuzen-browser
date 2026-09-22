@@ -38,6 +38,7 @@ namespace arcium {
 
 class CommandBox;
 class PeekController;
+class SplitController;
 class SuggestionSource;
 class TabSearchService;
 class SidebarView;
@@ -99,6 +100,9 @@ class BrowserSidebarController : public SidebarModel::Observer,
   // The window's peek, or null when the feature is off. A link that leaves a
   // pinned entry's home asks this whether it can be shown over the page.
   PeekController* peek() { return peek_.get(); }
+
+  // The window's split view: who may share a screen, and how one ends.
+  SplitController* split() { return split_.get(); }
 
   CommandBox* command_box_for_testing() { return command_box_.get(); }
   SuggestionSource* suggestion_source_for_testing() {
@@ -167,6 +171,9 @@ class BrowserSidebarController : public SidebarModel::Observer,
   // anything else, because it holds a view in the BrowserView and a page in
   // the strip and both must still be whole when it lets go of them.
   std::unique_ptr<PeekController> peek_;
+  // After `space_switcher_` and `model_` by declaration order, because it
+  // holds a pointer to each.
+  std::unique_ptr<SplitController> split_;
   bool visible_ = true;
   int caption_button_width_ = -1;
   float applied_corner_radius_ = -1.f;

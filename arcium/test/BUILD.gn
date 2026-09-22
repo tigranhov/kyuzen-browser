@@ -44,6 +44,7 @@ test("arcium_unittests") {
     "space_test_util.h",
     "space_wiring_unittest.cc",
     "sparkle_event_unittest.cc",
+    "split_controller_unittest.cc",
     "suggestion_source_unittest.cc",
     "tab_binding_unittest.cc",
     "tab_commands_unittest.cc",
