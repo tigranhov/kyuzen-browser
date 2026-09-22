@@ -21,6 +21,7 @@ class TabStripModel;
 namespace arcium {
 
 class ArchiveService;
+class SplitController;
 class TabBinding;
 
 // One per window. Holds which space the window is showing, answers whether a
@@ -54,6 +55,13 @@ class SpaceSwitcher : public TabStripModelObserver,
   // window built without a sidebar (--arcium-no-sidebar, and every browser
   // test that does not want one).
   static SpaceSwitcher* FromTabStripModel(const TabStripModel* tab_strip_model);
+
+  // The window's split view. Set once by BrowserSidebarController, which owns
+  // both: the split controller takes this switcher as a constructor argument,
+  // so this cannot go the other way round. Null in the playground and in
+  // every fixture with no split view, where a move ends no split because
+  // there is none to end.
+  void SetSplitController(SplitController* split);
 
   SpaceId active_space() const { return active_space_; }
   // Records the current space's active tab, moves to `id`, and lands on that
@@ -160,6 +168,7 @@ class SpaceSwitcher : public TabStripModelObserver,
   raw_ptr<TabStripModel> tab_strip_model_;
   raw_ptr<ArciumModel> model_;
   raw_ptr<TabBinding> binding_;
+  raw_ptr<SplitController> split_ = nullptr;
   // Null in the playground, in a window built without a sidebar, and in
   // every fixture that does not set one. See SetArchiveService.
   raw_ptr<ArchiveService> archive_service_ = nullptr;

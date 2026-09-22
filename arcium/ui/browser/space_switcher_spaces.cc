@@ -17,11 +17,17 @@
 #include "arcium/ui/browser/archive_service.h"
 #include "arcium/ui/browser/profile_reopen.h"
 #include "arcium/ui/browser/space_switcher.h"
+
+#include "arcium/ui/browser/split_controller.h"
 #include "arcium/ui/browser/tab_close_types.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/tabs/public/tab_interface.h"
 
 namespace arcium {
+
+void SpaceSwitcher::SetSplitController(SplitController* split) {
+  split_ = split;
+}
 
 void SpaceSwitcher::MoveTabToSpace(int index, SpaceId space) {
   if (!tab_strip_model_ || index < 0 || index >= tab_strip_model_->count() ||
@@ -30,6 +36,13 @@ void SpaceSwitcher::MoveTabToSpace(int index, SpaceId space) {
   }
   const ProfileId from = model_->ProfileOfSpace(SpaceOfTabAt(index));
   const ProfileId to = model_->ProfileOfSpace(space);
+  // Before the tag and before any reopen. A split whose halves are in two
+  // spaces must not exist even for one turn of the loop: the pane would hold
+  // a tab that has moved out from under it, and between profiles the reopen
+  // replaces the very tab the split is made of.
+  if (split_) {
+    split_->EndSplitFor(index);
+  }
   // The tag goes on before the reopen, never after. The reopen starts a load,
   // and the guard that keeps a page in its space's storage reads the tag to
   // decide where the tab belongs: a tab still wearing the space it is leaving
@@ -76,6 +89,10 @@ void SpaceSwitcher::MoveEntryToSpace(EntryId id, SpaceId space) {
     return;
   }
   const int index = tab_strip_model_->GetIndexOfTab(tab);
+  // The same rule as for a tab: the split ends before the tab goes.
+  if (split_ && index != TabStripModel::kNoTab) {
+    split_->EndSplitFor(index);
+  }
   // Only this window's strip: an entry's tab living in another window is
   // re-tagged here and put right by the guard when it next navigates.
   if (from != model_->ProfileOfSpace(space) && index != TabStripModel::kNoTab) {

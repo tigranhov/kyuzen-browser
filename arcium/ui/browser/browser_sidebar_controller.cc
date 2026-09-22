@@ -147,6 +147,9 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
       browser_view_->browser()->tab_strip_model(), space_switcher_.get(),
       model_.get());
   model_->SetSplitController(split_.get());
+  if (space_switcher_) {
+    space_switcher_->SetSplitController(split_.get());
+  }
   // The sidebar's rows announce their own drags; the target for dropping one
   // on the page is built when that starts and freed when it ends.
   drag_observation_.Observe(view_->drag_session());
@@ -164,8 +167,11 @@ BrowserSidebarController::~BrowserSidebarController() {
   // one of them.
   TakeAwaySplitDropTarget();
   drag_observation_.Reset();
-  // `model_` outlives `split_` by declaration order and points at it.
+  // Both outlive `split_` by declaration order and point at it.
   model_->SetSplitController(nullptr);
+  if (space_switcher_) {
+    space_switcher_->SetSplitController(nullptr);
+  }
   split_.reset();
   model_->RemoveObserver(this);
   // `model_` outlives `archive_service_` by declaration order, and holds a

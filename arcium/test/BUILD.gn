@@ -119,6 +119,7 @@ test("arcium_browsertests") {
     "browser/sidebar_tab_model_profiles_browsertest.cc",
     "browser/sidebar_ui_browsertest_base.cc",
     "browser/sidebar_ui_browsertest_base.h",
+    "browser/split_view_browsertest.cc",
     "browser/update_browsertest.cc",
     "browser/window_drag_browsertest.cc",
     "fake_update_status.h",
