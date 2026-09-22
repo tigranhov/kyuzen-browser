@@ -95,6 +95,21 @@ IN_PROC_BROWSER_TEST_F(UpdateTest, TheAboutPageNamesKyuzensVersion) {
 // what is claimed is that a reader can reach the setting: the row has to be
 // in the page, the page has to be allowed to write a setting the whole
 // browser shares, and the value has to land where the updater reads it.
+IN_PROC_BROWSER_TEST_F(UpdateTest, TheAboutPageCreditsTheChromiumProject) {
+  // Renaming the product renamed the project it is built on with it, so the
+  // page thanked Kyuzen for Kyuzen. The sentence is about this browser; the
+  // link in it is about Chromium.
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(),
+                                           GURL("chrome://settings/help")));
+  const std::string credit =
+      content::EvalJs(web_contents(),
+                      "import('chrome://resources/js/load_time_data.js')"
+                      ".then(m => m.loadTimeData.getString("
+                      "'aboutProductLicense'))")
+          .ExtractString();
+  EXPECT_NE(std::string::npos, credit.find(">Chromium</a>")) << credit;
+}
+
 IN_PROC_BROWSER_TEST_F(UpdateTest, TheSettingCanBeChangedFromTheSettingsPage) {
   ASSERT_EQ(UpdateMode::kAsk, GetUpdateMode(g_browser_process->local_state()));
   ASSERT_TRUE(
