@@ -108,8 +108,15 @@ void CommandBox::ContentsChanged(views::Textfield* sender,
     ShowMatchingPartners();
     return;
   }
-  source_->Start(new_contents, base::BindRepeating(&CommandBox::OnRows,
+  source_->Start(new_contents, base::BindRepeating(&CommandBox::OnSourceRows,
                                                    weak_factory_.GetWeakPtr()));
+}
+
+void CommandBox::OnSourceRows(std::vector<SuggestionRow> rows) {
+  if (mode_ == Mode::kSplitPartner) {
+    return;
+  }
+  OnRows(std::move(rows));
 }
 
 void CommandBox::OnRows(std::vector<SuggestionRow> rows) {
@@ -216,6 +223,8 @@ void CommandBox::EnterSplitPartnerMode() {
     return;
   }
   mode_ = Mode::kSplitPartner;
+  // Nothing the source is still working out can be a partner.
+  source_->Stop();
   // Clears the field without asking the source anything: ContentsChanged sees
   // the mode and shows the partners instead.
   field_->SetText(std::u16string());
@@ -226,9 +235,9 @@ void CommandBox::LeaveSplitPartnerMode() {
   mode_ = Mode::kAnything;
   partners_.clear();
   field_->SetText(std::u16string());
-  source_->Start(
-      std::u16string(),
-      base::BindRepeating(&CommandBox::OnRows, weak_factory_.GetWeakPtr()));
+  source_->Start(std::u16string(),
+                 base::BindRepeating(&CommandBox::OnSourceRows,
+                                     weak_factory_.GetWeakPtr()));
 }
 
 void CommandBox::ShowMatchingPartners() {

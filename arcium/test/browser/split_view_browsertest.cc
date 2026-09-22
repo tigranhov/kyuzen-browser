@@ -7,6 +7,7 @@
 // Both need real storage and a real session file, which is why they are here
 // rather than in a unit test.
 
+#include <string>
 #include <vector>
 
 #include "arcium/browser/model/arcium_model.h"
@@ -15,6 +16,7 @@
 #include "arcium/ui/browser/browser_sidebar_controller.h"
 #include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/browser/split_controller.h"
+#include "base/strings/strcat.h"
 #include "base/test/run_until.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -81,15 +83,18 @@ IN_PROC_BROWSER_TEST_F(SplitViewTest, MovingOneHalfToAnotherSpaceEndsTheSplit) {
   EXPECT_EQ(home, switcher()->SpaceOfTabAt(strip()->GetIndexOfTab(second)));
 }
 
-// The two tabs sharing the screen, in strip order, or fewer when nothing is.
-std::vector<GURL> SharedScreen(TabStripModel* strip) {
-  std::vector<GURL> urls;
+// The two pages sharing the screen, in strip order, or fewer when nothing is.
+// Named by host and query without the port, because the test server picks a
+// new port on every launch and these are compared across a relaunch.
+std::vector<std::string> SharedScreen(TabStripModel* strip) {
+  std::vector<std::string> pages;
   for (int i = 0; i < strip->count(); ++i) {
     if (strip->GetSplitForTab(i)) {
-      urls.push_back(strip->GetWebContentsAt(i)->GetLastCommittedURL());
+      const GURL& url = strip->GetWebContentsAt(i)->GetLastCommittedURL();
+      pages.push_back(base::StrCat({url.host(), "?", url.query()}));
     }
   }
-  return urls;
+  return pages;
 }
 
 IN_PROC_BROWSER_TEST_F(SplitViewTest, PRE_ASplitSurvivesAQuit) {
@@ -111,9 +116,9 @@ IN_PROC_BROWSER_TEST_F(SplitViewTest, ASplitSurvivesAQuit) {
     return SharedScreen(strip()).size() == 2u;
   })) << "the two pages never came back sharing the screen";
 
-  const std::vector<GURL> shared = SharedScreen(strip());
-  EXPECT_EQ(PageUrl("a.test", "left"), shared[0]);
-  EXPECT_EQ(PageUrl("b.test", "right"), shared[1]);
+  const std::vector<std::string> shared = SharedScreen(strip());
+  EXPECT_EQ("a.test?left", shared[0]);
+  EXPECT_EQ("b.test?right", shared[1]);
 }
 
 IN_PROC_BROWSER_TEST_F(SplitViewTest, PRE_ASplitComesBackInASpaceNotOnScreen) {
@@ -143,9 +148,9 @@ IN_PROC_BROWSER_TEST_F(SplitViewTest, ASplitComesBackInASpaceNotOnScreen) {
     return SharedScreen(strip()).size() == 2u;
   })) << "the pair in the space off screen never came back";
 
-  const std::vector<GURL> shared = SharedScreen(strip());
-  EXPECT_EQ(PageUrl("a.test", "left"), shared[0]);
-  EXPECT_EQ(PageUrl("b.test", "right"), shared[1]);
+  const std::vector<std::string> shared = SharedScreen(strip());
+  EXPECT_EQ("a.test?left", shared[0]);
+  EXPECT_EQ("b.test?right", shared[1]);
   for (int i = 0; i < strip()->count(); ++i) {
     if (strip()->GetSplitForTab(i)) {
       EXPECT_EQ(work, switcher()->SpaceOfTabAt(i))

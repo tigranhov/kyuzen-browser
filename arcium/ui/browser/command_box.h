@@ -83,6 +83,11 @@ class CommandBox : public views::BubbleDialogDelegate,
 
  private:
   void OnRows(std::vector<SuggestionRow> rows);
+  // The source's answers, which keep arriving after the question they
+  // answer: the fast providers first, the rest later. Dropped while the box
+  // asks which tab to split with, or a late batch for "split" replaces the
+  // tabs being offered.
+  void OnSourceRows(std::vector<SuggestionRow> rows);
   // Asks which tab to share the screen with: the field is cleared, the rows
   // become the open tabs, and the box stays open.
   void EnterSplitPartnerMode();
