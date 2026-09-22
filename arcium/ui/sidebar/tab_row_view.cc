@@ -89,6 +89,9 @@ TabRowView::TabRowView(Delegate delegate)
   audio_ = AddChildView(std::make_unique<views::ImageView>());
   audio_->SetVisible(false);
 
+  split_ = AddChildView(std::make_unique<views::ImageView>());
+  split_->SetVisible(false);
+
   revert_ = AddChildView(views::CreateVectorImageButtonWithNativeTheme(
       base::BindRepeating(&TabRowView::Revert, base::Unretained(this)),
       kRevertIcon, kIndicatorSize));
@@ -153,6 +156,13 @@ void TabRowView::UpdateVisuals() {
   title_->SetEnabledColor(row_.is_active      ? kColorArciumRowTextActive
                           : row_.needs_load() ? kColorArciumRowTextUnloaded
                                               : kColorArciumRowText);
+  // Only when the bracket is not already saying it: a row joined to its
+  // partner would otherwise carry the mark and the bracket both.
+  if (row_.split.has_value() && !row_.split_joins_previous &&
+      !row_.split_joins_next) {
+    split_->SetImage(ui::ImageModel::FromVectorIcon(
+        kSplitIcon, kColorArciumRowTextActive, kIndicatorSize));
+  }
   if (row_.is_audible || row_.is_muted) {
     audio_->SetImage(
         ui::ImageModel::FromVectorIcon(row_.is_muted ? kMutedIcon : kAudioIcon,
@@ -178,6 +188,9 @@ void TabRowView::UpdateTrailingButtons() {
   // The audio indicator yields its slot to the hover buttons.
   audio_->SetVisible(!hovered_ && !renaming &&
                      (row_.is_audible || row_.is_muted));
+  // So does the split mark, for the same reason and in the same slot.
+  split_->SetVisible(!hovered_ && !renaming && row_.split.has_value() &&
+                     !row_.split_joins_previous && !row_.split_joins_next);
 }
 
 void TabRowView::BeginRename() {

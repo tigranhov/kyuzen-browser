@@ -52,6 +52,39 @@ TabListView::TabListView(SidebarModel* model, SidebarSection section)
     // See the note in TabRowView: the Today list is inside a ScrollView.
     new_tab_->SetTextSubpixelRenderingEnabled(false);
   }
+  // Added last so it paints over the rows' own fills, and kept out of the
+  // layout: SetRows reorders every other child, and this one is placed by
+  // hand from the bounds that layout produces.
+  bracket_ = AddChildView(std::make_unique<views::View>());
+  bracket_->SetProperty(views::kViewIgnoredByLayoutKey, true);
+  bracket_->SetBackground(views::CreateRoundedRectBackground(
+      kColorArciumRowTextActive, metrics::kSplitBracketWidth / 2.f));
+  bracket_->SetVisible(false);
+}
+
+void TabListView::Layout(PassKey) {
+  LayoutSuperclass<views::View>(this);
+  if (!bracket_) {
+    return;
+  }
+  // The join spans both rows and the gap between them, which belongs to
+  // neither, so it is placed here rather than painted inside a row. At most
+  // one split is on screen at a time, so at most one bar is needed.
+  for (size_t i = 1; i < rows_.size(); ++i) {
+    const SidebarRow& above = rows_[i - 1]->row();
+    const SidebarRow& below = rows_[i]->row();
+    if (!above.split_joins_next || !below.split_joins_previous ||
+        above.split != below.split) {
+      continue;
+    }
+    const gfx::Rect top = rows_[i - 1]->bounds();
+    const gfx::Rect bottom = rows_[i]->bounds();
+    bracket_->SetBounds(0, top.y(), metrics::kSplitBracketWidth,
+                        bottom.bottom() - top.y());
+    bracket_->SetVisible(true);
+    return;
+  }
+  bracket_->SetVisible(false);
 }
 
 TabListView::~TabListView() = default;

@@ -1,0 +1,19 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Two panes side by side, which is what a split is. Filled rather than
+// outlined: the mark is drawn at 14px beside a row's title, where a 1px
+// outline reads as noise rather than as a shape.
+CANVAS_DIMENSIONS, 20,
+FILL_RULE_NONZERO,
+MOVE_TO, 3.5f, 5,
+H_LINE_TO, 9,
+V_LINE_TO, 15,
+H_LINE_TO, 3.5f,
+CLOSE,
+MOVE_TO, 11, 5,
+H_LINE_TO, 16.5f,
+V_LINE_TO, 15,
+H_LINE_TO, 11,
+CLOSE

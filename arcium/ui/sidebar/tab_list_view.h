@@ -52,8 +52,15 @@ class TabListView : public views::View, public RowDragSession::Observer {
   TabListView& operator=(const TabListView&) = delete;
   ~TabListView() override;
 
+  // views::View:
+  void Layout(PassKey) override;
+
   // Filters `rows` to this section and updates children, reusing views.
   void SetRows(const std::vector<SidebarRow>& rows);
+
+  // The bar joining two rows that share the screen, for a test that wants to
+  // see it without reading pixels. Empty bounds when nothing is joined.
+  views::View* split_bracket_for_testing() { return bracket_; }
 
   // The shared "a sidebar row is being dragged" signal. This list is both a
   // source — its rows announce their drags — and, when it is empty, a target
@@ -200,6 +207,11 @@ class TabListView : public views::View, public RowDragSession::Observer {
   raw_ptr<SidebarModel> model_;
   const SidebarSection section_;
   std::vector<raw_ptr<TabRowView>> rows_;
+  // Drawn down the left of two rows that are the halves of one split. Its
+  // own view rather than paint inside a row, because the join has to cross
+  // the gap between them, which belongs to neither. Ignored by the layout
+  // and placed by hand.
+  raw_ptr<views::View> bracket_ = nullptr;
   // Parallel to `rows_`: each row's position among this section's rows, which
   // for an entry section is the position the model orders by. Kept because
   // `rows_` is in laid-out order and that order is not the model's.

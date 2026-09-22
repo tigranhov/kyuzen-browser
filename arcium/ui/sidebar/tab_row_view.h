@@ -152,6 +152,10 @@ class TabRowView : public views::Button,
   raw_ptr<views::Throbber> throbber_ = nullptr;
   raw_ptr<views::Label> title_ = nullptr;
   raw_ptr<views::ImageView> audio_ = nullptr;
+  // Two panes, shown on a row whose split partner is not its neighbour in
+  // the list. Where the two are neighbours the list draws a bracket joining
+  // them instead, which says the same thing in one mark rather than two.
+  raw_ptr<views::ImageView> split_ = nullptr;
   raw_ptr<views::ImageButton> revert_ = nullptr;
   raw_ptr<views::ImageButton> close_ = nullptr;
   raw_ptr<RenameField> rename_field_ = nullptr;

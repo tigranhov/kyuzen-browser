@@ -20,6 +20,7 @@
 #include "arcium/browser/tab_space.h"
 #include "arcium/ui/browser/archive_service.h"
 #include "arcium/ui/browser/tab_close_types.h"
+#include "arcium/ui/sidebar/split_rows.h"
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
@@ -151,6 +152,7 @@ std::vector<SidebarRow> SidebarTabModel::rows() const {
     }
     rows.push_back(RowForTab(i, tab));
   }
+  MarkSplitNeighbours(rows);
   return rows;
 }
 
@@ -182,7 +184,10 @@ SidebarRow SidebarTabModel::RowForTab(int index,
     row.title = u"New tab";
   }
   row.favicon = data.favicon;
-  row.is_active = index == tab_strip_model_->active_index();
+  // Asked of the tab rather than of the strip: the strip CHECKs the index,
+  // and a row build is not the place to learn an index went stale.
+  row.split = tab->GetSplit();
+  row.is_active = IsForeground(index);
   row.is_unloaded = !row.is_active && IsTabUnloaded(tab->GetContents());
   row.is_loading = data.network_state != tabs::TabNetworkState::kNone &&
                    !data.should_hide_throbber;
@@ -190,6 +195,24 @@ SidebarRow SidebarTabModel::RowForTab(int index,
   row.is_muted = data.alert_state == tabs::TabAlert::kAudioMuting;
   row.url = data.visible_url;
   return row;
+}
+
+bool SidebarTabModel::IsForeground(int index) const {
+  if (!tab_strip_model_->ContainsIndex(index)) {
+    return false;
+  }
+  // The foreground is the active tab, or both halves when it is in a split,
+  // which is exactly what a row means by current. Asking the strip rather
+  // than comparing against active_index() is what makes the second half of a
+  // split read as current instead of as a tab somewhere else in the list.
+  const tabs::TabInterface* const tab = tab_strip_model_->GetTabAtIndex(index);
+  for (const tabs::TabInterface* front :
+       tab_strip_model_->GetForegroundTabs()) {
+    if (front == tab) {
+      return true;
+    }
+  }
+  return false;
 }
 
 void SidebarTabModel::ActivateTab(int tab_index) {
@@ -414,6 +437,13 @@ void SidebarTabModel::OnTabStripModelChanged(
       }
     }
   }
+  NotifyChanged();
+}
+
+void SidebarTabModel::OnSplitTabChanged(const SplitTabChange& change) {
+  // Forming or breaking a split changes which rows are current and which
+  // carry the mark, and the strip reports it here rather than as a selection
+  // change. NotifyChanged coalesces it with the rest of the burst.
   NotifyChanged();
 }
 

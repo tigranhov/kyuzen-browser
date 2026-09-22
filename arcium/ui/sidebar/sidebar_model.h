@@ -15,6 +15,7 @@
 #include "base/functional/callback.h"
 #include "base/observer_list_types.h"
 #include "base/time/time.h"
+#include "components/split_tabs/split_tab_id.h"
 #include "ui/base/models/image_model.h"
 #include "url/gurl.h"
 
@@ -43,6 +44,20 @@ struct SidebarRow {
   // or discarded to save memory. Clicking it loads the page it was left on.
   // Never set on a cold row, which has no tab, or on the active row.
   bool is_unloaded = false;
+
+  // The split this row's tab shares the screen in, absent when it shares
+  // with nothing. Two rows carrying the same value are the two halves of one
+  // split, and both are active: being current means being in the foreground,
+  // which is one tab normally and two in a split.
+  std::optional<split_tabs::SplitTabId> split;
+  // Whether the split's other half is the row immediately above or below
+  // this one in the list. Set by the model, because only it knows the order
+  // the rows come back in. Two joined rows draw one bracket down their
+  // shared edge; a row whose other half is elsewhere -- a pinned entry split
+  // with a Today tab, which no ordering can put together -- carries a small
+  // two-pane mark instead. Both say the same thing.
+  bool split_joins_previous = false;
+  bool split_joins_next = false;
 
   // Whether clicking this row has to load a page first: a cold entry opens
   // its URL, an unloaded tab reloads its page. The one question the views

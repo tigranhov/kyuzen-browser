@@ -12,6 +12,8 @@ inline constexpr int kSidebarWidth = 250;
 inline constexpr int kSidebarPadding = 8;
 inline constexpr int kRowHeight = 32;
 inline constexpr int kRowCornerRadius = 8;
+// The bar down the left of two rows that share the screen.
+inline constexpr int kSplitBracketWidth = 3;
 inline constexpr int kRowHorizontalPadding = 8;
 inline constexpr int kRowIconTextGap = 9;
 inline constexpr int kFaviconSize = 16;

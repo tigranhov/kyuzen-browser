@@ -175,7 +175,8 @@ SidebarRow SidebarTabModel::RowForEntry(const TabEntry& entry) const {
   // the truth, exactly as Stage 1 had it.
   row.title = entry.custom_title.empty() ? data.title : entry.custom_title;
   row.favicon = data.favicon;
-  row.is_active = row.tab_index == tab_strip_model_->active_index();
+  row.split = tab->GetSplit();
+  row.is_active = IsForeground(row.tab_index);
   row.is_unloaded = !row.is_active && IsTabUnloaded(tab->GetContents());
   row.is_loading = data.network_state != tabs::TabNetworkState::kNone &&
                    !data.should_hide_throbber;

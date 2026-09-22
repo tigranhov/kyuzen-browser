@@ -149,6 +149,7 @@ class SidebarTabModel : public SidebarModel,
       TabStripModel* tab_strip_model,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
+  void OnSplitTabChanged(const SplitTabChange& change) override;
   void OnTabChangedAt(tabs::TabInterface* tab,
                       int index,
                       TabChangeType change_type) override;
@@ -178,6 +179,9 @@ class SidebarTabModel : public SidebarModel,
   bool IsClaimedByEntry(tabs::TabInterface* tab) const;
   // Selects `tab` in the strip that actually holds it and raises its window.
   void ActivateTabInItsOwnWindow(tabs::TabInterface* tab);
+  // Whether the tab at `index` is on screen: the active tab, or either half
+  // of the split the active tab is in.
+  bool IsForeground(int index) const;
   SidebarRow RowForEntry(const TabEntry& entry) const;
   SidebarRow RowForTab(int index, tabs::TabInterface* tab) const;
   // Creates an entry of `kind` from the tab at `tab_index` and binds it.

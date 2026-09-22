@@ -4,6 +4,8 @@
 
 #include "arcium/ui/playground/fake_sidebar_model.h"
 
+#include "arcium/ui/sidebar/split_rows.h"
+
 #include <algorithm>
 #include <iterator>
 #include <limits>
@@ -187,6 +189,19 @@ void FakeSidebarModel::SetFolderPosition(FolderId id, int position) {
   }
 }
 
+void FakeSidebarModel::SplitRows(size_t first, size_t second) {
+  if (first >= rows_.size() || second >= rows_.size() || first == second) {
+    return;
+  }
+  const split_tabs::SplitTabId id = split_tabs::SplitTabId::GenerateNew();
+  rows_[first].split = id;
+  rows_[second].split = id;
+  // Both halves of a split are on screen, so both rows are current.
+  rows_[first].is_active = true;
+  rows_[second].is_active = true;
+  Notify();
+}
+
 std::vector<SidebarRow> FakeSidebarModel::rows() const {
   // Only the space on screen: the real model's rows() is scoped the same
   // way, filtering at the tab strip before a row is ever built.
@@ -197,6 +212,7 @@ std::vector<SidebarRow> FakeSidebarModel::rows() const {
       result.push_back(row);
     }
   }
+  MarkSplitNeighbours(result);
   return result;
 }
 

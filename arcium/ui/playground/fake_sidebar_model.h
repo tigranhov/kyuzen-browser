@@ -105,6 +105,11 @@ class FakeSidebarModel : public SidebarModel {
   }
 
   // SidebarModel:
+  // Puts the two rows at these indices in one split, so the playground can
+  // show what a split looks like without a tab strip to make one. Ignores an
+  // index it does not have.
+  void SplitRows(size_t first, size_t second);
+
   std::vector<SidebarRow> rows() const override;
   void ActivateTab(int tab_index) override;
   void CloseTab(int tab_index) override;
