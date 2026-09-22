@@ -1,0 +1,11 @@
+# Deciding when to look for a new version of the browser, and saying what the
+# looking found. Nothing here knows about the framework that does the work.
+source_set("update") {
+  sources = [
+    "update_preference.cc",
+    "update_preference.h",
+    "update_status.h",
+  ]
+  public_deps = [ "//components/prefs" ]
+  deps = [ "//base" ]
+}

@@ -47,6 +47,7 @@ test("arcium_unittests") {
     "tab_space_unittest.cc",
     "test_app_activation.h",
     "unloaded_rows_unittest.cc",
+    "update_preference_unittest.cc",
     "url_pill_unittest.cc",
   ]
 
@@ -63,6 +64,7 @@ test("arcium_unittests") {
   deps = [
     "//arcium/browser",
     "//arcium/browser/model",
+    "//arcium/browser/update",
     "//arcium/common",
     "//arcium/ui/browser",
     "//arcium/ui/playground:fake_model",

@@ -1,0 +1,41 @@
+Seam: RegisterLocalState in chrome/browser/prefs/browser_prefs.cc, among the
+      calls that ask each subsystem to register the settings it owns, and the
+      dep that lets that file see them.
+Why: how updates are allowed to arrive is one setting for the installation
+     rather than one per profile -- there is one application on disk and
+     every profile runs from it -- and local state is where Chromium keeps
+     settings of that kind. No seam existed here yet, because this is the
+     first setting Arcium owns that is not part of its own model file.
+Delegates to: arcium::RegisterUpdatePrefs
+diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
+index cc6f81920f..4d182f1b58 100644
+--- a/chrome/browser/prefs/BUILD.gn
++++ b/chrome/browser/prefs/BUILD.gn
+@@ -58,6 +58,7 @@ source_set("impl") {
+   ]
+ 
+   deps = [
++    "//arcium/browser/update",
+     ":prefs",
+     ":util",
+     "//chrome/browser:browser_process",
+diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
+index c2fba47e0d..d7dc3c1e15 100644
+--- a/chrome/browser/prefs/browser_prefs.cc
++++ b/chrome/browser/prefs/browser_prefs.cc
+@@ -3,6 +3,7 @@
+ // found in the LICENSE file.
+ 
+ #include "chrome/browser/prefs/browser_prefs.h"
++#include "arcium/browser/update/update_preference.h"
+ 
+ #include <array>
+ #include <optional>
+@@ -1418,6 +1419,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
+   accessibility::AccessibilityPrefsController::RegisterLocalStatePrefs(
+       registry);
+ #endif
++  arcium::RegisterUpdatePrefs(registry);
+   autofill::prefs::RegisterLocalStatePrefs(registry);
+   breadcrumbs::RegisterPrefs(registry);
+   browser_shutdown::RegisterPrefs(registry);
