@@ -28,8 +28,24 @@ namespace arcium {
 
 SplitController::SplitController(TabStripModel* tab_strip_model,
                                  SpaceSwitcher* switcher,
-                                 SidebarTabModel* model)
-    : tab_strip_model_(tab_strip_model), switcher_(switcher), model_(model) {}
+                                 SidebarTabModel* model,
+                                 ArciumModel* arcium_model)
+    : tab_strip_model_(tab_strip_model),
+      switcher_(switcher),
+      model_(model),
+      arcium_model_(arcium_model) {
+  if (tab_strip_model_) {
+    tab_strip_model_->AddObserver(this);
+  }
+  if (arcium_model_) {
+    arcium_model_->AddObserver(this);
+    // The model file is usually still being read when this window is built,
+    // and the record then arrives as a change. It can also already be here,
+    // in a second window or a test that seeded the model, and then no change
+    // is coming and nothing would ever ask.
+    ScheduleReform();
+  }
+}
 
 SplitController::~SplitController() {
   if (tab_strip_model_) {

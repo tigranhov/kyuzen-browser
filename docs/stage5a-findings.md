@@ -84,7 +84,7 @@ back where it found it afterwards; without that, a split recorded in a space
 the window is not showing would drag the window into that space at every
 launch.
 
-## Four things found while writing, all fixed before they shipped
+## Five things found while writing, all fixed before they shipped
 
 Each was found by reading the upstream implementation rather than by a test,
 which is the method this stage was written under and also its weakest point:
@@ -108,6 +108,18 @@ a fifth of the same kind would not have been caught.
    in the playground's fake, which is how the two drift apart. Pulled out into
    `arcium/ui/sidebar/split_rows.{h,cc}`, which both call and which is unit
    tested without a tab strip.
+5. **The controller observed nothing.** Adding the model argument in the last
+   task changed the declaration and left the definition alone, so the
+   constructor took three arguments where its caller passed four — it would
+   not have compiled — and it registered with neither the tab strip nor the
+   model. That is more than a missing argument: without the strip there is no
+   record of which page you were on before this one, so Cmd+Option+S would
+   have done nothing, and no split would ever have been written down, so the
+   whole of the persistence work above was dead code. Found by reading the
+   constructor against its own header while the build was unavailable
+   (`dc7849e`). The unit test for the keyboard's previous-page rule already
+   exists and would have failed on it, which is the point: nothing here has
+   been run.
 
 ## Tests written
 
