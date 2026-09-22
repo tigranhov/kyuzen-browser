@@ -127,4 +127,17 @@ source_set("browser") {
     # views::WebView, for the page inside a peek and an outside link's window.
     "//ui/views/controls/webview",
   ]
+
+  # The updater, started from Chromium's startup parts (patch 0248). Sparkle
+  # exists only on macOS.
+  if (is_mac) {
+    sources += [
+      "browser_updates.cc",
+      "browser_updates.h",
+    ]
+    deps += [
+      "//arcium/browser/update",
+      "//arcium/browser/update:sparkle",
+    ]
+  }
 }

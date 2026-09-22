@@ -77,6 +77,19 @@ TEST_F(UpdateControllerTest, ChangingTheSettingTakesEffectWithoutARelaunch) {
   EXPECT_TRUE(backend()->downloads_automatically());
 }
 
+TEST_F(UpdateControllerTest, AfterShutdownTheSettingIsNoLongerWatched) {
+  // The controller outlives the setting's store at shutdown, because Sparkle
+  // installs a staged version as the application quits, so it has to let go
+  // of the store first.
+  SetMode(UpdateMode::kOff);
+  std::unique_ptr<UpdateController> controller = MakeController();
+  controller->Shutdown();
+
+  SetMode(UpdateMode::kAutomatic);
+
+  EXPECT_FALSE(backend()->checks_automatically());
+}
+
 TEST_F(UpdateControllerTest, ItReportsWhatTheUpdaterIsDoing) {
   SetMode(UpdateMode::kAsk);
   std::unique_ptr<UpdateController> controller = MakeController();

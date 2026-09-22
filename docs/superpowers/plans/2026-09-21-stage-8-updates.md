@@ -263,7 +263,7 @@ git commit -m "Drive the updater from the setting"
 
 - [ ] **Step 1: Make the signing key**
 
-Run `arcium/third_party/sparkle/bin/generate_keys`. Record the public key. **Export the private key and keep it off this machine as well** -- losing it strands every installed copy forever.
+Run `arcium/third_party/sparkle/bin/generate_keys --account kyuzen`. Record the public key. Done 2026-09-22: the key is in the login keychain under the account `kyuzen`, so every later use of Sparkle's tools (`sign_update`, `generate_appcast`) passes `--account kyuzen`, and the owner holds a copy in Passwords. **Export the private key and keep it off this machine as well** -- losing it strands every installed copy forever.
 
 - [ ] **Step 2: Write the backend**
 
@@ -279,7 +279,7 @@ Add `SUFeedURL` (the constant above) and `SUPublicEDKey` (from step 1).
 
 - [ ] **Step 5: Sync and build**
 
-Run: `scripts/sync` (expect 43 patches), then `scripts/build release chrome`.
+Run: `scripts/sync` (expect 44 patches: this task also added `0248-browser-updates-startup.patch`, see the note below), then `scripts/build release chrome`.
 Expected: `Kyuzen.app/Contents/Frameworks/Sparkle.framework` exists.
 
 - [ ] **Step 6: Prove it loads**
@@ -287,6 +287,18 @@ Expected: `Kyuzen.app/Contents/Frameworks/Sparkle.framework` exists.
 Launch the built browser and confirm it starts and stays up. A framework that
 library validation refuses would prevent launch, which is the open question in
 the design.
+
+**Note, added while executing.** The plan named no owner for the controller,
+and without one nothing loads Sparkle, so step 6 would prove nothing. The owner
+is `arcium::BrowserUpdates` in `arcium/ui/browser/`, one of Chromium's startup
+parts, added by `patches/0248-browser-updates-startup.patch`. It loads the
+framework off the UI thread once startup is over, creates the controller, and at
+shutdown calls `UpdateController::Shutdown()` to stop watching the setting. The
+controller itself is never deleted, because Sparkle installs a staged version as
+the application quits. `BrowserUpdates::Get()` is what the About page reads in
+the next task. Sparkle's delegate events become states through
+`arcium::StateAfter` in `sparkle_event.cc`, unit-tested, because the delegate
+cannot run in a test. Only an official build carries the framework.
 
 - [ ] **Step 7: Commit**
 
@@ -329,7 +341,7 @@ Expected: fails -- Chromium's own implementation answers, reporting no updater.
 
 - [ ] **Step 3: Write the adapter and the patch**
 
-- [ ] **Step 4: Run it and watch it pass, then sync and count patches (44)**
+- [ ] **Step 4: Run it and watch it pass, then sync and count patches (45)**
 
 - [ ] **Step 5: Commit**
 
@@ -360,7 +372,7 @@ A row in the About section of Chromium's settings resources, bound to the
 preference. Header says it carries no call: it is a resource table keyed by
 file name.
 
-- [ ] **Step 3: Sync and count patches (45), then verify by hand**
+- [ ] **Step 3: Sync and count patches (46), then verify by hand**
 
 Open the settings page, change the value three times, quit and relaunch, and
 confirm the value held and that the About page behaves accordingly.

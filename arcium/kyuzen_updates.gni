@@ -1,0 +1,16 @@
+# Copyright 2026 The Kyuzen Authors
+# Use of this source code is governed by a BSD-style license that can be
+# found in the LICENSE file.
+
+# Where a released copy looks for newer versions, and the key it checks them
+# against. Both are compiled into every release, so changing either strands
+# the copies already installed: they would go on reading the old feed, or
+# refuse everything signed with the new key.
+
+kyuzen_update_feed_url =
+    "https://tigranhov.github.io/kyuzen-browser/appcast.xml"
+
+# The public half of the EdDSA pair. The private half lives in the release
+# machine's login keychain under the account "kyuzen", with a copy kept by the
+# owner off this machine; it is never committed.
+kyuzen_update_public_key = "ishaQKaObFIZ387XRRzeqmQGrI9rhvcEv8Hh4gq4NBc="

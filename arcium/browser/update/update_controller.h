@@ -32,6 +32,10 @@ class UpdateController : public UpdateStatus {
   bool RelaunchIsPending() const override;
   void CheckNow() override;
 
+  // Stops following the setting. Called at shutdown, before the setting's
+  // store goes away, because the controller itself is kept to the end.
+  void Shutdown();
+
  private:
   void ApplySetting();
   void OnStateChanged(State state);

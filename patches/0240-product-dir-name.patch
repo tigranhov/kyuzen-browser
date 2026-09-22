@@ -1,7 +1,8 @@
 Seam: chrome/app/app-Info.plist, the outer application's property list, and
-      the tweak_info_plist("chrome_app_plist") target in chrome/BUILD.gn that
-      stamps the version keys into it.
-Why: two things the application has to say about itself and could not.
+      in chrome/BUILD.gn the tweak_info_plist("chrome_app_plist") target
+      that stamps the version keys into it and the chrome_app target's
+      substitutions that fill the others.
+Why: three things the application has to say about itself and could not.
 
      The folder under ~/Library/Application Support that holds a profile is
      named by the CrProductDirName key in the outer bundle, and with the key
@@ -19,26 +20,32 @@ Why: two things the application has to say about itself and could not.
      script already accepts, with the build number placed where the bundle
      version reads it so that it always increases.
 
+     The updater reads where to look for newer versions and the key they
+     must be signed with from the same list, so a release has both built in.
+     The values live in arcium/kyuzen_updates.gni and reach the list the way
+     the bundle identifier does, as substitutions on the application target.
+
      Taken here because this is the only file those keys can live in: the
      code reads them from the outer application, and the values come from
-     the same branding and version files everything else reads.
-Delegates to: nothing. This patch carries no call -- it is branding and
-     version values substituted by GN, of the same kind as the bundle
+     the same branding, version and update files everything else reads.
+Delegates to: nothing. This patch carries no call -- it is branding, version
+     and update values substituted by GN, of the same kind as the bundle
      identifier beside them.
 
 diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
-index a33fe738ba..6f105f072d 100644
+index a33fe738ba..1de2e169df 100644
 --- a/chrome/BUILD.gn
 +++ b/chrome/BUILD.gn
-@@ -3,6 +3,7 @@
+@@ -3,6 +3,8 @@
  # found in the LICENSE file.
  
  import("//build/config/chrome_build.gni")
 +import("//arcium/kyuzen_version.gni")
++import("//arcium/kyuzen_updates.gni")
  import("//build/config/chromeos/args.gni")
  import("//build/config/compiler/compiler.gni")
  import("//build/config/compiler/pgo/pgo.gni")
-@@ -508,6 +509,9 @@ if (is_win) {
+@@ -508,6 +510,9 @@ if (is_win) {
        "--scm=1",
        "--bundle_id=$chrome_mac_bundle_id",
      ]
@@ -48,16 +55,29 @@ index a33fe738ba..6f105f072d 100644
      if (enable_updater) {
        args += [ "--privileged_helper_id=$privileged_helper_name" ]
        if (is_chrome_branded) {
+@@ -531,6 +536,8 @@ if (is_win) {
+       "CHROMIUM_BUNDLE_ID=$chrome_mac_bundle_id",
+       "CHROMIUM_SHORT_NAME=$chrome_product_short_name",
+       "CHROMIUM_CREATOR=$chrome_mac_creator_code",
++      "KYUZEN_UPDATE_FEED_URL=$kyuzen_update_feed_url",
++      "KYUZEN_UPDATE_PUBLIC_KEY=$kyuzen_update_public_key",
+     ]
+ 
+     sources = [ "app/chrome_exe_main_mac.cc" ]
 diff --git a/chrome/app/app-Info.plist b/chrome/app/app-Info.plist
-index 6fada0a2b1..9422e3b563 100644
+index 6fada0a2b1..2361e30b56 100644
 --- a/chrome/app/app-Info.plist
 +++ b/chrome/app/app-Info.plist
-@@ -161,6 +161,8 @@
+@@ -161,6 +161,12 @@
  	<string>APPL</string>
  	<key>CFBundleSignature</key>
  	<string>${CHROMIUM_CREATOR}</string>
 +	<key>CrProductDirName</key>
 +	<string>${CHROMIUM_SHORT_NAME}</string>
++	<key>SUFeedURL</key>
++	<string>${KYUZEN_UPDATE_FEED_URL}</string>
++	<key>SUPublicEDKey</key>
++	<string>${KYUZEN_UPDATE_PUBLIC_KEY}</string>
  	<key>NSAppleScriptEnabled</key>
  	<true/>
  	<key>OSAScriptingDefinition</key>

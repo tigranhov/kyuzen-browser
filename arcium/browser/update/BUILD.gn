@@ -2,6 +2,8 @@
 # looking found. Nothing here knows about the framework that does the work.
 source_set("update") {
   sources = [
+    "sparkle_event.cc",
+    "sparkle_event.h",
     "update_controller.cc",
     "update_controller.h",
     "update_preference.cc",
@@ -13,4 +15,39 @@ source_set("update") {
     "//base",
     "//components/prefs",
   ]
+}
+
+if (is_mac) {
+  # The one file that talks to Sparkle. The framework is found by its headers
+  # here and loaded at run time, never linked; -iframework rather than -F so
+  # that its headers are held to their own standards rather than Chromium's.
+  source_set("sparkle") {
+    sources = [
+      "sparkle_backend.h",
+      "sparkle_backend.mm",
+    ]
+    deps = [
+      ":update",
+      "//base",
+    ]
+    frameworks = [ "Foundation.framework" ]
+    cflags_objcc = [
+      "-iframework",
+      rebase_path("//arcium/third_party/sparkle", root_build_dir),
+    ]
+  }
+
+  # Only a release carries Sparkle, so that a development build never offers
+  # to replace itself with a published one. scripts/fetch-sparkle, run by
+  # scripts/sync, puts the framework where this reads it.
+  group("sparkle_in_bundle") {
+    if (is_official_build) {
+      public_deps = [ ":sparkle_framework" ]
+    }
+  }
+
+  bundle_data("sparkle_framework") {
+    sources = [ "//arcium/third_party/sparkle/Sparkle.framework" ]
+    outputs = [ "{{bundle_contents_dir}}/Frameworks/{{source_file_part}}" ]
+  }
 }

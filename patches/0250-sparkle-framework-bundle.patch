@@ -1,0 +1,21 @@
+Seam: chrome/BUILD.gn, mac_app_bundle("chrome_app"), its deps.
+Why: the updater is a framework that has to sit inside the application, in
+     Contents/Frameworks beside Chromium's own, and only the application
+     target decides what the bundle holds. The dependency is a group that is
+     empty unless the build is official, so only a release carries Sparkle
+     and a development build never offers to replace itself with a published
+     one.
+Delegates to: nothing. This patch carries no call -- it is GN wiring to the
+     group in arcium/browser/update/BUILD.gn that names the framework.
+
+diff --git a/chrome/BUILD.gn b/chrome/BUILD.gn
+--- a/chrome/BUILD.gn
++++ b/chrome/BUILD.gn
+@@ -548,6 +548,7 @@ if (is_win) {
+       ":chrome_app_strings_bundle_data",
+       ":chrome_resources",
+       ":chrome_versioned_bundle_data",
++      "//arcium/browser/update:sparkle_in_bundle",
+       "//base:compiler_specific",
+       "//base/allocator:early_zone_registration_apple",
+       "//build:branding_buildflags",

@@ -1,0 +1,30 @@
+Seam: ChromeBrowserMainParts::Create, in chrome/browser/chrome_browser_main.cc,
+      where the macOS startup parts are added.
+Why: the updater belongs to the browser process rather than to any window,
+     and nothing of Arcium's ran once per process until now. Chromium's
+     startup parts are the place such things join, and they are told when
+     the browser has started and when its message loop has ended -- the two
+     moments the updater needs: it starts once startup is over, and lets go
+     of the settings store before that store is destroyed.
+Delegates to: arcium/ui/browser/browser_updates.cc (arcium::BrowserUpdates).
+
+diff --git a/chrome/browser/chrome_browser_main.cc b/chrome/browser/chrome_browser_main.cc
+index 21d499a926..fba1ae2ca9 100644
+--- a/chrome/browser/chrome_browser_main.cc
++++ b/chrome/browser/chrome_browser_main.cc
+@@ -224,6 +224,7 @@
+ #if BUILDFLAG(IS_MAC)
+ #include <Security/Security.h>
+ 
++#include "arcium/ui/browser/browser_updates.h"
+ #include "chrome/browser/mac/chrome_browser_main_extra_parts_mac.h"
+ #include "chrome/browser/ui/cocoa/keystone_infobar_delegate.h"
+ #include "chrome/browser/ui/ui_features.h"
+@@ -804,6 +805,7 @@ std::unique_ptr<content::BrowserMainParts> ChromeBrowserMainParts::Create(
+ 
+ #if BUILDFLAG(IS_MAC)
+   main_parts->AddParts(std::make_unique<ChromeBrowserMainExtraPartsMac>());
++  main_parts->AddParts(std::make_unique<arcium::BrowserUpdates>());
+ #endif
+ 
+ #if BUILDFLAG(IS_CHROMEOS)

@@ -41,6 +41,10 @@ void UpdateController::CheckNow() {
   backend_->CheckByHand();
 }
 
+void UpdateController::Shutdown() {
+  registrar_.RemoveAll();
+}
+
 void UpdateController::ApplySetting() {
   const UpdateMode mode = GetUpdateMode(local_state_);
   backend_->SetChecksAutomatically(mode != UpdateMode::kOff);
