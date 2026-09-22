@@ -117,7 +117,7 @@ a fifth of the same kind would not have been caught.
    have done nothing, and no split would ever have been written down, so the
    whole of the persistence work above was dead code. Found by reading the
    constructor against its own header while the build was unavailable
-   (`dc7849e`). The unit test for the keyboard's previous-page rule already
+   (`b949f8c`). The unit test for the keyboard's previous-page rule already
    exists and would have failed on it, which is the point: nothing here has
    been run.
 
