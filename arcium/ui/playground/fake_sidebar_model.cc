@@ -189,6 +189,40 @@ void FakeSidebarModel::SetFolderPosition(FolderId id, int position) {
   }
 }
 
+bool FakeSidebarModel::CanSplitRow(const SidebarRow& row) const {
+  // The playground has no tab strip, so it stands in for the real rule with
+  // the two halves it can answer: the row on screen cannot share with itself,
+  // and a row already sharing has to be taken apart first. The real model
+  // also refuses another space's row, which this fake has no page on screen
+  // to compare against.
+  return !row.split.has_value() && !row.is_active;
+}
+
+void FakeSidebarModel::SplitRowWithCurrentPage(const SidebarRow& row) {
+  // The active row stands in for the page on screen, which the playground
+  // does not have. Rows are matched by URL: the fake's rows are copies, so
+  // the one handed over is never the one held.
+  std::optional<size_t> active;
+  std::optional<size_t> chosen;
+  for (size_t i = 0; i < rows_.size(); ++i) {
+    if (rows_[i].url == row.url) {
+      chosen = i;
+    } else if (rows_[i].is_active) {
+      active = i;
+    }
+  }
+  if (active && chosen) {
+    SplitRows(*active, *chosen);
+  }
+}
+
+void FakeSidebarModel::ToggleSplit() {
+  for (SidebarRow& r : rows_) {
+    r.split.reset();
+  }
+  Notify();
+}
+
 void FakeSidebarModel::SplitRows(size_t first, size_t second) {
   if (first >= rows_.size() || second >= rows_.size() || first == second) {
     return;

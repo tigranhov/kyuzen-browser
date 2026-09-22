@@ -96,6 +96,7 @@ class RowContextMenu : public ui::SimpleMenuModel::Delegate {
   void AddMoveToSpaceSubmenu();
   // Appends "Always open <site> in this space", or "Stop opening" when that
   // rule exists. Appends nothing for a row whose page is not on the web.
+  void AddSplitItem();
   void AddRoutingItem();
 
   raw_ptr<SidebarModel> model_;

@@ -922,10 +922,10 @@ TEST_F(SidebarViewsTest, TheMenuForAPinnedRowThatHasNavigatedAway) {
   // "Move to folder" is dead here: this row is not in a folder and there are
   // no folders to move it into, so every item in the submenu is greyed out.
   EXPECT_EQ(
-      (std::vector<std::u16string>{u"Rename", u"Return to pinned URL",
-                                   u"New folder", u"Move to folder [disabled]",
-                                   u"Always open one.example in this space",
-                                   u"Unpin", u"Close tab"}),
+      (std::vector<std::u16string>{
+          u"Rename", u"Return to pinned URL", u"New folder",
+          u"Move to folder [disabled]", u"Split with current page",
+          u"Always open one.example in this space", u"Unpin", u"Close tab"}),
       MenuLabels(capture.menu()->menu()));
 }
 
@@ -967,7 +967,8 @@ TEST_F(SidebarViewsTest, NewFolderIsDeadForARowInAFolderAtTheDeepestLevel) {
   EXPECT_EQ(
       (std::vector<std::u16string>{
           u"Rename", u"New folder [disabled]", u"Move to folder",
-          u"Always open one.example in this space", u"Unpin", u"Close tab"}),
+          u"Split with current page", u"Always open one.example in this space",
+          u"Unpin", u"Close tab"}),
       MenuLabels(capture.menu()->menu()));
 }
 
@@ -983,8 +984,55 @@ TEST_F(SidebarViewsTest, APinnedRowOnItsPinnedUrlIsNotOfferedTheReturn) {
   EXPECT_EQ(
       (std::vector<std::u16string>{
           u"Rename", u"New folder", u"Move to folder [disabled]",
-          u"Always open one.example in this space", u"Unpin", u"Close tab"}),
+          u"Split with current page", u"Always open one.example in this space",
+          u"Unpin", u"Close tab"}),
       MenuLabels(capture.menu()->menu()));
+}
+
+// The row on screen is the one a split would be with, so it cannot be the
+// row a split is offered on. Without this the item would appear on every row
+// and do nothing on one of them.
+TEST_F(SidebarViewsTest, TheRowOnScreenIsNotOfferedASplitWithItself) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, true);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kToday, false);
+  MakeList(SidebarSection::kToday);
+  Refresh();
+
+  {
+    ScopedMenuCapture capture;
+    RightClickOn(views::AsViewClass<TabRowView>(list_->children()[0]));
+    ASSERT_TRUE(capture.menu());
+    const std::vector<std::u16string> labels =
+        MenuLabels(capture.menu()->menu());
+    EXPECT_EQ(labels.end(), std::find(labels.begin(), labels.end(),
+                                      u"Split with current page"));
+  }
+  {
+    ScopedMenuCapture capture;
+    RightClickOn(views::AsViewClass<TabRowView>(list_->children()[1]));
+    ASSERT_TRUE(capture.menu());
+    const std::vector<std::u16string> labels =
+        MenuLabels(capture.menu()->menu());
+    EXPECT_NE(labels.end(), std::find(labels.begin(), labels.end(),
+                                      u"Split with current page"));
+  }
+}
+
+// Two rows already sharing the screen have nothing left to offer: replacing a
+// pane means taking the split apart first.
+TEST_F(SidebarViewsTest, ARowAlreadySharingIsNotOfferedAnotherSplit) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kToday, false);
+  MakeList(SidebarSection::kToday);
+  model_.SplitRows(0, 1);
+  Refresh();
+
+  ScopedMenuCapture capture;
+  RightClickOn(views::AsViewClass<TabRowView>(list_->children()[0]));
+  ASSERT_TRUE(capture.menu());
+  const std::vector<std::u16string> labels = MenuLabels(capture.menu()->menu());
+  EXPECT_EQ(labels.end(), std::find(labels.begin(), labels.end(),
+                                    u"Split with current page"));
 }
 
 // A favourite is a tile in the grid, not a row in a list, and the tiles carry
@@ -1001,10 +1049,11 @@ TEST_F(SidebarViewsTest, TheMenuForAFavouriteTile) {
   ScopedMenuCapture capture;
   RightClickOn(grid->children()[0]);
   ASSERT_TRUE(capture.menu());
-  EXPECT_EQ((std::vector<std::u16string>{
-                u"Rename", u"Always open one.example in this space",
-                u"Remove from Favorites", u"Close tab"}),
-            MenuLabels(capture.menu()->menu()));
+  EXPECT_EQ(
+      (std::vector<std::u16string>{u"Rename", u"Split with current page",
+                                   u"Always open one.example in this space",
+                                   u"Remove from Favorites", u"Close tab"}),
+      MenuLabels(capture.menu()->menu()));
 }
 
 // A favourite carries no title of its own, so its icon is the only place a
@@ -1308,11 +1357,12 @@ TEST_F(SidebarViewsTest, ColdRowsCannotCloseATabTheyDoNotHave) {
   ScopedMenuCapture capture;
   RightClickOn(views::AsViewClass<TabRowView>(list_->children()[0]));
   ASSERT_TRUE(capture.menu());
-  EXPECT_EQ((std::vector<std::u16string>{
-                u"Rename", u"New folder", u"Move to folder [disabled]",
-                u"Always open cold.example in this space", u"Unpin",
-                u"Close tab [disabled]"}),
-            MenuLabels(capture.menu()->menu()));
+  EXPECT_EQ(
+      (std::vector<std::u16string>{
+          u"Rename", u"New folder", u"Move to folder [disabled]",
+          u"Split with current page", u"Always open cold.example in this space",
+          u"Unpin", u"Close tab [disabled]"}),
+      MenuLabels(capture.menu()->menu()));
 }
 
 // A field open on the row owns it: a right-click that put a menu over the

@@ -9,6 +9,7 @@
 
 #include "arcium/browser/model/entry_id.h"
 #include "base/memory/raw_ptr.h"
+#include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/split_tabs/split_tab_id.h"
 #include "components/tabs/public/tab_interface.h"
 
@@ -27,7 +28,7 @@ class SpaceSwitcher;
 // Two panes, never more. SplitTabLayout has two values, SplitTabVisualData
 // holds one ratio and MultiContentsView holds two contents views; three and
 // four are deferred, with the reason in the stage's design.
-class SplitController {
+class SplitController : public TabStripModelObserver {
  public:
   // `switcher` is null in the playground, in a window built without a sidebar
   // and in every fixture written before spaces -- all of which mean one
@@ -40,7 +41,7 @@ class SplitController {
                   SidebarTabModel* model);
   SplitController(const SplitController&) = delete;
   SplitController& operator=(const SplitController&) = delete;
-  ~SplitController();
+  ~SplitController() override;
 
   // Whether the tabs at these two indices may share the screen. False for a
   // bad index, for two spaces, for a loose page, and for a tab already in a
@@ -63,6 +64,10 @@ class SplitController {
   // Ends the split the tab on screen is in. Both tabs stay open.
   void Unsplit();
 
+  // Splits the page on screen with the one the reader was on before it, or
+  // ends the split when there is one. The keyboard's way in and out.
+  void ToggleSplitWithPrevious();
+
   // Ends the split the tab at `index` is in, if any. Called before a tab
   // leaves its space: a split whose halves are in two spaces must not exist
   // even for one turn of the loop.
@@ -70,6 +75,12 @@ class SplitController {
 
   bool ActiveIsSplit() const;
   std::optional<split_tabs::SplitTabId> SplitOfActive() const;
+
+  // TabStripModelObserver:
+  void OnTabStripModelChanged(
+      TabStripModel* tab_strip_model,
+      const TabStripModelChange& change,
+      const TabStripSelectionChange& selection) override;
 
  private:
   // Swaps the split's halves when `tab` is not on the side `right` says it
@@ -82,6 +93,10 @@ class SplitController {
   raw_ptr<TabStripModel> tab_strip_model_;
   raw_ptr<SpaceSwitcher> switcher_;
   raw_ptr<SidebarTabModel> model_;
+  // The tab that was on screen before the one that is. A handle, because the
+  // tab it names can be closed or moved between one activation and the next,
+  // and a handle reads as null rather than as somebody else.
+  tabs::TabHandle previously_active_;
 };
 
 }  // namespace arcium

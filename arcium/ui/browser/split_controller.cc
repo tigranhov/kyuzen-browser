@@ -22,7 +22,11 @@ SplitController::SplitController(TabStripModel* tab_strip_model,
                                  SidebarTabModel* model)
     : tab_strip_model_(tab_strip_model), switcher_(switcher), model_(model) {}
 
-SplitController::~SplitController() = default;
+SplitController::~SplitController() {
+  if (tab_strip_model_) {
+    tab_strip_model_->RemoveObserver(this);
+  }
+}
 
 bool SplitController::CanSplit(int index_a, int index_b) const {
   if (!tab_strip_model_ || index_a == index_b) {
@@ -133,6 +137,34 @@ void SplitController::PutOnSide(const split_tabs::SplitTabId& id,
 void SplitController::Unsplit() {
   if (const std::optional<split_tabs::SplitTabId> id = SplitOfActive()) {
     tab_strip_model_->RemoveSplit(*id);
+  }
+}
+
+void SplitController::ToggleSplitWithPrevious() {
+  if (ActiveIsSplit()) {
+    Unsplit();
+    return;
+  }
+  if (!tab_strip_model_ || !previously_active_.Get()) {
+    return;
+  }
+  const int previous =
+      tab_strip_model_->GetIndexOfTab(previously_active_.Get());
+  if (previous >= 0) {
+    SplitWithActive(previous);
+  }
+}
+
+void SplitController::OnTabStripModelChanged(
+    TabStripModel* tab_strip_model,
+    const TabStripModelChange& change,
+    const TabStripSelectionChange& selection) {
+  // Which tab the keyboard would split with. Taken from the strip's own
+  // record of the activation rather than kept as a second history, so a tab
+  // closed or moved away is simply a handle that no longer resolves.
+  if (selection.active_tab_changed() && selection.old_tab &&
+      selection.old_tab != selection.new_tab) {
+    previously_active_ = selection.old_tab->GetHandle();
   }
 }
 

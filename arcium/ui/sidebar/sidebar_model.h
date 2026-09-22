@@ -192,6 +192,19 @@ class SidebarModel {
   // Navigates the entry's bound tab back to the entry's URL.
   virtual void ReturnToPinnedUrl(EntryId id) = 0;
 
+  // Whether `row` could share the screen with the page on it: the row menu
+  // asks before offering the item, so a row it would refuse does not offer
+  // it. False for the row already on screen, for a row in another space, and
+  // for anything already sharing.
+  virtual bool CanSplitRow(const SidebarRow& row) const = 0;
+  // Puts `row`'s page beside the page on screen, opening it first when the
+  // row is cold. The row menu's "Split with current page".
+  virtual void SplitRowWithCurrentPage(const SidebarRow& row) = 0;
+  // Splits the page on screen with the one the reader was on before it, or
+  // ends the split when there is one. What Cmd+Option+S does; the one way in
+  // that needs no pointer, and the fastest way out.
+  virtual void ToggleSplit() = 0;
+
   // Puts `id` in `section` at `position` among that section's entries. What a
   // drop does, and one command rather than a kind change followed by a
   // reorder: a drop changes both at once, so two calls would let an observer

@@ -47,6 +47,9 @@ enum RowCommand {
   // is on the web.
   kOpenSiteHere,
   kStopOpeningSiteHere,
+  // "Split with current page". Only on a row the model says could share the
+  // screen with the page on it.
+  kSplitWithCurrentPage,
   // Every folder in the "Move to folder" submenu, in folders() order, up to
   // RowContextMenu::kMoveToSpaceFirst, whose range is tested before this one.
   kMoveToFolderFirst = 100,
@@ -113,6 +116,7 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
       menu_->AddItem(kPin, u"Pin");
       menu_->AddItem(kAddToFavorites, u"Add to Favorites");
       menu_->AddItem(kRename, u"Rename");
+      AddSplitItem();
       AddMoveToSpaceSubmenu();
       AddRoutingItem();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
@@ -138,6 +142,7 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
       }
       menu_->AddSubMenu(kMoveToFolderParent, u"Move to folder",
                         move_submenu_.get());
+      AddSplitItem();
       AddMoveToSpaceSubmenu();
       AddRoutingItem();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
@@ -146,6 +151,7 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
       break;
     case SidebarSection::kFavorites:
       menu_->AddItem(kRename, u"Rename");
+      AddSplitItem();
       AddMoveToSpaceSubmenu();
       AddRoutingItem();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
@@ -285,6 +291,15 @@ bool RowContextMenu::IsCommandIdEnabled(int command_id) const {
   }
 }
 
+void RowContextMenu::AddSplitItem() {
+  // Asked rather than assumed: the row on screen cannot share with itself,
+  // a row in another space is refused, and a row already sharing has to be
+  // taken apart first. An item that would do nothing is worse than no item.
+  if (model_->CanSplitRow(row_)) {
+    menu_->AddItem(kSplitWithCurrentPage, u"Split with current page");
+  }
+}
+
 void RowContextMenu::AddRoutingItem() {
   const std::string site = RuleSiteForUrl(row_.url);
   if (site.empty()) {
@@ -301,6 +316,15 @@ void RowContextMenu::AddRoutingItem() {
 }
 
 void RowContextMenu::ExecuteCommand(int command_id, int event_flags) {
+  if (command_id == kSplitWithCurrentPage) {
+    // Re-asked at the moment it runs: the menu is a snapshot and the page on
+    // screen can change while it is open, which is exactly what this item is
+    // about.
+    if (model_->CanSplitRow(row_)) {
+      model_->SplitRowWithCurrentPage(row_);
+    }
+    return;
+  }
   if (command_id >= kMoveToSpaceFirst) {
     const size_t index = static_cast<size_t>(command_id - kMoveToSpaceFirst);
     if (index >= space_targets_.size()) {

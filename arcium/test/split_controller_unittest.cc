@@ -172,6 +172,47 @@ TEST_F(SplitControllerTest, ADroppedRowTakesTheRightSideToo) {
   EXPECT_EQ(1, strip()->GetIndexOfTab(dragged));
 }
 
+TEST_F(SplitControllerTest, TheKeyboardSplitsWithTheTabBeforeThisOne) {
+  AddTab(GURL("https://a.test/"), FirstSpace());
+  AddTab(GURL("https://b.test/"), FirstSpace());
+  AddTab(GURL("https://c.test/"), FirstSpace());
+  strip()->ActivateTabAt(1);
+  strip()->ActivateTabAt(2);  // b is now the tab before this one.
+
+  controller().ToggleSplitWithPrevious();
+
+  EXPECT_TRUE(controller().ActiveIsSplit());
+  EXPECT_EQ(2u, strip()->GetForegroundTabs().size());
+  EXPECT_TRUE(
+      strip()
+          ->GetSplitForTab(strip()->GetIndexOfTab(strip()->GetTabAtIndex(1)))
+          .has_value());
+}
+
+TEST_F(SplitControllerTest, TheKeyboardEndsTheSplitItIsShowing) {
+  AddTab(GURL("https://a.test/"), FirstSpace());
+  AddTab(GURL("https://b.test/"), FirstSpace());
+  strip()->ActivateTabAt(0);
+  strip()->ActivateTabAt(1);
+  controller().ToggleSplitWithPrevious();
+  ASSERT_TRUE(controller().ActiveIsSplit());
+
+  controller().ToggleSplitWithPrevious();
+
+  EXPECT_FALSE(controller().ActiveIsSplit());
+  EXPECT_EQ(2, strip()->count());
+}
+
+TEST_F(SplitControllerTest, TheKeyboardDoesNothingWithNoTabBeforeThisOne) {
+  AddTab(GURL("https://a.test/"), FirstSpace());
+  strip()->ActivateTabAt(0);
+
+  controller().ToggleSplitWithPrevious();
+
+  EXPECT_FALSE(controller().ActiveIsSplit());
+  EXPECT_EQ(1, strip()->count());
+}
+
 TEST_F(SplitControllerTest, EndingASplitByIndexWorksFromEitherHalf) {
   AddTab(GURL("https://a.test/"), FirstSpace());
   AddTab(GURL("https://b.test/"), FirstSpace());

@@ -179,6 +179,11 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   // on; the active row is the one the user is looking at.
   AddAccelerator(
       ui::Accelerator(ui::VKEY_BACK, ui::EF_COMMAND_DOWN | ui::EF_SHIFT_DOWN));
+  // Cmd+Option+S puts the page on screen beside the one before it, and takes
+  // a split apart again. Cmd+S is Chromium's Save page; Cmd+Option+S is
+  // claimed by nothing in chrome/browser/ui/accelerator_table.cc.
+  AddAccelerator(
+      ui::Accelerator(ui::VKEY_S, ui::EF_COMMAND_DOWN | ui::EF_ALT_DOWN));
   // Ctrl+1 to Ctrl+9 show the nth space in the bar. Like the one above, they
   // arrive only when the page has not consumed the key.
   for (int i = 0; i < 9; ++i) {
@@ -253,6 +258,10 @@ gfx::Size SidebarView::CalculatePreferredSize(
 }
 
 bool SidebarView::AcceleratorPressed(const ui::Accelerator& accelerator) {
+  if (accelerator.key_code() == ui::VKEY_S) {
+    model_->ToggleSplit();
+    return true;
+  }
   if (accelerator.IsCtrlDown() && accelerator.key_code() >= ui::VKEY_1 &&
       accelerator.key_code() <= ui::VKEY_9) {
     const size_t index = accelerator.key_code() - ui::VKEY_1;

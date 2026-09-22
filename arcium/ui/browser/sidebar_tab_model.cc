@@ -19,6 +19,7 @@
 #include "arcium/browser/restored_tab_loading.h"
 #include "arcium/browser/tab_space.h"
 #include "arcium/ui/browser/archive_service.h"
+#include "arcium/ui/browser/split_controller.h"
 #include "arcium/ui/browser/tab_close_types.h"
 #include "arcium/ui/sidebar/split_rows.h"
 #include "base/auto_reset.h"
@@ -314,6 +315,47 @@ void SidebarTabModel::MoveTabBeforeStripIndex(int from, int before) {
 
 void SidebarTabModel::SetArchiveService(ArchiveService* service) {
   archive_service_ = service;
+}
+
+void SidebarTabModel::SetSplitController(SplitController* split) {
+  split_ = split;
+}
+
+bool SidebarTabModel::CanSplitRow(const SidebarRow& row) const {
+  if (!split_ || !tab_strip_model_) {
+    return false;
+  }
+  const int active = tab_strip_model_->active_index();
+  if (active < 0) {
+    return false;
+  }
+  if (row.is_cold) {
+    // A cold row has no tab to ask about, and opening it is this stage's job
+    // rather than the reader's. The only thing that could refuse it is the
+    // page on screen already sharing.
+    return !tab_strip_model_->GetTabAtIndex(active)->GetSplit().has_value();
+  }
+  return split_->CanSplit(active, row.tab_index);
+}
+
+void SidebarTabModel::SplitRowWithCurrentPage(const SidebarRow& row) {
+  if (!split_) {
+    return;
+  }
+  // An entry is commanded by id and a Today tab by index, the same split the
+  // rest of this model makes: an entry outlives its tab, and a cold one has
+  // no index at all.
+  if (row.entry_id.is_valid()) {
+    split_->SplitWithActive(row.entry_id);
+  } else {
+    split_->SplitWithActive(row.tab_index);
+  }
+}
+
+void SidebarTabModel::ToggleSplit() {
+  if (split_) {
+    split_->ToggleSplitWithPrevious();
+  }
 }
 
 void SidebarTabModel::SetArchiveTimeout(ArchiveTimeout timeout) {

@@ -33,6 +33,7 @@ class TabInterface;
 namespace arcium {
 
 class ArchiveService;
+class SplitController;
 struct ArchiveReadResult;
 struct ArchivedTab;
 struct TabEntry;
@@ -74,6 +75,13 @@ class SidebarTabModel : public SidebarModel,
   // constructor argument. Only ClearToday() reads it.
   void SetArchiveService(ArchiveService* service);
 
+  // The window's split view. Set once by BrowserSidebarController, which owns
+  // both: the controller needs this model to open a cold entry, so it cannot
+  // be a constructor argument here. Null in the playground and in every
+  // fixture that has no split view, where the three split commands do
+  // nothing.
+  void SetSplitController(SplitController* split);
+
   // SidebarModel:
   std::vector<SidebarRow> rows() const override;
   void ActivateTab(int tab_index) override;
@@ -99,6 +107,9 @@ class SidebarTabModel : public SidebarModel,
                    const GURL& expected_url,
                    const std::u16string& title) override;
   void ReturnToPinnedUrl(EntryId id) override;
+  bool CanSplitRow(const SidebarRow& row) const override;
+  void SplitRowWithCurrentPage(const SidebarRow& row) override;
+  void ToggleSplit() override;
   void MoveEntryToSection(EntryId id,
                           SidebarSection section,
                           int position) override;
@@ -219,6 +230,7 @@ class SidebarTabModel : public SidebarModel,
   void FlushNotification();
 
   raw_ptr<TabStripModel> tab_strip_model_;
+  raw_ptr<SplitController> split_ = nullptr;
   raw_ptr<ArciumModel> arcium_model_;
   raw_ptr<TabBinding> binding_;
   raw_ptr<SpaceSwitcher> switcher_;

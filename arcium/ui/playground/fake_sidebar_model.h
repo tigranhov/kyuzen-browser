@@ -104,12 +104,12 @@ class FakeSidebarModel : public SidebarModel {
     return pending_archive_requests_ > 0;
   }
 
-  // SidebarModel:
   // Puts the two rows at these indices in one split, so the playground can
   // show what a split looks like without a tab strip to make one. Ignores an
   // index it does not have.
   void SplitRows(size_t first, size_t second);
 
+  // SidebarModel:
   std::vector<SidebarRow> rows() const override;
   void ActivateTab(int tab_index) override;
   void CloseTab(int tab_index) override;
@@ -129,6 +129,9 @@ class FakeSidebarModel : public SidebarModel {
                    const GURL& expected_url,
                    const std::u16string& title) override;
   void ReturnToPinnedUrl(EntryId id) override;
+  bool CanSplitRow(const SidebarRow& row) const override;
+  void SplitRowWithCurrentPage(const SidebarRow& row) override;
+  void ToggleSplit() override;
   void MoveEntryToSection(EntryId id,
                           SidebarSection section,
                           int position) override;
