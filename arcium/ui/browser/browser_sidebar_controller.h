@@ -74,6 +74,11 @@ class BrowserSidebarController : public SidebarModel::Observer,
   void LayoutSidebar(const gfx::Rect& host_bounds);
   bool IsPositionInWindowCaption(const gfx::Point& point_in_browser_view) const;
 
+  // True inside the thin band along the top of the window that moves it.
+  // Part of the answer above; separate because it is about the window's own
+  // top edge rather than about anything in the sidebar.
+  bool IsWindowTopGrabBand(const gfx::Point& point_in_browser_view) const;
+
   void ToggleVisibility();
 
   // Moves the toolbar's LocationBarView into the URL pill. Called once from

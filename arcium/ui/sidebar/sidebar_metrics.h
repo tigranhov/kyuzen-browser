@@ -47,6 +47,15 @@ inline constexpr int kDefaultCaptionButtonWidth = 70;
 inline constexpr int kNavRowTopMargin = 3;
 inline constexpr int kNavRowY = kSidebarPadding + kNavRowTopMargin;
 
+// A band along the top of the window that moves it.
+//
+// The page and the sidebar both run to the window's edges, so without this
+// there is nothing along the top to take hold of. The band draws nothing and
+// changes no bounds -- everything is painted under it as before -- and only
+// decides where a press goes. Eight pixels is enough to aim at and little
+// enough that a site's own top bar keeps its clicks.
+inline constexpr int kWindowTopGrabHeight = 8;
+
 // The height macOS should treat as this window's title bar.
 //
 // It has no title bar to speak of -- Arcium hides the tab strip and the

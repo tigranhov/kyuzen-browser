@@ -1,11 +1,15 @@
-Seam: BrowserView::InitViews (twice), ShouldDrawTabStrip, NonClientHitTest (mac).
+Seam: BrowserView::InitViews (twice), ShouldDrawTabStrip, NonClientHitTest
+      (both its paths).
 Why: create the sidebar controller; move the location bar and the pinned
      extension buttons into the sidebar after the toolbar exists; hide the tab
-     strip; drag the window from the sidebar.
+     strip; drag the window by the sidebar and by a band along the top of the
+     page. Both paths of the hit test are hooked: the one for immersive full
+     screen and the one every ordinary window takes, which is the one that
+     decides whether a window can be moved at all.
 Delegates to: arcium/ui/browser/browser_sidebar_controller.cc
 
 diff --git a/chrome/browser/ui/views/frame/browser_view.cc b/chrome/browser/ui/views/frame/browser_view.cc
-index cfa9bbe1e0..9ce23431f3 100644
+index cfa9bbe1e0..dcd63b0afe 100644
 --- a/chrome/browser/ui/views/frame/browser_view.cc
 +++ b/chrome/browser/ui/views/frame/browser_view.cc
 @@ -946,6 +946,7 @@ BrowserView::BrowserView(Browser* browser)
@@ -37,7 +41,19 @@ index cfa9bbe1e0..9ce23431f3 100644
      // The vertical tabstrip is not part of the overlay in immersive mode and
      // must be tested separately.
      if (vertical_tab_strip_region_view_ &&
-@@ -4934,6 +4942,10 @@ void BrowserView::AddedToWidget() {
+@@ -4721,6 +4729,11 @@ int BrowserView::NonClientHitTest(const gfx::Point& point) {
+     }
+   }
+ 
++  if (arcium_sidebar_ && arcium_sidebar_->IsPositionInWindowCaption(
++                             point_in_browser_view_coords)) {
++    return HTCAPTION;
++  }
++
+   // If the point's y coordinate is below the top of the topmost view and
+   // otherwise within the bounds of this view, the point is considered to be
+   // within the client area.
+@@ -4934,6 +4947,10 @@ void BrowserView::AddedToWidget() {
  #endif
  
    toolbar_->Init();

@@ -220,12 +220,32 @@ void BrowserSidebarController::UpdateContentCorners() {
 
 bool BrowserSidebarController::IsPositionInWindowCaption(
     const gfx::Point& point_in_browser_view) const {
+  if (IsWindowTopGrabBand(point_in_browser_view)) {
+    return true;
+  }
   if (!visible_ || !view_->bounds().Contains(point_in_browser_view)) {
     return false;
   }
   gfx::Point p = point_in_browser_view;
   views::View::ConvertPointToTarget(browser_view_, view_, &p);
   return view_->IsPositionInWindowCaption(p);
+}
+
+bool BrowserSidebarController::IsWindowTopGrabBand(
+    const gfx::Point& point_in_browser_view) const {
+  // Everything runs to the window's edges -- the page beside the sidebar and
+  // the sidebar's own first row -- so without this there is nothing along the
+  // top to take hold of. The band draws nothing and moves nothing; it only
+  // sends a press to the window rather than to whatever is underneath. It
+  // spans the whole width, because the sidebar's top edge is as bare as the
+  // page's.
+  if (browser_view_->IsFullscreen()) {
+    // Nothing to move and nowhere to move it, so every pixel stays with what
+    // is drawn there.
+    return false;
+  }
+  return point_in_browser_view.y() >= 0 &&
+         point_in_browser_view.y() < metrics::kWindowTopGrabHeight;
 }
 
 void BrowserSidebarController::ToggleVisibility() {
