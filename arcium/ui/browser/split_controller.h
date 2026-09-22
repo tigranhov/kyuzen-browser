@@ -10,11 +10,13 @@
 #include "arcium/browser/model/entry_id.h"
 #include "base/memory/raw_ptr.h"
 #include "components/split_tabs/split_tab_id.h"
+#include "components/tabs/public/tab_interface.h"
 
 class TabStripModel;
 
 namespace arcium {
 
+class SidebarTabModel;
 class SpaceSwitcher;
 
 // One window's split view (R5.1): the decisions Chromium's own split cannot
@@ -31,7 +33,11 @@ class SplitController {
   // and in every fixture written before spaces -- all of which mean one
   // space, so only the rules that do not mention spaces apply. Both arguments
   // must outlive this.
-  SplitController(TabStripModel* tab_strip_model, SpaceSwitcher* switcher);
+  // `model` is the sidebar's own model, null in a window without one; it is
+  // consulted only to open a cold entry.
+  SplitController(TabStripModel* tab_strip_model,
+                  SpaceSwitcher* switcher,
+                  SidebarTabModel* model);
   SplitController(const SplitController&) = delete;
   SplitController& operator=(const SplitController&) = delete;
   ~SplitController();
@@ -43,7 +49,16 @@ class SplitController {
 
   // Puts the tab at `index` beside the tab on screen. False when refused, and
   // then nothing happened.
-  bool SplitWithActive(int index);
+  //
+  // `on_right` is which side that tab should take, which only a drop knows:
+  // it was dropped on one half of the page and belongs there. Absent leaves
+  // the order Chromium chose, which is strip order.
+  bool SplitWithActive(int index, std::optional<bool> on_right = std::nullopt);
+
+  // The same for a sidebar entry, opening its page first when the entry is
+  // cold. Needs the sidebar's model, which is what knows how to open one;
+  // false when this window has none.
+  bool SplitWithActive(EntryId id, std::optional<bool> on_right = std::nullopt);
 
   // Ends the split the tab on screen is in. Both tabs stay open.
   void Unsplit();
@@ -57,8 +72,16 @@ class SplitController {
   std::optional<split_tabs::SplitTabId> SplitOfActive() const;
 
  private:
+  // Swaps the split's halves when `tab` is not on the side `right` says it
+  // should be. Which half a tab is in is its strip index: the lower of the
+  // two is the pane on the left.
+  void PutOnSide(const split_tabs::SplitTabId& id,
+                 tabs::TabHandle tab,
+                 bool right);
+
   raw_ptr<TabStripModel> tab_strip_model_;
   raw_ptr<SpaceSwitcher> switcher_;
+  raw_ptr<SidebarTabModel> model_;
 };
 
 }  // namespace arcium

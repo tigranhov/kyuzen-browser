@@ -58,6 +58,11 @@ class SidebarView : public views::View, public SidebarModel::Observer {
   };
 
   SidebarView(SidebarModel* model, Delegate delegate);
+
+  // Whether one of the sidebar's own rows is being dragged, which the window
+  // needs too: dropping a row on the page is what puts two pages side by
+  // side, and the target for that drop exists only while a drag is running.
+  RowDragSession* drag_session() { return &row_drag_session_; }
   SidebarView(const SidebarView&) = delete;
   SidebarView& operator=(const SidebarView&) = delete;
   ~SidebarView() override;

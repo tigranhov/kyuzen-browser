@@ -58,6 +58,8 @@ source_set("browser") {
     "space_switcher_spaces.cc",
     "split_controller.cc",
     "split_controller.h",
+    "split_drop_view.cc",
+    "split_drop_view.h",
     "suggestion_source.cc",
     "suggestion_source.h",
     "tab_close_types.h",
@@ -128,9 +130,17 @@ source_set("browser") {
     "//content/public/browser",
     "//third_party/metrics_proto",
 
+    # cc::PaintFlags, for lighting the half of the page a dragged row would
+    # land on.
+    "//cc/paint",
+
     # display::Screen, for placing the outside-link window on the screen the
     # browser window is on.
     "//ui/display",
+
+    # ui::Layer, which the split drop target and the peek both paint to so
+    # they are drawn over a page that draws through one of its own.
+    "//ui/compositor",
     "//ui/views",
 
     # views::WebView, for the page inside a peek and an outside link's window.

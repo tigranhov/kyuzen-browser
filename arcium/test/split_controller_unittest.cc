@@ -9,8 +9,10 @@
 #include "arcium/browser/loose_page.h"
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/entry_id.h"
+#include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/test/space_test_util.h"
+#include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/browser/space_switcher.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -29,11 +31,15 @@ class SplitControllerTest : public BrowserWithTestWindowTest {
     BrowserWithTestWindowTest::SetUp();
     switcher_ =
         std::make_unique<SpaceSwitcher>(strip(), &arcium_model_, &binding_);
-    controller_ = std::make_unique<SplitController>(strip(), switcher_.get());
+    model_ = std::make_unique<SidebarTabModel>(strip(), &arcium_model_,
+                                               &binding_, switcher_.get());
+    controller_ = std::make_unique<SplitController>(strip(), switcher_.get(),
+                                                    model_.get());
   }
 
   void TearDown() override {
     controller_.reset();
+    model_.reset();
     switcher_.reset();
     BrowserWithTestWindowTest::TearDown();
   }
@@ -49,6 +55,7 @@ class SplitControllerTest : public BrowserWithTestWindowTest {
   ArciumModel arcium_model_;
   TabBinding binding_;
   std::unique_ptr<SpaceSwitcher> switcher_;
+  std::unique_ptr<SidebarTabModel> model_;
   std::unique_ptr<SplitController> controller_;
 };
 
@@ -126,6 +133,43 @@ TEST_F(SplitControllerTest, UnsplittingLeavesBothTabsOpen) {
 
   EXPECT_FALSE(controller().ActiveIsSplit());
   EXPECT_EQ(2, strip()->count());
+}
+
+TEST_F(SplitControllerTest, SplittingWithAColdEntryOpensItsPageFirst) {
+  const EntryId cold = arcium_model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://pinned.test/"), u"Pinned");
+  AddTab(GURL("https://a.test/"), FirstSpace());
+  strip()->ActivateTabAt(0);
+  ASSERT_EQ(1, strip()->count());
+
+  EXPECT_TRUE(controller().SplitWithActive(cold));
+
+  EXPECT_EQ(2, strip()->count());
+  EXPECT_EQ(2u, strip()->GetForegroundTabs().size());
+}
+
+TEST_F(SplitControllerTest, ADroppedRowTakesTheSideItWasDroppedOn) {
+  AddTab(GURL("https://a.test/"), FirstSpace());
+  tabs::TabInterface* const dragged =
+      AddTab(GURL("https://b.test/"), FirstSpace());
+  strip()->ActivateTabAt(0);
+
+  // Dropped on the left half, so the dragged page is the left pane -- which
+  // is the lower of the two strip indices.
+  ASSERT_TRUE(controller().SplitWithActive(1, /*on_right=*/false));
+
+  EXPECT_EQ(0, strip()->GetIndexOfTab(dragged));
+}
+
+TEST_F(SplitControllerTest, ADroppedRowTakesTheRightSideToo) {
+  AddTab(GURL("https://a.test/"), FirstSpace());
+  tabs::TabInterface* const dragged =
+      AddTab(GURL("https://b.test/"), FirstSpace());
+  strip()->ActivateTabAt(0);
+
+  ASSERT_TRUE(controller().SplitWithActive(1, /*on_right=*/true));
+
+  EXPECT_EQ(1, strip()->GetIndexOfTab(dragged));
 }
 
 TEST_F(SplitControllerTest, EndingASplitByIndexWorksFromEitherHalf) {

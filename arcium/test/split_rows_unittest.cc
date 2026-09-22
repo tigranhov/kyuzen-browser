@@ -111,7 +111,8 @@ class SplitSidebarRowsTest : public BrowserWithTestWindowTest {
     BrowserWithTestWindowTest::SetUp();
     model_ =
         std::make_unique<SidebarTabModel>(strip(), &arcium_model_, &binding_);
-    controller_ = std::make_unique<SplitController>(strip(), nullptr);
+    controller_ =
+        std::make_unique<SplitController>(strip(), nullptr, model_.get());
   }
 
   void TearDown() override {

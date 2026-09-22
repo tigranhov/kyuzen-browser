@@ -7,16 +7,20 @@
 #include <vector>
 
 #include "arcium/browser/loose_page.h"
+#include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/browser/space_switcher.h"
 #include "chrome/browser/ui/tabs/split_tab_metrics.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "components/split_tabs/split_tab_visual_data.h"
+#include "components/tabs/public/split_tab_data.h"
+#include "components/tabs/public/tab_interface.h"
 
 namespace arcium {
 
 SplitController::SplitController(TabStripModel* tab_strip_model,
-                                 SpaceSwitcher* switcher)
-    : tab_strip_model_(tab_strip_model), switcher_(switcher) {}
+                                 SpaceSwitcher* switcher,
+                                 SidebarTabModel* model)
+    : tab_strip_model_(tab_strip_model), switcher_(switcher), model_(model) {}
 
 SplitController::~SplitController() = default;
 
@@ -53,18 +57,77 @@ bool SplitController::CanSplit(int index_a, int index_b) const {
   return switcher_->SpaceOfTabAt(index_a) == switcher_->SpaceOfTabAt(index_b);
 }
 
-bool SplitController::SplitWithActive(int index) {
+bool SplitController::SplitWithActive(int index, std::optional<bool> on_right) {
   const int active = tab_strip_model_ ? tab_strip_model_->active_index() : -1;
   if (active < 0 || !CanSplit(active, index)) {
     return false;
   }
+  // Taken before the split, because forming one reorders the strip to put the
+  // two tabs together and the index this was called with is stale afterwards.
+  const tabs::TabHandle joined =
+      tab_strip_model_->GetTabAtIndex(index)->GetHandle();
   // One index, not two: AddToNewSplit splits what it is given with whatever
   // is active, and CHECKs that it was handed exactly one index that is not
   // the active one. CanSplit has already established both.
-  tab_strip_model_->AddToNewSplit(
+  const split_tabs::SplitTabId id = tab_strip_model_->AddToNewSplit(
       {index}, split_tabs::SplitTabVisualData(),
       split_tabs::SplitTabCreatedSource::kDragAndDropTab);
+  if (on_right.has_value()) {
+    PutOnSide(id, joined, *on_right);
+  }
   return true;
+}
+
+bool SplitController::SplitWithActive(EntryId id,
+                                      std::optional<bool> on_right) {
+  if (!model_ || !tab_strip_model_) {
+    return false;
+  }
+  const int active = tab_strip_model_->active_index();
+  if (active < 0) {
+    return false;
+  }
+  // The page on screen now, remembered before anything opens: activating the
+  // entry puts its own tab in front, and splitting that with itself is not a
+  // split.
+  const tabs::TabHandle kept =
+      tab_strip_model_->GetTabAtIndex(active)->GetHandle();
+  // Opens a cold entry and binds the tab; a no-op for one that is already
+  // warm, beyond putting it on screen.
+  model_->ActivateEntry(id);
+  const int opened =
+      tab_strip_model_->GetIndexOfTab(tab_strip_model_->GetActiveTab());
+  const int previous = tab_strip_model_->GetIndexOfTab(kept.Get());
+  if (opened < 0 || previous < 0 || opened == previous) {
+    // Nothing opened here: either the entry has no URL, or its tab belongs to
+    // another window, which was raised instead. Neither is a split.
+    return false;
+  }
+  // The entry's tab is the one that joins, so the page that was on screen
+  // goes back in front first. Activating moves nothing, so `opened` still
+  // names the entry's tab.
+  tab_strip_model_->ActivateTabAt(previous);
+  return SplitWithActive(opened, on_right);
+}
+
+void SplitController::PutOnSide(const split_tabs::SplitTabId& id,
+                                tabs::TabHandle tab,
+                                bool right) {
+  const split_tabs::SplitTabData* const data =
+      tab_strip_model_->GetSplitData(id);
+  if (!data || !tab.Get()) {
+    return;
+  }
+  const int index = tab_strip_model_->GetIndexOfTab(tab.Get());
+  if (index < 0) {
+    return;
+  }
+  // The lower of the two strip indices is the pane on the left.
+  const bool is_on_right =
+      index > static_cast<int>(data->GetIndexRange().start());
+  if (is_on_right != right) {
+    tab_strip_model_->ReverseTabsInSplit(id);
+  }
 }
 
 void SplitController::Unsplit() {

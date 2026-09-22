@@ -14,6 +14,7 @@
 #include "arcium/ui/browser/session_rebuild_nudge.h"
 #include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/browser/split_controller.h"
+#include "arcium/ui/browser/split_drop_view.h"
 #include "arcium/ui/browser/tab_search_service.h"
 #include "arcium/ui/sidebar/extensions_row_view.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
@@ -46,6 +47,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
 #include "chrome/browser/ui/views/frame/layout/browser_view_layout_params.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "chrome/browser/ui/views/location_bar/location_bar_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
@@ -56,6 +58,7 @@
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -141,7 +144,11 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   // Two pointers and no allocation until something is split: the window's
   // split view exists to answer questions, and Chromium owns the panes.
   split_ = std::make_unique<SplitController>(
-      browser_view_->browser()->tab_strip_model(), space_switcher_.get());
+      browser_view_->browser()->tab_strip_model(), space_switcher_.get(),
+      model_.get());
+  // The sidebar's rows announce their own drags; the target for dropping one
+  // on the page is built when that starts and freed when it ends.
+  drag_observation_.Observe(view_->drag_session());
   UpdateNavButtons();
   MaybeScheduleSnapshot();
   MaybeShowCommandBoxForDebugging();
@@ -152,6 +159,10 @@ BrowserSidebarController::~BrowserSidebarController() {
   // tab in the strip, and both are still whole here. ~BrowserView frees this
   // controller before it removes its own children.
   peek_.reset();
+  // Before the BrowserView removes its own children, as the peek is: this is
+  // one of them.
+  TakeAwaySplitDropTarget();
+  drag_observation_.Reset();
   split_.reset();
   model_->RemoveObserver(this);
   // `model_` outlives `archive_service_` by declaration order, and holds a
@@ -193,6 +204,64 @@ void BrowserSidebarController::LayoutSidebar(const gfx::Rect& host_bounds) {
   if (peek_) {
     peek_->Layout(PageArea());
   }
+  if (split_drop_) {
+    split_drop_->SetBoundsRect(WholePageArea());
+  }
+}
+
+void BrowserSidebarController::OnRowDragInFlightChanged() {
+  if (view_->drag_session()->in_flight()) {
+    ShowSplitDropTarget();
+  } else {
+    TakeAwaySplitDropTarget();
+  }
+}
+
+void BrowserSidebarController::ShowSplitDropTarget() {
+  if (split_drop_) {
+    return;
+  }
+  split_drop_ = browser_view_->AddChildView(
+      std::make_unique<SplitDropView>(base::BindRepeating(
+          &BrowserSidebarController::OnSplitDrop, weak_factory_.GetWeakPtr())));
+  // Above every other layer in the window, for the reason PeekController
+  // gives: added last is not enough, because the window restacks its children
+  // whenever it lays them out.
+  if (ui::Layer* layer = split_drop_->layer(); layer && layer->parent()) {
+    layer->parent()->StackAtTop(layer);
+  }
+  split_drop_->SetBoundsRect(WholePageArea());
+}
+
+void BrowserSidebarController::TakeAwaySplitDropTarget() {
+  if (!split_drop_) {
+    return;
+  }
+  browser_view_->RemoveChildViewT(split_drop_.ExtractAsDangling());
+}
+
+void BrowserSidebarController::OnSplitDrop(RowDragData payload, bool right) {
+  if (!split_) {
+    return;
+  }
+  if (payload.is_entry()) {
+    split_->SplitWithActive(payload.entry_id, right);
+  } else {
+    split_->SplitWithActive(payload.tab_index, right);
+  }
+}
+
+gfx::Rect BrowserSidebarController::WholePageArea() const {
+  // Both panes and the divider, not just the pane in front: PageArea() is the
+  // active contents container, which in a split is one half of the page, and
+  // a target over one half would refuse the other.
+  views::View* const contents = browser_view_->multi_contents_view();
+  if (!contents) {
+    return PageArea();
+  }
+  gfx::Point origin;
+  views::View::ConvertPointToTarget(contents, browser_view_, &origin);
+  return gfx::Rect(origin, contents->size());
 }
 
 gfx::Rect BrowserSidebarController::PageArea() const {
