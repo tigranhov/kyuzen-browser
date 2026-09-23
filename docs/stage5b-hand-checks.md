@@ -41,5 +41,15 @@ so the lowest line on show was one row up. Fixed in 3fc6eb7 and confirmed by
 the owner.
 
 Row 2 follow-up: the sidebar rebuilt every row on each divider step; it no
-longer does (791118f). The owner saw less lag but not none, so the rest is
-being compared against plain Chromium through `--arcium-no-sidebar`.
+longer does (791118f). The owner saw less lag but not none, and the same
+drag in plain Chromium, through `--arcium-no-sidebar`, lags the same way. The
+lag left is Chromium's own page resize, not Arcium's. Closed as upstream.
+
+Added after the pass at the owner's request (73314f4): dropping a sidebar row
+on the middle of another row splits the two. Not yet walked by hand:
+
+| # | Do this | Look for |
+|---|---|---|
+| 9 | Drag a Today row over the middle of another Today row, hold, then let go | While held there, that row's right half is tinted. Letting go splits the two, the dragged page on the right, drawn as one row |
+| 10 | Drag a row near the top or bottom edge of another row | The line shows, no tint, and letting go moves the row as before |
+| 11 | Drag a Today row over the middle of a pinned row that is not open | The pinned page opens on the left, the dragged page on the right |

@@ -87,10 +87,16 @@ each page twice.
 ## Open
 
 - The page behind the split divider lags on heavy pages, up to ten seconds
-  to settle, while the divider itself is smooth. Not yet compared with plain
-  Chromium.
-- A pinned row cannot be dragged to the very bottom of the Pinned list, only
-  to one place above it. Not yet traced.
+  to settle, while the divider itself is smooth. Part of it was the sidebar
+  rebuilding on every divider step, fixed in 791118f. The rest is Chromium's:
+  plain Chromium lags the same way.
+
+## Fixed and added after the hand pass
+
+- A pinned row could not be dropped at the very bottom of Pinned: the line
+  for that drop was drawn past the list's edge and clipped (3fc6eb7).
+- Dropping a row on the middle of another row splits the two, at the
+  owner's request (73314f4). Hand rows 9 to 11 cover it.
 
 ## Owed
 
