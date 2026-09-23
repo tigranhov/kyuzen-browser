@@ -102,6 +102,13 @@ Put such changes in one patch, or far enough apart to clear the three lines of c
   Prefer the Views playground for UI iteration.
 - Build configs in `build/`: `dev` (component build, minimal symbols), `perf` (release-like, for
   measurements), `release`.
+- **The dev browser may be quit freely**, without asking the owner, whenever a rebuild or relaunch
+  needs it. It is the build in `out/dev`, run with its own data in `Kyuzen-dev`, and the owner's
+  daily browsing is in the installed release build, which has its own data and icon. Quit it by
+  process, never by app name: both builds share the bundle id `io.github.tigranhov.kyuzen`, so
+  "quit Kyuzen" can reach the release build. `pkill -TERM -f "out/dev/Kyuzen.app/Contents/MacOS/Kyuzen"`
+  shuts it down cleanly and its tabs and spaces come back on the next launch; wait for the process
+  to be gone before building. Never quit `/Applications/Kyuzen.app`.
 
 ## Commands
 
