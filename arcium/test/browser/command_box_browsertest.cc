@@ -40,6 +40,17 @@ namespace {
 
 using CommandBoxTest = SidebarUiTest;
 
+// Every tab's address, for a failure that finds one more tab than it made.
+std::string TabUrls(Browser* browser) {
+  std::string urls = "tabs:";
+  TabStripModel* strip = browser->tab_strip_model();
+  for (int i = 0; i < strip->count(); ++i) {
+    base::StrAppend(&urls,
+                    {" ", strip->GetWebContentsAt(i)->GetVisibleURL().spec()});
+  }
+  return urls;
+}
+
 // The three things that decide whether taking "split" asks which tab or
 // closes the box, read before Enter: a box that closes anyway then says
 // which of them it was. The box closes itself when it loses focus, and a
@@ -187,7 +198,8 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest,
 
   EXPECT_FALSE(Box());
   EXPECT_EQ(tabs_before, browser()->tab_strip_model()->count())
-      << "splitting opened a tab instead of sharing the screen with one";
+      << "splitting opened a tab instead of sharing the screen with one; "
+      << TabUrls(browser());
   EXPECT_EQ(2u, browser()->tab_strip_model()->GetForegroundTabs().size());
 }
 
