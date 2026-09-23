@@ -19,3 +19,21 @@ Launch with `scripts/run`. Rows 7 and 8 need a second space.
 
 A row that fails is a finding: write down what you saw, not what should have
 happened, and say which row it was.
+
+## Result, 2026-09-23
+
+Walked by the owner against the build holding 1e5d0ae, 666f923 and f9b06b6.
+All eight rows passed.
+
+- Row 2 passed for the divider itself, which follows the pointer smoothly,
+  but the page behind it lags: on a heavy page the content can take up to ten
+  seconds to settle at its new width. The divider and the resize are
+  Chromium's own, unchanged by Arcium, so whether plain Chromium lags the
+  same way is still to be checked with `--arcium-no-sidebar`. Open.
+- Row 6, seen more widely: ending a split puts each half back where it came
+  from, so two pinned halves stay pinned and a pinned half with a Today half
+  go back to Pinned and Today. The owner judged that right.
+
+Found outside the rows: a pinned row cannot be dragged to the very bottom of
+the Pinned list; the lowest place it will land is one above the end. Not
+yet traced, and not yet known to be older than this stage. Open.

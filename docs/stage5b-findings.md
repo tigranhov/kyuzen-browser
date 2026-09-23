@@ -6,7 +6,7 @@ Plan: `docs/superpowers/plans/2026-09-23-stage-5b-split-entry.md`. Hand rows:
 
 ## Where this stage stands
 
-**Built and green, hand rows not walked, perf not measured.** Both changes came
+**Built and green, all eight hand rows passed on 2026-09-23, perf not measured.** Both changes came
 from the Stage 5a hand pass on 2026-09-23. 773 unit tests pass. All 11 split
 browser tests pass, and so do the 40 restore, profile, space-move and box
 command browser tests that the changes reach. The full browser suite has not
@@ -84,7 +84,14 @@ each page twice.
 - Dragging a pair carries the half you picked up. Drops into Pinned and Today
   act on both halves through the model's pair rules.
 
+## Open
+
+- The page behind the split divider lags on heavy pages, up to ten seconds
+  to settle, while the divider itself is smooth. Not yet compared with plain
+  Chromium.
+- A pinned row cannot be dragged to the very bottom of the Pinned list, only
+  to one place above it. Not yet traced.
+
 ## Owed
 
-- The hand rows in `docs/stage5b-hand-checks.md`.
 - Perf, and a whole-suite browser run.
