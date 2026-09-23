@@ -53,6 +53,7 @@ source_set("browser") {
     "sidebar_tab_model_entries.cc",
     "sidebar_tab_model_profiles.cc",
     "sidebar_tab_model_spaces.cc",
+    "sidebar_tab_model_splits.cc",
     "space_switcher.cc",
     "space_switcher.h",
     "space_switcher_spaces.cc",

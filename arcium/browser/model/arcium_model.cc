@@ -206,20 +206,25 @@ EntryId ArciumModel::AddEntry(SpaceId space_id,
 }
 
 void ArciumModel::MoveEntryToSpace(EntryId id, SpaceId space_id) {
-  TabEntry* entry = FindEntry(id);
-  if (!entry || !GetSpace(space_id) || entry->space_id == space_id) {
+  const TabEntry* moved = GetEntry(id);
+  if (!moved || !GetSpace(space_id) || moved->space_id == space_id) {
     return;
   }
-  entry->space_id = space_id;
-  // Folders do not cross spaces, so the entry arrives at the top level.
-  entry->folder_id.reset();
-  entry->position =
-      static_cast<int>(EntriesForKind(space_id, entry->kind).size());
+  // A split partner goes too, after it, so the pair arrives whole.
+  for (EntryId half : PairOf(id)) {
+    TabEntry* entry = FindEntry(half);
+    entry->space_id = space_id;
+    // Folders do not cross spaces, so the entry arrives at the top level.
+    entry->folder_id.reset();
+    entry->position =
+        static_cast<int>(EntriesForKind(space_id, entry->kind).size());
+  }
   NormalisePositions();
   Notify();
 }
 
 void ArciumModel::RemoveEntry(EntryId id) {
+  BreakLink(id);
   const size_t before = entries_.size();
   std::erase_if(entries_,
                 [id](const TabEntry& entry) { return entry.id == id; });
@@ -234,6 +239,8 @@ void ArciumModel::SetEntryKind(EntryId id, EntryKind kind) {
   if (!entry || entry->kind == kind) {
     return;
   }
+  // Only pinned entries are linked, so a kind change ends a pair.
+  BreakLink(id);
   entry->kind = kind;
   // A favourite is never inside a folder: folders hold pinned entries only.
   if (kind == EntryKind::kFavorite) {
@@ -265,11 +272,13 @@ void ArciumModel::SetLastTitle(EntryId id, const std::u16string& title) {
 
 void ArciumModel::SetEntryFolder(EntryId id,
                                  std::optional<FolderId> folder_id) {
-  TabEntry* entry = FindEntry(id);
-  if (!entry) {
+  const std::vector<EntryId> pair = PairOf(id);
+  if (pair.empty()) {
     return;
   }
-  entry->folder_id = folder_id;
+  for (EntryId half : pair) {
+    FindEntry(half)->folder_id = folder_id;
+  }
   Notify();
 }
 
@@ -281,19 +290,20 @@ void ArciumModel::ReorderEntry(EntryId id, int new_position) {
   const SpaceId space_id = entry->space_id;
   const EntryKind kind = entry->kind;
   std::vector<const TabEntry*> siblings = EntriesForKind(space_id, kind);
-  new_position =
-      std::clamp(new_position, 0, static_cast<int>(siblings.size()) - 1);
+  // A split partner moves with it, in the order the two already had.
+  const std::vector<EntryId> moved = PairOf(id);
 
-  // Renumber by walking the sibling order with the moved entry lifted out and
-  // reinserted, so positions stay 0..n-1 with no gaps.
+  // Renumber by walking the sibling order with the moved entries lifted out
+  // and reinserted, so positions stay 0..n-1 with no gaps.
   std::vector<EntryId> order;
   order.reserve(siblings.size());
   for (const TabEntry* sibling : siblings) {
-    if (sibling->id != id) {
+    if (std::ranges::find(moved, sibling->id) == moved.end()) {
       order.push_back(sibling->id);
     }
   }
-  order.insert(order.begin() + new_position, id);
+  new_position = std::clamp(new_position, 0, static_cast<int>(order.size()));
+  order.insert(order.begin() + new_position, moved.begin(), moved.end());
   for (size_t i = 0; i < order.size(); ++i) {
     FindEntry(order[i])->position = static_cast<int>(i);
   }
@@ -559,6 +569,7 @@ void ArciumModel::ReplaceAll(std::vector<ArciumProfile> profiles,
     }
     routing_rules_.push_back(std::move(rule));
   }
+  DropBrokenSplitLinks();
   NormaliseProfiles();
   NormalisePositions();
   Notify();

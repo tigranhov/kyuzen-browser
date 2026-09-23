@@ -132,6 +132,8 @@ class FakeSidebarModel : public SidebarModel {
   bool CanSplitRow(const SidebarRow& row) const override;
   void SplitRowWithCurrentPage(const SidebarRow& row) override;
   void ToggleSplit() override;
+  void EndSplit(const SidebarRow& row) override;
+  void CloseSplit(const SidebarRow& row) override;
   void MoveEntryToSection(EntryId id,
                           SidebarSection section,
                           int position) override;

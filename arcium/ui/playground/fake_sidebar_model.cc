@@ -223,6 +223,35 @@ void FakeSidebarModel::ToggleSplit() {
   Notify();
 }
 
+void FakeSidebarModel::EndSplit(const SidebarRow& row) {
+  for (SidebarRow& r : rows_) {
+    if (row.split.has_value() && r.split == row.split) {
+      r.split.reset();
+    }
+  }
+  Notify();
+}
+
+void FakeSidebarModel::CloseSplit(const SidebarRow& row) {
+  if (!row.split.has_value()) {
+    return;
+  }
+  // Copies, because each close rebuilds the list the loop would be reading.
+  std::vector<SidebarRow> halves;
+  for (const SidebarRow& r : rows_) {
+    if (r.split == row.split) {
+      halves.push_back(r);
+    }
+  }
+  for (const SidebarRow& half : halves) {
+    if (half.entry_id.is_valid()) {
+      CloseEntryTab(half.entry_id);
+    } else {
+      CloseTab(half.tab_index);
+    }
+  }
+}
+
 void FakeSidebarModel::SplitRows(size_t first, size_t second) {
   if (first >= rows_.size() || second >= rows_.size() || first == second) {
     return;
@@ -246,7 +275,14 @@ std::vector<SidebarRow> FakeSidebarModel::rows() const {
       result.push_back(row);
     }
   }
-  MarkSplitNeighbours(result);
+  int active_tab_index = -1;
+  for (const SidebarRow& row : result) {
+    if (row.is_active && !row.is_cold) {
+      active_tab_index = row.tab_index;
+      break;
+    }
+  }
+  GroupSplitRows(result, active_tab_index);
   return result;
 }
 

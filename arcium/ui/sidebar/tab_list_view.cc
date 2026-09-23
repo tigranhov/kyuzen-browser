@@ -52,39 +52,25 @@ TabListView::TabListView(SidebarModel* model, SidebarSection section)
     // See the note in TabRowView: the Today list is inside a ScrollView.
     new_tab_->SetTextSubpixelRenderingEnabled(false);
   }
-  // Added last so it paints over the rows' own fills, and kept out of the
-  // layout: SetRows reorders every other child, and this one is placed by
-  // hand from the bounds that layout produces.
-  bracket_ = AddChildView(std::make_unique<views::View>());
-  bracket_->SetProperty(views::kViewIgnoredByLayoutKey, true);
-  bracket_->SetBackground(views::CreateRoundedRectBackground(
-      kColorArciumRowTextActive, metrics::kSplitBracketWidth / 2.f));
-  bracket_->SetVisible(false);
 }
 
 void TabListView::Layout(PassKey) {
   LayoutSuperclass<views::View>(this);
-  if (!bracket_) {
-    return;
-  }
-  // The join spans both rows and the gap between them, which belongs to
-  // neither, so it is placed here rather than painted inside a row. At most
-  // one split is on screen at a time, so at most one bar is needed.
+  // A split is one row: the second half is left out of the vertical layout,
+  // and the two share the slot the first half was given.
   for (size_t i = 1; i < rows_.size(); ++i) {
-    const SidebarRow& above = rows_[i - 1]->row();
-    const SidebarRow& below = rows_[i]->row();
-    if (!above.split_joins_next || !below.split_joins_previous ||
-        above.split != below.split) {
+    if (!rows_[i]->row().split_joins_previous ||
+        !rows_[i - 1]->row().split_joins_next) {
       continue;
     }
-    const gfx::Rect top = rows_[i - 1]->bounds();
-    const gfx::Rect bottom = rows_[i]->bounds();
-    bracket_->SetBounds(0, top.y(), metrics::kSplitBracketWidth,
-                        bottom.bottom() - top.y());
-    bracket_->SetVisible(true);
-    return;
+    const gfx::Rect slot = rows_[i - 1]->bounds();
+    const int left_width = (slot.width() - metrics::kSplitHalfGap) / 2;
+    rows_[i - 1]->SetBounds(slot.x(), slot.y(), left_width, slot.height());
+    rows_[i]->SetBounds(
+        slot.x() + left_width + metrics::kSplitHalfGap, slot.y(),
+        slot.right() - (slot.x() + left_width + metrics::kSplitHalfGap),
+        slot.height());
   }
-  bracket_->SetVisible(false);
 }
 
 TabListView::~TabListView() = default;
@@ -132,7 +118,7 @@ std::unique_ptr<FolderHeaderView> TabListView::MakeHeader() {
 void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
   std::vector<const SidebarRow*> mine;
   for (const SidebarRow& row : all_rows) {
-    if (row.section == section_) {
+    if (row.DrawnSection() == section_) {
       mine.push_back(&row);
     }
   }
@@ -224,7 +210,18 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
   size_t child_index = 0;
   row_positions_.clear();
   row_positions_.reserve(rows_needed);
-  section_row_count_ = static_cast<int>(mine.size());
+  // Positions count this section's own rows only. A row drawn here from
+  // another section has no place in this section's order, so it takes the
+  // place of the next row that does.
+  std::vector<int> own_position(mine.size(), 0);
+  int own_rows = 0;
+  for (size_t r = 0; r < mine.size(); ++r) {
+    own_position[r] = own_rows;
+    if (mine[r]->section == section_) {
+      ++own_rows;
+    }
+  }
+  section_row_count_ = own_rows;
   for (const PlanItem& item : plan) {
     views::View* view = nullptr;
     if (item.is_header) {
@@ -241,8 +238,12 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
       // `mine` is in the order the model hands the section over, which for an
       // entry section is position order. The plan is not, so the position
       // travels with the row rather than being read off its slot later.
-      row_positions_.push_back(static_cast<int>(item.index));
+      row_positions_.push_back(own_position[item.index]);
       row->SetRow(*mine[item.index]);
+      // The second half of a split shares the first half's slot, which
+      // Layout divides between them.
+      row->SetProperty(views::kViewIgnoredByLayoutKey,
+                       mine[item.index]->split_joins_previous);
       view = row;
     }
     // One rule for both kinds of child: the plan already worked out that a

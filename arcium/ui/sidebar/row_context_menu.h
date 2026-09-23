@@ -6,6 +6,7 @@
 #define ARCIUM_UI_SIDEBAR_ROW_CONTEXT_MENU_H_
 
 #include <memory>
+#include <string>
 #include <vector>
 
 #include "arcium/ui/sidebar/sidebar_model.h"
@@ -96,7 +97,13 @@ class RowContextMenu : public ui::SimpleMenuModel::Delegate {
   void AddMoveToSpaceSubmenu();
   // Appends "Always open <site> in this space", or "Stop opening" when that
   // rule exists. Appends nothing for a row whose page is not on the web.
+  // "Split with current page" when the model would allow it, and "End split"
+  // on a half of a split drawn as one row.
   void AddSplitItem();
+  // "Close both" on a half of a split drawn as one row, `label` otherwise.
+  void AddCloseItem(const std::u16string& label);
+  // Whether the row is one half of a split drawn as one row.
+  bool IsJoined() const;
   void AddRoutingItem();
 
   raw_ptr<SidebarModel> model_;

@@ -262,11 +262,6 @@ class SidebarViewsTest : public views::ViewsTestBase {
   std::vector<std::string> ChildClasses() const {
     std::vector<std::string> names;
     for (const views::View* child : list_->children()) {
-      // The split bracket is a child for painting only: it is never a row
-      // and never takes a place in the order these tests are about.
-      if (child == list_->split_bracket_for_testing()) {
-        continue;
-      }
       names.push_back(std::string(child->GetClassName()));
     }
     return names;
@@ -1038,6 +1033,53 @@ TEST_F(SidebarViewsTest, ARowAlreadySharingIsNotOfferedAnotherSplit) {
   const std::vector<std::u16string> labels = MenuLabels(capture.menu()->menu());
   EXPECT_EQ(labels.end(), std::find(labels.begin(), labels.end(),
                                     u"Split with current page"));
+}
+
+// A split is one row: the two halves side by side in the height of one, and
+// the row after them one row further down, not two.
+TEST_F(SidebarViewsTest, ASplitIsOneRowWithItsHalvesSideBySide) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kToday, false);
+  model_.AddTab(u"Three", "https://three.example/", SidebarSection::kToday,
+                false);
+  MakeList(SidebarSection::kToday);
+  model_.SplitRows(0, 1);
+  Refresh();
+  views::test::RunScheduledLayout(widget_.get());
+
+  std::vector<const TabRowView*> rows;
+  for (const views::View* child : list_->children()) {
+    if (const auto* row = views::AsViewClass<TabRowView>(child)) {
+      rows.push_back(row);
+    }
+  }
+  ASSERT_EQ(3u, rows.size());
+  const gfx::Rect left = rows[0]->bounds();
+  const gfx::Rect right = rows[1]->bounds();
+  EXPECT_EQ(left.y(), right.y());
+  EXPECT_EQ(left.height(), right.height());
+  EXPECT_LT(left.right(), right.x());
+  EXPECT_GT(left.width(), 0);
+  EXPECT_GT(right.width(), 0);
+  EXPECT_EQ(left.bottom(), rows[2]->y() - 2)
+      << "the row after the pair is not one row below it";
+}
+
+TEST_F(SidebarViewsTest, TheMenuOnAHalfOfASplitEndsOrClosesBoth) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kToday, false);
+  MakeList(SidebarSection::kToday);
+  model_.SplitRows(0, 1);
+  Refresh();
+
+  ScopedMenuCapture capture;
+  RightClickNearLeadingEdgeOf(
+      views::AsViewClass<TabRowView>(list_->children()[1]));
+  ASSERT_TRUE(capture.menu());
+  const std::vector<std::u16string> labels = MenuLabels(capture.menu()->menu());
+  EXPECT_NE(labels.end(), std::ranges::find(labels, u"End split"));
+  EXPECT_NE(labels.end(), std::ranges::find(labels, u"Close both"));
+  EXPECT_EQ(labels.end(), std::ranges::find(labels, u"Close"));
 }
 
 // A favourite is a tile in the grid, not a row in a list, and the tiles carry

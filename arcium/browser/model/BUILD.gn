@@ -5,6 +5,7 @@ source_set("model") {
     "arcium_model.cc",
     "arcium_model.h",
     "arcium_model_profiles.cc",
+    "arcium_model_splits.cc",
     "arcium_profile.h",
     "entry_id.h",
     "folder.h",

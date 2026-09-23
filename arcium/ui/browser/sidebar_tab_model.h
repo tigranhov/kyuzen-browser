@@ -110,6 +110,13 @@ class SidebarTabModel : public SidebarModel,
   bool CanSplitRow(const SidebarRow& row) const override;
   void SplitRowWithCurrentPage(const SidebarRow& row) override;
   void ToggleSplit() override;
+  void EndSplit(const SidebarRow& row) override;
+  void CloseSplit(const SidebarRow& row) override;
+  // Puts the entry's page on screen, opening it when the entry is cold, and
+  // nothing more: unlike ActivateEntry, a pinned split's other half is left
+  // alone. What SplitController uses to open the half it is about to split,
+  // which must not in turn split that half with its own partner.
+  void ShowEntry(EntryId id);
   void MoveEntryToSection(EntryId id,
                           SidebarSection section,
                           int position) override;
@@ -225,6 +232,31 @@ class SidebarTabModel : public SidebarModel,
   // entries -- which is after ModelStore::Load, and so after first paint.
   void RequestColdFavicons();
 
+  // Pinned splits, in sidebar_tab_model_splits.cc. The other tab in the
+  // split `tab` is in, or null.
+  tabs::TabInterface* SplitPartnerTab(tabs::TabInterface* tab) const;
+  // The entry claiming `tab`, or an invalid id for a Today tab.
+  EntryId EntryClaiming(tabs::TabInterface* tab) const;
+  // Pins the other half of the split `id`'s tab is in, when it is a Today
+  // tab, and links the two as one entry, keeping the pair where `id` is.
+  void PinSplitPartner(EntryId id);
+  // Puts a linked entry's partner beside it when `id`'s tab is on screen
+  // and sharing it with nothing, opening the partner when it is cold.
+  void FormLinkedSplit(EntryId id);
+  // Moves the other half of a split drawn as one row to `space` after `tab`
+  // has gone there, and puts the two back on screen together when either
+  // was on it. `partner_entry` is the pinned partner, when there is one.
+  void MoveSplitPartnerToSpace(tabs::TabHandle tab,
+                               tabs::TabHandle partner,
+                               EntryId partner_entry,
+                               SpaceId space);
+  // What forming or ending a split means for the links: two pinned entries
+  // that come to share the screen are one entry, and a split the reader
+  // ends with both pages still open is two again.
+  void UpdateLinksForSplitChange(const SplitTabChange& change);
+  void LinkIfBothPinned(tabs::TabHandle a, tabs::TabHandle b);
+  void UnlinkIfBothOpen(tabs::TabHandle a, tabs::TabHandle b);
+
   // Schedules FlushNotification() unless one is already pending.
   void NotifyChanged();
   void FlushNotification();
@@ -243,6 +275,10 @@ class SidebarTabModel : public SidebarModel,
   // The entry awaiting the tab ActivateEntry() just asked for. Valid only
   // across that synchronous call.
   EntryId pending_bind_;
+  // Set while a pair is being moved to another space. The move ends the
+  // split first, which on its own would read as the reader ending it and
+  // leave the pair unlinked.
+  bool moving_pair_ = false;
   // Custom names for Today tabs, which have no entry to hold one. Never
   // written to disk: the name dies with the tab. Keyed by handle rather than
   // strip index, because an index is only true at the instant it is read.

@@ -132,7 +132,7 @@ bool SplitController::SplitWithActive(EntryId id,
       tab_strip_model_->GetTabAtIndex(active)->GetHandle();
   // Opens a cold entry and binds the tab; a no-op for one that is already
   // warm, beyond putting it on screen.
-  model_->ActivateEntry(id);
+  model_->ShowEntry(id);
   const int opened =
       tab_strip_model_->GetIndexOfTab(tab_strip_model_->GetActiveTab());
   const int previous = tab_strip_model_->GetIndexOfTab(kept.Get());

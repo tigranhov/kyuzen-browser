@@ -26,7 +26,10 @@ class ArciumModel;
 //    back onto Default and losing which logins it used.
 // 5: the model gained `routing_rules`. Bumped so a build without them refuses
 //    the file rather than dropping every rule on its next save.
-inline constexpr int kModelSchemaVersion = 6;
+// 6: spaces gained `split`, the two tabs sharing the screen.
+// 7: entries gained `split_partner`. Bumped so a build without it refuses the
+//    file rather than saving a pinned split back as two loose entries.
+inline constexpr int kModelSchemaVersion = 7;
 
 base::DictValue SerializeModel(const ArciumModel& model);
 

@@ -31,6 +31,10 @@ struct TabEntry {
   // something to draw.
   std::u16string last_title;
   base::Time created_at;
+  // The other half of a pinned split, or invalid. Always symmetric, both
+  // pinned and in one space: ArciumModel keeps that true, and a file that
+  // breaks it loads with the link dropped.
+  EntryId split_partner;
 
   const std::u16string& DisplayTitle() const {
     return custom_title.empty() ? last_title : custom_title;

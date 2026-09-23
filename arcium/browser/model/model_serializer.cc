@@ -140,6 +140,9 @@ base::DictValue SerializeModel(const ArciumModel& model) {
     value.Set("url", entry.url.spec());
     value.Set("custom_title", base::UTF16ToUTF8(entry.custom_title));
     value.Set("last_title", base::UTF16ToUTF8(entry.last_title));
+    if (entry.split_partner.is_valid()) {
+      value.Set("split_partner", entry.split_partner.value());
+    }
     // A decimal string, not a number: a double cannot hold a microsecond
     // timestamp exactly above 2^53, and today's timestamps already are.
     value.Set(
@@ -392,6 +395,11 @@ bool DeserializeModel(const base::DictValue& dict, ArciumModel* model) {
       }
       if (const std::string* title = value->FindString("last_title")) {
         entry.last_title = base::UTF8ToUTF16(*title);
+      }
+      // Checked by ReplaceAll, which needs every entry to tell a whole link
+      // from half of one.
+      if (const std::string* partner = value->FindString("split_partner")) {
+        entry.split_partner = EntryId::FromString(*partner);
       }
       int64_t created_micros = 0;
       if (const std::string* created = value->FindString("created_at")) {

@@ -92,11 +92,17 @@ bool MigrateV5ToV6(base::DictValue&) {
   return true;
 }
 
+// Version 6 -> 7: two pinned entries may be linked as one split. A version 6
+// file links none, and an absent key is what that means.
+bool MigrateV6ToV7(base::DictValue&) {
+  return true;
+}
+
 // Indexed by source version: kSteps[0] takes a version 1 dict to version 2.
 using MigrationStep = bool (*)(base::DictValue&);
 constexpr MigrationStep kSteps[] = {&MigrateV1ToV2, &MigrateV2ToV3,
                                     &MigrateV3ToV4, &MigrateV4ToV5,
-                                    &MigrateV5ToV6};
+                                    &MigrateV5ToV6, &MigrateV6ToV7};
 static_assert(
     std::size(kSteps) == static_cast<size_t>(kModelSchemaVersion) - 1,
     "Bumping kModelSchemaVersion needs a step that gets a file there");

@@ -11,9 +11,13 @@
 
 #include <utility>
 
+#include "base/auto_reset.h"
+
 #include "arcium/browser/model/space.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
+#include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "components/tabs/public/tab_interface.h"
 
 #include "arcium/browser/model/routing_rule.h"
 #include "url/gurl.h"
@@ -88,20 +92,52 @@ void SidebarTabModel::DeleteSpace(SpaceId id) {
 }
 
 void SidebarTabModel::MoveTabToSpace(int tab_index, SpaceId space_id) {
-  if (switcher_) {
-    switcher_->MoveTabToSpace(tab_index, space_id);
+  if (!switcher_ || !tab_strip_model_->ContainsIndex(tab_index)) {
+    return;
   }
+  // A split drawn as one row moves as one: read its other half before the
+  // move ends the split.
+  tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(tab_index);
+  tabs::TabInterface* partner = SplitPartnerTab(tab);
+  const tabs::TabHandle handle = tab->GetHandle();
+  const tabs::TabHandle partner_handle =
+      partner ? partner->GetHandle() : tabs::TabHandle();
+  const EntryId partner_entry = partner ? EntryClaiming(partner) : EntryId();
+  base::AutoReset<bool> moving(&moving_pair_, true);
+  switcher_->MoveTabToSpace(tab_index, space_id);
+  MoveSplitPartnerToSpace(handle, partner_handle, partner_entry, space_id);
 }
 
 void SidebarTabModel::MoveEntryToSpace(EntryId id, SpaceId space_id) {
   // The switcher follows the move when the entry's tab is the one on screen;
   // with no switcher there is no "on screen" to follow, so the model change
-  // is all there is.
-  if (switcher_) {
-    switcher_->MoveEntryToSpace(id, space_id);
-  } else {
+  // is all there is -- and the model moves a pinned split's partner itself.
+  if (!switcher_) {
     arcium_model_->MoveEntryToSpace(id, space_id);
+    return;
   }
+  const TabEntry* entry = arcium_model_->GetEntry(id);
+  // A favourite is a tile and never one row with its partner, so it moves
+  // alone.
+  if (!entry || entry->kind == EntryKind::kFavorite) {
+    switcher_->MoveEntryToSpace(id, space_id);
+    return;
+  }
+  const EntryId linked = entry->split_partner;
+  tabs::TabInterface* tab = LiveTabForEntry(id);
+  tabs::TabInterface* partner = tab ? SplitPartnerTab(tab) : nullptr;
+  if (!partner && linked.is_valid()) {
+    partner = LiveTabForEntry(linked);
+  }
+  const tabs::TabHandle handle = tab ? tab->GetHandle() : tabs::TabHandle();
+  const tabs::TabHandle partner_handle =
+      partner ? partner->GetHandle() : tabs::TabHandle();
+  const EntryId partner_entry =
+      linked.is_valid() ? linked
+                        : (partner ? EntryClaiming(partner) : EntryId());
+  base::AutoReset<bool> moving(&moving_pair_, true);
+  switcher_->MoveEntryToSpace(id, space_id);
+  MoveSplitPartnerToSpace(handle, partner_handle, partner_entry, space_id);
 }
 
 bool SidebarTabModel::SiteOpensInActiveSpace(const GURL& url) const {

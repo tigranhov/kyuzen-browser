@@ -156,8 +156,9 @@ void TabRowView::UpdateVisuals() {
   title_->SetEnabledColor(row_.is_active      ? kColorArciumRowTextActive
                           : row_.needs_load() ? kColorArciumRowTextUnloaded
                                               : kColorArciumRowText);
-  // Only when the bracket is not already saying it: a row joined to its
-  // partner would otherwise carry the mark and the bracket both.
+  // Only for a half that is not drawn beside its partner -- one split with a
+  // favourite, which is a tile and never merges -- since a joined pair
+  // already says it by being one row.
   if (row_.split.has_value() && !row_.split_joins_previous &&
       !row_.split_joins_next) {
     split_->SetImage(ui::ImageModel::FromVectorIcon(

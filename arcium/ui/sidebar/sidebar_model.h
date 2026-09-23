@@ -50,14 +50,25 @@ struct SidebarRow {
   // split, and both are active: being current means being in the foreground,
   // which is one tab normally and two in a split.
   std::optional<split_tabs::SplitTabId> split;
-  // Whether the split's other half is the row immediately above or below
-  // this one in the list. Set by the model, because only it knows the order
-  // the rows come back in. Two joined rows draw one bracket down their
-  // shared edge; a row whose other half is elsewhere -- a pinned entry split
-  // with a Today tab, which no ordering can put together -- carries a small
-  // two-pane mark instead. Both say the same thing.
+  // Whether this row is one half of a pair drawn as one row, and which half:
+  // the row immediately before or after it in rows() is the other. Set by
+  // GroupSplitRows, which puts the two next to each other in pane order. A
+  // row in a split that is not joined -- one with a favourite, which is a
+  // tile in a grid and never merges -- carries a small two-pane mark
+  // instead.
   bool split_joins_previous = false;
   bool split_joins_next = false;
+  // For a pinned entry linked to another as one split, that entry. Such a
+  // pair is joined whether or not its tabs are open, which is what lets a
+  // pinned split come back as one row after a relaunch.
+  EntryId split_partner;
+  // Where the row is drawn when that is not its own section: a Today tab
+  // split with a pinned entry is drawn beside it in Pinned. Its folder is
+  // copied the same way, so a collapsed folder hides both halves.
+  std::optional<SidebarSection> drawn_section;
+  SidebarSection DrawnSection() const {
+    return drawn_section.value_or(section);
+  }
 
   // Whether clicking this row has to load a page first: a cold entry opens
   // its URL, an unloaded tab reloads its page. The one question the views
@@ -204,6 +215,12 @@ class SidebarModel {
   // ends the split when there is one. What Cmd+Option+S does; the one way in
   // that needs no pointer, and the fastest way out.
   virtual void ToggleSplit() = 0;
+  // Ends the split `row` is half of, leaving both pages open as two rows. A
+  // pinned pair stops being one entry. The row menu's "End split".
+  virtual void EndSplit(const SidebarRow& row) = 0;
+  // Closes both halves of the split `row` is in. A pinned half keeps its
+  // entry, cold, the way closing one pinned tab does. "Close both".
+  virtual void CloseSplit(const SidebarRow& row) = 0;
 
   // Puts `id` in `section` at `position` among that section's entries. What a
   // drop does, and one command rather than a kind change followed by a

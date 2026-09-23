@@ -11,13 +11,16 @@
 #include <vector>
 
 #include "arcium/browser/model/arcium_model.h"
+#include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/profile_partition.h"
 #include "arcium/test/browser/profile_browsertest_base.h"
 #include "arcium/ui/browser/browser_sidebar_controller.h"
+#include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/browser/split_band.h"
 #include "arcium/ui/browser/split_controller.h"
 #include "arcium/ui/sidebar/row_drag_session.h"
+#include "arcium/ui/sidebar/sidebar_model.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
 #include "base/strings/strcat.h"
 #include "base/test/run_until.h"
@@ -203,6 +206,61 @@ IN_PROC_BROWSER_TEST_F(SplitViewTest, ASplitComesBackInASpaceNotOnScreen) {
   EXPECT_EQ(home, switcher()->active_space())
       << "re-forming the split left the window in the other space";
   EXPECT_EQ(home, switcher()->SpaceOfTabAt(strip()->active_index()));
+}
+
+// A pinned split is one pinned entry, and comes back as one: pinning either
+// half pins both, and after a relaunch the sidebar draws them as one row and
+// the two pages share the screen again. The hand pass found the opposite --
+// the pair came back as two separate pinned tabs.
+IN_PROC_BROWSER_TEST_F(SplitViewTest, PRE_APinnedSplitComesBackAsOneEntry) {
+  RestoreSessionAtNextLaunch();
+  OpenTab(browser(), PageUrl("a.test", "left"));
+  tabs::TabInterface* const first = strip()->GetActiveTab();
+  OpenTab(browser(), PageUrl("b.test", "right"));
+  ASSERT_TRUE(Split(browser())->SplitWithActive(strip()->GetIndexOfTab(first)));
+
+  SidebarTabModel* sidebar = BrowserView::GetBrowserViewForBrowser(browser())
+                                 ->arcium_sidebar()
+                                 ->model_for_testing();
+  sidebar->PinTab(strip()->GetIndexOfTab(first));
+
+  const std::vector<const TabEntry*> pinned =
+      model()->EntriesForKind(switcher()->active_space(), EntryKind::kPinned);
+  ASSERT_EQ(2u, pinned.size()) << "pinning one half left the other in Today";
+  ASSERT_EQ(pinned[1]->id, pinned[0]->split_partner);
+  FlushSessionAndModel();
+}
+
+IN_PROC_BROWSER_TEST_F(SplitViewTest, APinnedSplitComesBackAsOneEntry) {
+  const std::vector<const TabEntry*> pinned =
+      model()->EntriesForKind(switcher()->active_space(), EntryKind::kPinned);
+  ASSERT_EQ(2u, pinned.size());
+  EXPECT_EQ(pinned[1]->id, pinned[0]->split_partner)
+      << "the pair came back as two separate entries";
+
+  // The pages share the screen again. Waited for first: a relaunch brings
+  // the tabs back and binds them to their entries on its own schedule.
+  ASSERT_TRUE(base::test::RunUntil([&]() {
+    return SharedScreen(strip()).size() == 2u;
+  })) << "the two pages never came back sharing the screen";
+  const std::vector<std::string> shared = SharedScreen(strip());
+  EXPECT_EQ("a.test?left", shared[0]);
+  EXPECT_EQ("b.test?right", shared[1]);
+
+  // One row, and no second copy of either page: the pair drawn once from its
+  // entries, not again from its tabs as though they were Today's.
+  SidebarTabModel* sidebar = BrowserView::GetBrowserViewForBrowser(browser())
+                                 ->arcium_sidebar()
+                                 ->model_for_testing();
+  std::string drawn;
+  int joined = 0;
+  for (const SidebarRow& row : sidebar->rows()) {
+    joined += row.split_joins_next ? 1 : 0;
+    drawn += base::StrCat(
+        {row.url.host(), row.entry_id.is_valid() ? "(pinned)" : "(today)",
+         row.is_cold ? "(cold)" : "", row.split_joins_next ? "+" : " "});
+  }
+  EXPECT_EQ(1, joined) << "the sidebar drew: " << drawn;
 }
 
 // The one way into a split that Arcium does not own: Chromium's own drop

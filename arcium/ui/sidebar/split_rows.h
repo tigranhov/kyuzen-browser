@@ -11,19 +11,20 @@
 
 namespace arcium {
 
-// Says which of `rows` are drawn joined, in place. Two rows are joined when
-// they are the two halves of one split and sit next to each other in the same
-// list: the same section, and the same folder, so a collapsed folder hides
-// both or neither.
+// Puts the two halves of each split next to each other in `rows`, in pane
+// order, where the earlier of the two was, and joins them. A pair is two rows
+// in one live split, or two pinned entries linked as one whether or not
+// their tabs are open. Both halves are drawn in the earlier one's section and
+// folder, and only the half with the focus -- the tab at `active_tab_index`
+// -- stays current.
 //
-// Favourites are never joined. They are a grid rather than a list, so a row's
-// neighbours are above and beside it and a bar down one edge would name the
-// wrong pair; a favourite in a split carries the two-pane mark instead.
+// A pair with a favourite in it is left where it is and unjoined: favourites
+// are a grid of tiles, and a tile does not merge with a row.
 //
 // Here rather than in either model because both build rows and both must
 // agree: the browser's model, and the playground's fake, which is how the
-// bracket is iterated on without a tab strip to make a split with.
-void MarkSplitNeighbours(std::vector<SidebarRow>& rows);
+// pair is iterated on without a tab strip to make a split with.
+void GroupSplitRows(std::vector<SidebarRow>& rows, int active_tab_index);
 
 }  // namespace arcium
 

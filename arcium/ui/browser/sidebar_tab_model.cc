@@ -153,7 +153,7 @@ std::vector<SidebarRow> SidebarTabModel::rows() const {
     }
     rows.push_back(RowForTab(i, tab));
   }
-  MarkSplitNeighbours(rows);
+  GroupSplitRows(rows, tab_strip_model_->active_index());
   return rows;
 }
 
@@ -486,6 +486,7 @@ void SidebarTabModel::OnSplitTabChanged(const SplitTabChange& change) {
   // Forming or breaking a split changes which rows are current and which
   // carry the mark, and the strip reports it here rather than as a selection
   // change. NotifyChanged coalesces it with the rest of the burst.
+  UpdateLinksForSplitChange(change);
   NotifyChanged();
 }
 

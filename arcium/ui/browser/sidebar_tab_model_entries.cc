@@ -146,6 +146,7 @@ SidebarRow SidebarTabModel::RowForEntry(const TabEntry& entry) const {
   row.entry_id = entry.id;
   row.section = SectionForKind(entry.kind);
   row.folder_id = entry.folder_id;
+  row.split_partner = entry.split_partner;
   // The space this window is drawing: rows() asks for that space's entries
   // and no other's.
   row.space = active_space();
@@ -209,7 +210,7 @@ void SidebarTabModel::AddToFavorites(int tab_index) {
 }
 
 void SidebarTabModel::PinTab(int tab_index) {
-  AddEntryForTab(tab_index, EntryKind::kPinned);
+  PinSplitPartner(AddEntryForTab(tab_index, EntryKind::kPinned));
 }
 
 void SidebarTabModel::MoveTabToSection(int tab_index,
@@ -234,18 +235,38 @@ void SidebarTabModel::MoveTabToSection(int tab_index,
   // Two ArciumModel writes, one sidebar notification: NotifyChanged coalesces
   // the burst, so no observer sees the entry appended before it is placed.
   arcium_model_->ReorderEntry(id, position);
+  // Pinning half a split pins the pair.
+  if (kind == EntryKind::kPinned) {
+    PinSplitPartner(id);
+  }
   NotifyChanged();
 }
 
 void SidebarTabModel::UnpinEntry(EntryId id) {
-  // Releasing the binding first is what returns the tab to Today: nothing
-  // claims it any more.
-  binding_->UnbindEntry(id);
-  arcium_model_->RemoveEntry(id);
+  const TabEntry* entry = arcium_model_->GetEntry(id);
+  // Read before the removal, which ends the link. A pinned split is one
+  // entry, so unpinning either half unpins both.
+  const EntryId partner = entry ? entry->split_partner : EntryId();
+  for (EntryId half : {id, partner}) {
+    if (!half.is_valid()) {
+      continue;
+    }
+    // Releasing the binding first is what returns the tab to Today: nothing
+    // claims it any more.
+    binding_->UnbindEntry(half);
+    arcium_model_->RemoveEntry(half);
+  }
   NotifyChanged();
 }
 
 void SidebarTabModel::ActivateEntry(EntryId id) {
+  ShowEntry(id);
+  // A pinned split comes back as one: clicking either half puts both on
+  // screen.
+  FormLinkedSplit(id);
+}
+
+void SidebarTabModel::ShowEntry(EntryId id) {
   const TabEntry* entry = arcium_model_->GetEntry(id);
   if (!entry || !tab_strip_model_) {
     return;
@@ -358,6 +379,8 @@ void SidebarTabModel::MoveEntryToSection(EntryId id,
     // The URL is copied out before the mutation: RemoveEntry invalidates
     // every TabEntry pointer.
     const GURL url = entry->url;
+    // A pinned split leaves Pinned as one: the partner follows, beside it.
+    const EntryId partner = entry->split_partner;
     // Anywhere, not just this window: an entry whose tab sits in another
     // window still has a page behind it, and opening a second copy here
     // would duplicate it.
@@ -383,8 +406,16 @@ void SidebarTabModel::MoveEntryToSection(EntryId id,
     arcium_model_->RemoveEntry(id);
     // Today's order is the tab strip's, so putting the row where the
     // insertion line was drawn is a strip move. A tab in another window's
-    // strip has `from` -1 and stays where it is: that window owns it.
-    MoveTabBeforeStripIndex(from, before);
+    // strip has `from` -1 and stays where it is: that window owns it. So
+    // does a tab sharing the screen, because moving one half of a split
+    // away from the other ends the split.
+    if (from < 0 ||
+        !tab_strip_model_->GetTabAtIndex(from)->GetSplit().has_value()) {
+      MoveTabBeforeStripIndex(from, before);
+    }
+    if (partner.is_valid() && arcium_model_->GetEntry(partner)) {
+      MoveEntryToSection(partner, SidebarSection::kToday, position + 1);
+    }
     NotifyChanged();
     return;
   }
@@ -396,6 +427,9 @@ void SidebarTabModel::MoveEntryToSection(EntryId id,
   // the entry in its new section still holding its old position.
   arcium_model_->SetEntryKind(id, kind);
   arcium_model_->ReorderEntry(id, position);
+  if (kind == EntryKind::kPinned) {
+    PinSplitPartner(id);
+  }
   NotifyChanged();
 }
 

@@ -98,6 +98,7 @@ class SpaceSwitcher : public TabStripModelObserver,
   // back on it. When that tab is the one on screen, follows it there --
   // adopting the target rather than switching, which would land on whatever
   // `space` already remembers as its own place, not on the tab that moved.
+  // A pinned split's partner goes with it, tab and all.
   void MoveEntryToSpace(EntryId id, SpaceId space);
 
   // Called by ArchiveService itself, which hands itself over when it is built
@@ -154,6 +155,10 @@ class SpaceSwitcher : public TabStripModelObserver,
   // OnTabStripModelChanged and by MoveTabToSpace -- the two places that put
   // the window in a space it did not SwitchTo.
   void AdoptSpace(SpaceId id);
+  // The tab half of MoveEntryToSpace, for an entry the model has already
+  // moved to `space` from a space on `from`: ends its split, reopens it in
+  // the new profile and re-tags it. True when that tab is the one on screen.
+  bool MoveEntryTabToSpace(EntryId id, ProfileId from, SpaceId space);
   // The space after `id` in position order, or the one before it when `id`
   // is last. Where DeleteSpace lands the window: never the space it is
   // about to remove.

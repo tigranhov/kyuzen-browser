@@ -137,8 +137,16 @@ TabListView::DropAnchor TabListView::AnchorForDropIndex(size_t index) const {
   DropAnchor anchor;
   anchor.today_position = static_cast<int>(index);
   if (index < rows_.size()) {
-    anchor.before_entry = rows_[index]->row().entry_id;
     anchor.before_tab = rows_[index]->tab_index();
+  }
+  // The first row of this section's own at or after the line: a Today tab
+  // drawn here beside the pinned entry it shares the screen with has no
+  // place in this section's order.
+  for (size_t i = index; i < rows_.size(); ++i) {
+    if (rows_[i]->row().section == section_) {
+      anchor.before_entry = rows_[i]->row().entry_id;
+      break;
+    }
   }
   return anchor;
 }

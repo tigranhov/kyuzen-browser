@@ -76,6 +76,9 @@ void SpaceSwitcher::MoveEntryToSpace(EntryId id, SpaceId space) {
   const TabEntry* before = model_->GetEntry(id);
   const ProfileId from =
       before ? model_->ProfileOfSpace(before->space_id) : DefaultProfileId();
+  // Read before the move: the model carries a linked partner along, and its
+  // tab has to follow as this entry's does.
+  const EntryId partner = before ? before->split_partner : EntryId();
   model_->MoveEntryToSpace(id, space);
   const TabEntry* entry = model_->GetEntry(id);
   if (!entry || entry->space_id != space || !tab_strip_model_) {
@@ -83,10 +86,25 @@ void SpaceSwitcher::MoveEntryToSpace(EntryId id, SpaceId space) {
     // there is no strip to follow it through.
     return;
   }
+  bool follow = MoveEntryTabToSpace(id, from, space);
+  if (partner.is_valid()) {
+    follow = MoveEntryTabToSpace(partner, from, space) || follow;
+  }
+  AskForSessionRebuild();
+  if (follow) {
+    // Moving the entry behind the tab you are looking at takes you with it,
+    // the same as moving the tab itself does.
+    AdoptSpace(space);
+  }
+}
+
+bool SpaceSwitcher::MoveEntryTabToSpace(EntryId id,
+                                        ProfileId from,
+                                        SpaceId space) {
   std::optional<tabs::TabHandle> handle = binding_->TabForEntry(id);
   tabs::TabInterface* tab = handle ? handle->Get() : nullptr;
   if (!tab) {
-    return;
+    return false;
   }
   const int index = tab_strip_model_->GetIndexOfTab(tab);
   // The same rule as for a tab: the split ends before the tab goes.
@@ -103,13 +121,8 @@ void SpaceSwitcher::MoveEntryToSpace(EntryId id, SpaceId space) {
   // back to whatever the tab itself carries, and that has to agree with
   // where the entry just went.
   SetSpaceTag(tab->GetContents(), space);
-  AskForSessionRebuild();
-  if (index != TabStripModel::kNoTab &&
-      index == tab_strip_model_->active_index()) {
-    // Moving the entry behind the tab you are looking at takes you with it,
-    // the same as moving the tab itself does.
-    AdoptSpace(space);
-  }
+  return index != TabStripModel::kNoTab &&
+         index == tab_strip_model_->active_index();
 }
 
 void SpaceSwitcher::SetArchiveService(ArchiveService* archive_service) {

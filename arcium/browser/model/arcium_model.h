@@ -104,6 +104,15 @@ class ArciumModel {
   void SetEntryFolder(EntryId id, std::optional<FolderId> folder_id);
   void ReorderEntry(EntryId id, int new_position);
 
+  // Pinned splits: two pinned entries of one space that come back as one.
+  // Linking drops any earlier partner of either and puts `b` in `a`'s folder
+  // directly after it. False, changing nothing, for a favourite, two spaces,
+  // one entry twice or an id the model does not have. Once linked, the pair
+  // moves as one: a reorder, a folder and a space move carry both, and
+  // removing one half or making it a favourite leaves the other unlinked.
+  bool LinkSplitEntries(EntryId a, EntryId b);
+  void UnlinkSplitEntry(EntryId id);
+
   const TabEntry* GetEntry(EntryId id) const;
   std::vector<const TabEntry*> EntriesForKind(SpaceId space_id,
                                               EntryKind kind) const;
@@ -179,6 +188,14 @@ class ArciumModel {
   // Puts Default first and renumbers positions; points any space whose
   // profile is gone at Default. The one place those two invariants are kept.
   void NormaliseProfiles();
+  // `id` and its split partner, in position order; just `id` when it has
+  // none, and empty for an id the model does not have.
+  std::vector<EntryId> PairOf(EntryId id) const;
+  // Clears `id`'s link and its partner's. No notification.
+  void BreakLink(EntryId id);
+  // Drops every link that is one-sided, names a missing entry, or joins two
+  // spaces or two kinds. For ReplaceAll, which takes whatever the file said.
+  void DropBrokenSplitLinks();
   // The greatest number of levels below `id`: 0 when it holds no folders.
   int SubtreeHeight(FolderId id) const;
   // Renumbers positions 0..n-1 within each (space, kind) so a reorder never

@@ -50,6 +50,10 @@ enum RowCommand {
   // "Split with current page". Only on a row the model says could share the
   // screen with the page on it.
   kSplitWithCurrentPage,
+  // On either half of a split drawn as one row: take the two apart, or close
+  // both. "Close both" stands where "Close" would be.
+  kEndSplit,
+  kCloseBoth,
   // Every folder in the "Move to folder" submenu, in folders() order, up to
   // RowContextMenu::kMoveToSpaceFirst, whose range is tested before this one.
   kMoveToFolderFirst = 100,
@@ -111,6 +115,9 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
   space_submenu_.reset();
   menu_ = std::make_unique<ui::SimpleMenuModel>(this);
 
+  // The row's own section, not the one it is drawn in: a Today tab drawn
+  // beside the pinned entry it shares the screen with is still a Today tab,
+  // and pinning it pins the pair.
   switch (row.section) {
     case SidebarSection::kToday:
       menu_->AddItem(kPin, u"Pin");
@@ -120,7 +127,7 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
       AddMoveToSpaceSubmenu();
       AddRoutingItem();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
-      menu_->AddItem(kCloseTab, u"Close");
+      AddCloseItem(u"Close");
       break;
     case SidebarSection::kPinned:
       menu_->AddItem(kRename, u"Rename");
@@ -147,7 +154,7 @@ void RowContextMenu::BuildForRow(const SidebarRow& row,
       AddRoutingItem();
       menu_->AddSeparator(ui::NORMAL_SEPARATOR);
       menu_->AddItem(kUnpin, u"Unpin");
-      menu_->AddItem(kCloseTab, u"Close tab");
+      AddCloseItem(u"Close tab");
       break;
     case SidebarSection::kFavorites:
       menu_->AddItem(kRename, u"Rename");
@@ -298,6 +305,21 @@ void RowContextMenu::AddSplitItem() {
   if (model_->CanSplitRow(row_)) {
     menu_->AddItem(kSplitWithCurrentPage, u"Split with current page");
   }
+  if (IsJoined()) {
+    menu_->AddItem(kEndSplit, u"End split");
+  }
+}
+
+void RowContextMenu::AddCloseItem(const std::u16string& label) {
+  if (IsJoined()) {
+    menu_->AddItem(kCloseBoth, u"Close both");
+  } else {
+    menu_->AddItem(kCloseTab, label);
+  }
+}
+
+bool RowContextMenu::IsJoined() const {
+  return row_.split_joins_previous || row_.split_joins_next;
 }
 
 void RowContextMenu::AddRoutingItem() {
@@ -397,6 +419,12 @@ void RowContextMenu::ExecuteCommand(int command_id, int event_flags) {
       return;
     case kDeleteFolder:
       model_->DeleteFolder(folder_.id);
+      return;
+    case kEndSplit:
+      model_->EndSplit(row_);
+      return;
+    case kCloseBoth:
+      model_->CloseSplit(row_);
       return;
     default:
       return;

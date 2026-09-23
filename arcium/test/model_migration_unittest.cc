@@ -70,6 +70,25 @@ TEST(ModelMigrationTest, AVersionFiveSpaceComesBackSharingNoScreen) {
   EXPECT_FALSE((*list)[0].GetDict().contains("split"));
 }
 
+TEST(ModelMigrationTest, AVersionSixEntryComesBackInNoSplit) {
+  // Version 7 let two pinned entries be one split. A file written before that
+  // links none, and an absent key is what that means.
+  base::DictValue dict = DictAtVersion(6);
+  base::DictValue entry;
+  entry.Set("id", EntryId::Generate().value());
+  entry.Set("url", "https://a.example/");
+  dict.FindList("entries")->Append(std::move(entry));
+
+  std::optional<base::DictValue> migrated = MigrateModelDict(std::move(dict));
+
+  ASSERT_TRUE(migrated.has_value());
+  EXPECT_EQ(kModelSchemaVersion, migrated->FindInt("version"));
+  const base::ListValue* list = migrated->FindList("entries");
+  ASSERT_TRUE(list);
+  ASSERT_EQ(1u, list->size());
+  EXPECT_FALSE((*list)[0].GetDict().contains("split_partner"));
+}
+
 TEST(ModelMigrationTest, AFileAlreadyAtTheCurrentVersionIsPassedThrough) {
   base::DictValue dict = DictAtVersion(kModelSchemaVersion);
   dict.Set("marker", "kept");
