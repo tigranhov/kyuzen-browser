@@ -1090,6 +1090,31 @@ TEST_F(SidebarDragTest, TheInsertionLineFollowsThePointerAndClearsOnExit) {
   EXPECT_FALSE(today_->drop_index_for_testing().has_value());
 }
 
+// Pinned has nothing below its last row, so a line drawn under that row's
+// bottom edge falls outside the list and is clipped away. The end of the
+// section then looks unreachable, and the lowest line anyone sees is the one
+// above the last row.
+TEST_F(SidebarDragTest, TheLineAtTheEndOfPinnedIsInsideTheList) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kPinned, false);
+  MakePinned();
+  Refresh();
+  TabRowView* one = RowIn(pinned_, 0);
+  ASSERT_TRUE(one);
+  std::unique_ptr<ui::OSExchangeData> data = DragDataFrom(one, one);
+  const gfx::Point at = BelowEveryRow(pinned_);
+  ui::DropTargetEvent event(*data, gfx::PointF(at), gfx::PointF(at),
+                            ui::DragDropTypes::DRAG_MOVE);
+  pinned_->OnDragEntered(event);
+  pinned_->OnDragUpdated(event);
+  ASSERT_EQ(2u, pinned_->drop_index_for_testing());
+
+  const int y = pinned_->drop_line_y_for_testing();
+  EXPECT_GE(y, 0);
+  EXPECT_LE(y + 2, pinned_->height());
+  pinned_->OnDragExited();
+}
+
 TEST_F(SidebarDragTest, TheGridsGapIndicatorFollowsThePointerAndClears) {
   model_.AddTab(u"One", "https://one.example/", SidebarSection::kFavorites,
                 false);

@@ -70,6 +70,11 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // this list. An index into the laid-out rows; row_count() means "after the
   // last one".
   std::optional<size_t> drop_index_for_testing() const { return drop_index_; }
+  // The top of the insertion line in this list's coordinates, or -1 when no
+  // line is drawn.
+  int drop_line_y_for_testing() const {
+    return drop_index_ ? DropLineY(*drop_index_) : -1;
+  }
 
   // views::View:
   bool GetDropFormats(int* formats,

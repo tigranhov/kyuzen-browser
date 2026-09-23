@@ -130,7 +130,11 @@ int TabListView::DropLineY(size_t index) const {
   if (index < rows_.size()) {
     return std::max(0, rows_[index]->y() - kDropLineThickness);
   }
-  return rows_.back()->bounds().bottom();
+  // Below the last row, but never past this list's own edge: Pinned has
+  // nothing under its last row, and a line drawn there would be clipped,
+  // hiding the one gap that drops at the end of the section.
+  return std::max(0, std::min(rows_.back()->bounds().bottom(),
+                              height() - kDropLineThickness));
 }
 
 TabListView::DropAnchor TabListView::AnchorForDropIndex(size_t index) const {
