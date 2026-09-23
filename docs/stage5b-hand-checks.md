@@ -35,5 +35,11 @@ All eight rows passed.
   go back to Pinned and Today. The owner judged that right.
 
 Found outside the rows: a pinned row cannot be dragged to the very bottom of
-the Pinned list; the lowest place it will land is one above the end. Not
-yet traced, and not yet known to be older than this stage. Open.
+the Pinned list; the lowest place it will land is one above the end. The
+drop worked, but its line was drawn just past the list's edge and clipped,
+so the lowest line on show was one row up. Fixed in 3fc6eb7 and confirmed by
+the owner.
+
+Row 2 follow-up: the sidebar rebuilt every row on each divider step; it no
+longer does (791118f). The owner saw less lag but not none, so the rest is
+being compared against plain Chromium through `--arcium-no-sidebar`.
