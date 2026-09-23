@@ -215,6 +215,34 @@ TEST_F(SessionTabEntryTest, TheStashIsClearedWhenTheEntryWasMissing) {
   EXPECT_FALSE(state()->binding()->IsBound(HandleAt(0)));
 }
 
+// The model file is read on another sequence and session restore does not
+// wait for it, so a restored tab usually asks for its entry before the model
+// has it. That is not a missing entry, it is an early one: the bind waits for
+// the load. Without this every pinned tab came back cold, with its page
+// beside it a second time as a Today tab.
+TEST_F(SessionTabEntryTest, ATabRestoredBeforeTheModelLoadsIsBoundWhenItDoes) {
+  AddTab(browser(), GURL("https://a.example/"));
+  ASSERT_FALSE(state()->model_load_finished());
+  const EntryId id = EntryId::Generate();
+
+  StashRestoredEntryId(ContentsAt(0), {{kEntryIdExtraDataKey, id.value()}});
+  BindStashedEntryId(ContentsAt(0));
+  ASSERT_FALSE(state()->binding()->IsBound(HandleAt(0)));
+
+  // What the load brings in: the entry the session file named.
+  TabEntry entry;
+  entry.id = id;
+  entry.kind = EntryKind::kPinned;
+  entry.space_id = state()->model()->default_space_id();
+  entry.url = GURL("https://a.example/");
+  state()->model()->ReplaceAll({}, state()->model()->spaces(), {}, {entry});
+  task_environment()->RunUntilIdle();
+  ASSERT_TRUE(state()->model_load_finished());
+
+  ASSERT_TRUE(state()->binding()->TabForEntry(id).has_value());
+  EXPECT_EQ(HandleAt(0), *state()->binding()->TabForEntry(id));
+}
+
 // A malformed key stores nothing at all, so a later call finds no stash even
 // though one was offered.
 TEST_F(SessionTabEntryTest, AMalformedKeyLeavesNoStash) {

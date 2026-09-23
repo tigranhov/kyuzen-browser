@@ -122,10 +122,15 @@ void BindStashedEntryId(content::WebContents* web_contents) {
     return;
   }
   ArciumProfileState* state = StateFor(web_contents);
-  // The model may not have finished loading, or the entry may simply be gone.
-  // Either way the tab is a Today tab: binding it to an entry the model does
-  // not hold is the invisible-tab bug, not a recovery.
+  // An entry the model does not hold is either not read yet or gone. Not
+  // read yet is the usual case -- the file is read on another sequence and
+  // restore does not wait -- so the bind waits for the load. Gone makes the
+  // tab a Today tab: binding it to an entry the model does not hold is the
+  // invisible-tab bug, not a recovery.
   if (!state->model()->GetEntry(id)) {
+    if (!state->model_load_finished()) {
+      state->BindWhenLoaded(id, tab->GetHandle());
+    }
     return;
   }
   // Suppressed: session restore binds every warm entry in a row and

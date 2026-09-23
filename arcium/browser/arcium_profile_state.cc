@@ -56,7 +56,8 @@ ArciumProfileState* ArciumProfileState::GetForBrowserContext(
     // Reads on a background sequence; the sidebar draws live tabs meanwhile
     // and entries appear when the read completes. Once per profile, not per
     // window.
-    state->store_->Load(base::DoNothing());
+    state->store_->Load(base::BindOnce(&ArciumProfileState::BindHeldTabs,
+                                       base::Unretained(state)));
   }
   return state;
 }
@@ -130,6 +131,30 @@ void ArciumProfileState::OnArciumModelChanged() {
     if (!model_.GetEntry(id)) {
       binding_.UnbindEntry(id);
     }
+  }
+}
+
+void ArciumProfileState::BindWhenLoaded(EntryId id, tabs::TabHandle tab) {
+  held_binds_.emplace_back(id, tab);
+}
+
+void ArciumProfileState::BindHeldTabs() {
+  // Unretained above is safe: the store owns the callback, and the store is
+  // this object's member.
+  std::vector<std::pair<EntryId, tabs::TabHandle>> held;
+  held.swap(held_binds_);
+  for (const auto& [id, tab] : held) {
+    // The tab closed, the entry is not in the file after all, or one of the
+    // two was bound some other way while the file was read: each leaves the
+    // tab where restore put it, in Today.
+    if (!tab.Get() || !model_.GetEntry(id) || binding_.IsBound(tab) ||
+        binding_.TabForEntry(id).has_value()) {
+      continue;
+    }
+    // Not suppressed, unlike a bind during restore: the session was rebuilt
+    // when restore finished, without this tab's entry, so this one has to
+    // ask for a rebuild or the next launch would lose it again.
+    binding_.Bind(id, tab);
   }
 }
 

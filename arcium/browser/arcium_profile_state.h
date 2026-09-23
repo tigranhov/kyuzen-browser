@@ -6,14 +6,18 @@
 #define ARCIUM_BROWSER_ARCIUM_PROFILE_STATE_H_
 
 #include <memory>
+#include <utility>
+#include <vector>
 
 #include "arcium/browser/archive_store.h"
 #include "arcium/browser/model/arcium_model.h"
+#include "arcium/browser/model/entry_id.h"
 #include "arcium/browser/model_store.h"
 #include "arcium/browser/tab_binding.h"
 #include "base/files/file_path.h"
 #include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
+#include "components/tabs/public/tab_interface.h"
 
 namespace content {
 class BrowserContext;
@@ -104,11 +108,18 @@ class ArciumProfileState : public base::SupportsUserData::Data,
     return archive_runner_;
   }
 
+  // Binds `tab` to `id` once the model has loaded, if it then holds `id` and
+  // neither is bound by then. For a restored tab that asked for its entry
+  // before the model file was read: session restore does not wait for it.
+  void BindWhenLoaded(EntryId id, tabs::TabHandle tab);
+
   // ArciumModel::Observer:
   void OnArciumModelChanged() override;
 
  private:
   ArciumProfileState(const base::FilePath& profile_path, bool off_the_record);
+  // Runs when the load has applied the file: the binds BindWhenLoaded held.
+  void BindHeldTabs();
 
   ArciumModel model_;
   TabBinding binding_;
@@ -119,6 +130,9 @@ class ArciumProfileState : public base::SupportsUserData::Data,
   // is created and is deleted there too, behind every write already posted.
   scoped_refptr<base::SequencedTaskRunner> archive_runner_;
   std::unique_ptr<ArchiveStore> archive_;
+  // Restored tabs waiting for the model to load, each with the entry its
+  // session named. Emptied once, when the load finishes.
+  std::vector<std::pair<EntryId, tabs::TabHandle>> held_binds_;
 };
 
 }  // namespace arcium
