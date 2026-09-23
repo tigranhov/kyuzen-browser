@@ -7,6 +7,7 @@
 // stop being one, and what the sidebar's commands do to the pair.
 
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include "arcium/browser/model/arcium_model.h"
@@ -20,12 +21,19 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/test/base/browser_with_test_window_test.h"
+#include "components/split_tabs/split_tab_id.h"
 #include "components/tabs/public/tab_interface.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "url/gurl.h"
 
 namespace arcium {
 namespace {
+
+class CountingObserver : public SidebarModel::Observer {
+ public:
+  void OnSidebarModelChanged() override { ++count; }
+  int count = 0;
+};
 
 class SplitEntryTest : public BrowserWithTestWindowTest {
  protected:
@@ -230,6 +238,29 @@ TEST_F(SplitEntryTest, ATodayTabSplitWithAPinnedEntryIsDrawnBesideIt) {
   // Not linked: a Today tab is not an entry until it is pinned.
   ASSERT_EQ(1u, Pinned().size());
   EXPECT_FALSE(Pinned()[0]->split_partner.is_valid());
+}
+
+// Dragging the divider reports every step of the drag. The sidebar draws
+// nothing from where the divider is, so a step must not rebuild it: that is
+// UI-thread work on every pointer move, competing with the page resize the
+// drag is asking for.
+TEST_F(SplitEntryTest, DraggingTheDividerDoesNotRebuildTheSidebar) {
+  AddTab("https://a.test/");
+  AddTab("https://b.test/");
+  SplitFirstTwo();
+  const std::optional<split_tabs::SplitTabId> split =
+      strip()->GetTabAtIndex(0)->GetSplit();
+  ASSERT_TRUE(split.has_value());
+  CountingObserver observer;
+  model_->AddObserver(&observer);
+
+  for (double ratio : {0.4, 0.35, 0.3}) {
+    strip()->UpdateSplitRatio(*split, ratio, /*is_intermediate=*/true);
+    task_environment()->RunUntilIdle();
+  }
+
+  EXPECT_EQ(0, observer.count);
+  model_->RemoveObserver(&observer);
 }
 
 }  // namespace

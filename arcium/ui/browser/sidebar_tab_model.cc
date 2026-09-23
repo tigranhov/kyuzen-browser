@@ -486,6 +486,12 @@ void SidebarTabModel::OnSplitTabChanged(const SplitTabChange& change) {
   // Forming or breaking a split changes which rows are current and which
   // carry the mark, and the strip reports it here rather than as a selection
   // change. NotifyChanged coalesces it with the rest of the burst.
+  //
+  // Not a divider move or a flip between side by side and stacked: no row
+  // draws either, and a divider drag reports every step of the pointer.
+  if (change.type == SplitTabChange::Type::kVisualsChanged) {
+    return;
+  }
   UpdateLinksForSplitChange(change);
   NotifyChanged();
 }
