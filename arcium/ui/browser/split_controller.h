@@ -12,6 +12,8 @@
 #include "arcium/browser/model/entry_id.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "components/split_tabs/split_tab_id.h"
 #include "components/tabs/public/tab_interface.h"
@@ -34,6 +36,10 @@ class SpaceSwitcher;
 class SplitController : public TabStripModelObserver,
                         public ArciumModel::Observer {
  public:
+  // How long the divider has to stay where it was let go before the split is
+  // written down again.
+  static constexpr base::TimeDelta kDividerSettle = base::Milliseconds(500);
+
   // `switcher` is null in the playground, in a window built without a sidebar
   // and in every fixture written before spaces -- all of which mean one
   // space, so only the rules that do not mention spaces apply. Both arguments
@@ -130,6 +136,11 @@ class SplitController : public TabStripModelObserver,
   // acting on is not immediately rewritten from the split it just made.
   bool reforming_ = false;
   bool reform_scheduled_ = false;
+  // Writes the split down once the divider has stopped moving. A drag reports
+  // every step, and letting go where the last step already was reports
+  // nothing at all -- Chromium drops a ratio update that changes nothing -- so
+  // a pause is the one signal that always arrives.
+  base::OneShotTimer divider_settle_;
 
   // The tab that was on screen before the one that is. A handle, because the
   // tab it names can be closed or moved between one activation and the next,

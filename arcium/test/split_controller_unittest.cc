@@ -5,10 +5,12 @@
 #include "arcium/ui/browser/split_controller.h"
 
 #include <memory>
+#include <optional>
 
 #include "arcium/browser/loose_page.h"
 #include "arcium/browser/model/arcium_model.h"
 #include "arcium/browser/model/entry_id.h"
+#include "arcium/browser/model/space.h"
 #include "arcium/browser/model/tab_entry.h"
 #include "arcium/browser/tab_binding.h"
 #include "arcium/test/space_test_util.h"
@@ -27,6 +29,10 @@ namespace {
 
 class SplitControllerTest : public BrowserWithTestWindowTest {
  protected:
+  SplitControllerTest()
+      : BrowserWithTestWindowTest(
+            content::BrowserTaskEnvironment::TimeSource::MOCK_TIME) {}
+
   void SetUp() override {
     BrowserWithTestWindowTest::SetUp();
     switcher_ =
@@ -226,6 +232,85 @@ TEST_F(SplitControllerTest, EndingASplitByIndexWorksFromEitherHalf) {
   EXPECT_FALSE(strip()->GetSplitForTab(0).has_value());
   EXPECT_FALSE(strip()->GetSplitForTab(1).has_value());
   EXPECT_EQ(2, strip()->count());
+}
+
+// The same window with the model a split is written into, which the tests
+// above leave out so that nothing they do is also a save.
+class SplitRecordTest : public SplitControllerTest,
+                        public ArciumModel::Observer {
+ protected:
+  void SetUp() override {
+    SplitControllerTest::SetUp();
+    controller_ = std::make_unique<SplitController>(
+        strip(), switcher_.get(), model_.get(), &arcium_model_);
+    arcium_model_.AddObserver(this);
+  }
+
+  void TearDown() override {
+    arcium_model_.RemoveObserver(this);
+    SplitControllerTest::TearDown();
+  }
+
+  // ArciumModel::Observer: every change is also a save scheduled and a
+  // sidebar rebuilt, which is what makes the count worth keeping.
+  void OnArciumModelChanged() override { ++changes_; }
+
+  const std::optional<SpaceSplit>& Recorded() const {
+    return arcium_model_.GetSpace(FirstSpace())->split;
+  }
+
+  split_tabs::SplitTabId SplitOfFirstTwo() {
+    AddTab(GURL("https://a.test/"), FirstSpace());
+    AddTab(GURL("https://b.test/"), FirstSpace());
+    strip()->ActivateTabAt(0);
+    CHECK(controller().SplitWithActive(1));
+    return strip()->GetTabAtIndex(0)->GetSplit().value();
+  }
+
+  int changes_ = 0;
+};
+
+TEST_F(SplitRecordTest, ASplitIsWrittenDownAsSoonAsItForms) {
+  SplitOfFirstTwo();
+
+  ASSERT_TRUE(Recorded().has_value());
+  EXPECT_EQ(0.5, Recorded()->ratio);
+}
+
+// Dragging the divider reports every step of the drag. Writing each one down
+// rebuilt the sidebar and scheduled a save per step, and only where the
+// divider is let go is worth keeping -- which is also all Chromium's own
+// session file keeps.
+TEST_F(SplitRecordTest, TheDividerIsWrittenDownOnceItIsLetGo) {
+  const split_tabs::SplitTabId id = SplitOfFirstTwo();
+  changes_ = 0;
+
+  strip()->UpdateSplitRatio(id, 0.4, /*is_intermediate=*/true);
+  strip()->UpdateSplitRatio(id, 0.35, /*is_intermediate=*/true);
+  strip()->UpdateSplitRatio(id, 0.3, /*is_intermediate=*/true);
+
+  EXPECT_EQ(0, changes_);
+  EXPECT_EQ(0.5, Recorded()->ratio);
+
+  // Let go where the last step already was: Chromium drops that update as a
+  // change of nothing, so the pause is what writes the drag down.
+  strip()->UpdateSplitRatio(id, 0.3, /*is_intermediate=*/false);
+  task_environment()->FastForwardBy(SplitController::kDividerSettle);
+
+  EXPECT_EQ(1, changes_);
+  EXPECT_EQ(0.3, Recorded()->ratio);
+}
+
+TEST_F(SplitRecordTest, LettingGoSomewhereNewIsWrittenDownAtOnce) {
+  const split_tabs::SplitTabId id = SplitOfFirstTwo();
+  strip()->UpdateSplitRatio(id, 0.4, /*is_intermediate=*/true);
+
+  strip()->UpdateSplitRatio(id, 0.35, /*is_intermediate=*/false);
+
+  EXPECT_EQ(0.35, Recorded()->ratio);
+  changes_ = 0;
+  task_environment()->FastForwardBy(SplitController::kDividerSettle);
+  EXPECT_EQ(0, changes_) << "the drag was written down a second time";
 }
 
 }  // namespace

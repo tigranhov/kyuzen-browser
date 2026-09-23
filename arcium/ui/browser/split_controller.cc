@@ -209,9 +209,22 @@ void SplitController::OnTabStripModelChanged(
 }
 
 void SplitController::OnSplitTabChanged(const SplitTabChange& change) {
-  if (!reforming_) {
-    RecordSplitOfActiveSpace();
+  if (reforming_) {
+    return;
   }
+  // Dragging the divider reports every step of the drag, and a record is a
+  // sidebar rebuilt and a save scheduled, so a drag is written down once,
+  // after it stops. Anything else about the split is written down at once.
+  if (change.type == SplitTabChange::Type::kVisualsChanged &&
+      change.GetVisualsChange()->is_intermediate()) {
+    divider_settle_.Start(
+        FROM_HERE, kDividerSettle,
+        base::BindOnce(&SplitController::RecordSplitOfActiveSpace,
+                       base::Unretained(this)));
+    return;
+  }
+  divider_settle_.Stop();
+  RecordSplitOfActiveSpace();
 }
 
 void SplitController::RecordSplitOfActiveSpace() {
