@@ -16,14 +16,9 @@
 
 namespace arcium {
 
-// Where a sidebar row is dropped to put its page beside the one on screen:
-// a sheet over the page, split into a left half and a right half, with the
-// half under the pointer lit.
-//
-// It exists only while a row is being dragged. Nothing is allocated at rest
-// and nothing takes a hit test, which is also why it can cover the whole page
-// rather than a strip at each edge -- a forgiving target costs nothing when
-// it is not there.
+// The drop target inside SplitBand: a strip beside the page, lit while a
+// row is held over it. A row dropped here goes beside the page on screen, on
+// the side the band is on.
 //
 // It accepts Arcium's own row format and no other, so a link dragged from a
 // page is left to Chromium's own drop target at the page's edge.
@@ -31,7 +26,7 @@ class SplitDropView : public views::View {
   METADATA_HEADER(SplitDropView, views::View)
 
  public:
-  // `right` is which half the row was dropped on.
+  // `right` is which side of the page the dropped row goes on.
   using DropCallback = base::RepeatingCallback<void(RowDragData, bool right)>;
 
   explicit SplitDropView(DropCallback on_drop);
@@ -56,14 +51,14 @@ class SplitDropView : public views::View {
                    const ui::DropTargetEvent& event,
                    ui::mojom::DragOperation& output_drag_op,
                    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
-  void SetLitHalf(std::optional<bool> right);
+  void SetLit(bool lit);
 
   DropCallback on_drop_;
   // Read once per drag rather than per move: the payload cannot change while
   // one drag is in flight.
   std::optional<RowDragData> payload_;
-  // Which half is lit, absent while the pointer is elsewhere.
-  std::optional<bool> lit_right_;
+  // True while a row that can be dropped is held over the band.
+  bool lit_ = false;
 
   base::WeakPtrFactory<SplitDropView> weak_factory_{this};
 };

@@ -14,11 +14,9 @@
 #include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/browser/suggestion_source.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
-#include "arcium/ui/sidebar/row_drag_session.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
-#include "base/scoped_observation.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
@@ -42,7 +40,7 @@ namespace arcium {
 class CommandBox;
 class PeekController;
 class SplitController;
-class SplitDropView;
+class SplitBand;
 class SuggestionSource;
 class TabSearchService;
 class SidebarView;
@@ -51,7 +49,6 @@ class SpaceSwitcher;
 // Owns the sidebar inside one BrowserView and answers the layout hooks.
 // Created by BrowserView::InitViews when the sidebar feature is on.
 class BrowserSidebarController : public SidebarModel::Observer,
-                                 public RowDragSession::Observer,
                                  public content::WebContentsObserver {
  public:
   static std::unique_ptr<BrowserSidebarController> MaybeCreate(
@@ -108,6 +105,8 @@ class BrowserSidebarController : public SidebarModel::Observer,
 
   // The window's split view: who may share a screen, and how one ends.
   SplitController* split() { return split_.get(); }
+  // Where a dragged row is dropped to split the screen.
+  SplitBand* split_band() { return split_band_.get(); }
 
   CommandBox* command_box_for_testing() { return command_box_.get(); }
   SuggestionSource* suggestion_source_for_testing() {
@@ -116,10 +115,6 @@ class BrowserSidebarController : public SidebarModel::Observer,
 
   // SidebarModel::Observer:
   void OnSidebarModelChanged() override;
-
-  // RowDragSession::Observer: raises the split target over the page while a
-  // sidebar row is being dragged, and takes it away again afterwards.
-  void OnRowDragInFlightChanged() override;
 
   // content::WebContentsObserver. The pill's warning follows the page rather
   // than the navigation, because a page can turn insecure while it sits there.
@@ -135,8 +130,6 @@ class BrowserSidebarController : public SidebarModel::Observer,
   gfx::Rect PageArea() const;
   // The same, but both panes of a split rather than the one in front.
   gfx::Rect WholePageArea() const;
-  void ShowSplitDropTarget();
-  void TakeAwaySplitDropTarget();
   void OnSplitDrop(RowDragData payload, bool right);
   void ExecuteCommand(int command_id);
   void UpdateNavButtons();
@@ -192,12 +185,8 @@ class BrowserSidebarController : public SidebarModel::Observer,
   // After `space_switcher_` and `model_` by declaration order, because it
   // holds a pointer to each.
   std::unique_ptr<SplitController> split_;
-  // A child of the BrowserView, owned by it, and alive only while a row is
-  // being dragged. Null the rest of the time, which is the whole of its
-  // idle cost.
-  raw_ptr<SplitDropView> split_drop_ = nullptr;
-  base::ScopedObservation<RowDragSession, RowDragSession::Observer>
-      drag_observation_{this};
+  // Builds its drop target only while a row is being dragged.
+  std::unique_ptr<SplitBand> split_band_;
   bool visible_ = true;
   int caption_button_width_ = -1;
   float applied_corner_radius_ = -1.f;

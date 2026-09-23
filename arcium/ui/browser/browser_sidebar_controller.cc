@@ -13,8 +13,8 @@
 #include "arcium/ui/browser/peek_controller.h"
 #include "arcium/ui/browser/session_rebuild_nudge.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "arcium/ui/browser/split_band.h"
 #include "arcium/ui/browser/split_controller.h"
-#include "arcium/ui/browser/split_drop_view.h"
 #include "arcium/ui/browser/tab_search_service.h"
 #include "arcium/ui/sidebar/extensions_row_view.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
@@ -150,9 +150,12 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   if (space_switcher_) {
     space_switcher_->SetSplitController(split_.get());
   }
-  // The sidebar's rows announce their own drags; the target for dropping one
-  // on the page is built when that starts and freed when it ends.
-  drag_observation_.Observe(view_->drag_session());
+  // The sidebar's rows announce their own drags; the band for dropping one
+  // beside the page is built when that starts and freed when it ends.
+  split_band_ = std::make_unique<SplitBand>(
+      browser_view_, view_->drag_session(),
+      base::BindRepeating(&BrowserSidebarController::OnSplitDrop,
+                          weak_factory_.GetWeakPtr()));
   UpdateNavButtons();
   MaybeScheduleSnapshot();
   MaybeShowCommandBoxForDebugging();
@@ -163,10 +166,10 @@ BrowserSidebarController::~BrowserSidebarController() {
   // tab in the strip, and both are still whole here. ~BrowserView frees this
   // controller before it removes its own children.
   peek_.reset();
-  // Before the BrowserView removes its own children, as the peek is: this is
-  // one of them.
-  TakeAwaySplitDropTarget();
-  drag_observation_.Reset();
+  // Before the BrowserView removes its own children, as the peek is: the
+  // band's drop target is one of them, and the drag session it watches
+  // belongs to another.
+  split_band_.reset();
   // Both outlive `split_` by declaration order and point at it.
   model_->SetSplitController(nullptr);
   if (space_switcher_) {
@@ -203,6 +206,11 @@ void BrowserSidebarController::AdjustLayoutParams(BrowserLayoutParams& params) {
   }
   params.InsetHorizontal(width(), /*leading=*/true);
   params.leading_exclusion = BrowserLayoutExclusionArea();
+  // While a row is being dragged the page also gives up a strip at its
+  // trailing edge, where the band for splitting the screen goes.
+  if (split_band_) {
+    params.InsetHorizontal(split_band_->ReservedWidth(), /*leading=*/false);
+  }
 }
 
 void BrowserSidebarController::LayoutSidebar(const gfx::Rect& host_bounds) {
@@ -213,40 +221,9 @@ void BrowserSidebarController::LayoutSidebar(const gfx::Rect& host_bounds) {
   if (peek_) {
     peek_->Layout(PageArea());
   }
-  if (split_drop_) {
-    split_drop_->SetBoundsRect(WholePageArea());
+  if (split_band_) {
+    split_band_->Layout(WholePageArea());
   }
-}
-
-void BrowserSidebarController::OnRowDragInFlightChanged() {
-  if (view_->drag_session()->in_flight()) {
-    ShowSplitDropTarget();
-  } else {
-    TakeAwaySplitDropTarget();
-  }
-}
-
-void BrowserSidebarController::ShowSplitDropTarget() {
-  if (split_drop_) {
-    return;
-  }
-  split_drop_ = browser_view_->AddChildView(
-      std::make_unique<SplitDropView>(base::BindRepeating(
-          &BrowserSidebarController::OnSplitDrop, weak_factory_.GetWeakPtr())));
-  // Above every other layer in the window, for the reason PeekController
-  // gives: added last is not enough, because the window restacks its children
-  // whenever it lays them out.
-  if (ui::Layer* layer = split_drop_->layer(); layer && layer->parent()) {
-    layer->parent()->StackAtTop(layer);
-  }
-  split_drop_->SetBoundsRect(WholePageArea());
-}
-
-void BrowserSidebarController::TakeAwaySplitDropTarget() {
-  if (!split_drop_) {
-    return;
-  }
-  browser_view_->RemoveChildViewT(split_drop_.ExtractAsDangling());
 }
 
 void BrowserSidebarController::OnSplitDrop(RowDragData payload, bool right) {

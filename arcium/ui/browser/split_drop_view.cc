@@ -8,6 +8,7 @@
 
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
+#include "arcium/ui/sidebar/vector_icons.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "cc/paint/paint_flags.h"
@@ -19,25 +20,31 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
-#include "ui/gfx/geometry/rect_f.h"
-#include "ui/gfx/geometry/rounded_corners_f.h"
+#include "ui/gfx/image/image_skia.h"
+#include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/view_class_properties.h"
 
 namespace arcium {
 namespace {
 
-// How much of the page the lit half covers is not a choice -- it is half --
-// so the only number here is how strongly it is lit.
-constexpr SkAlpha kLitAlpha = 0x38;
+// The band is drawn for the whole drag, so a row has somewhere visible to
+// go, and drawn stronger while one is held over it.
+constexpr SkAlpha kRestingAlpha = 0x18;
+constexpr SkAlpha kLitAlpha = 0x40;
+// Clear of the page on one side and the window's edge on the other.
+constexpr int kInset = 6;
+constexpr int kIconSize = 20;
 
 }  // namespace
 
 SplitDropView::SplitDropView(DropCallback on_drop)
     : on_drop_(std::move(on_drop)) {
   // The page draws through a compositor layer, and a view without one paints
-  // beneath every layer inside its parent's. Stage 4b's peek was invisible
-  // for exactly this reason; the caller stacks this layer at the top.
+  // beneath every layer inside its parent's. The band sits beside the page
+  // rather than over it, but the window's other layers still overlap its
+  // strip; the caller stacks this layer at the top.
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 }
@@ -67,16 +74,16 @@ int SplitDropView::OnDragUpdated(const ui::DropTargetEvent& event) {
     payload_ = RowDragData::Read(event.data());
   }
   if (!payload_ || payload_->is_folder()) {
-    SetLitHalf(std::nullopt);
+    SetLit(false);
     return ui::DragDropTypes::DRAG_NONE;
   }
-  SetLitHalf(event.location().x() >= width() / 2);
+  SetLit(true);
   return ui::DragDropTypes::DRAG_MOVE;
 }
 
 void SplitDropView::OnDragExited() {
   payload_.reset();
-  SetLitHalf(std::nullopt);
+  SetLit(false);
 }
 
 views::View::DropCallback SplitDropView::GetDropCallback(
@@ -85,32 +92,35 @@ views::View::DropCallback SplitDropView::GetDropCallback(
   if (!payload) {
     payload = RowDragData::Read(event.data());
   }
-  const bool right = event.location().x() >= width() / 2;
   payload_.reset();
-  SetLitHalf(std::nullopt);
+  SetLit(false);
   if (!payload || payload->is_folder()) {
     return base::NullCallback();
   }
   // Weak, and with the payload resolved already: the drop runs after the
   // event that produced it, and the drag ending destroys this view.
+  // The band is at the page's trailing edge, so that is the side the page
+  // goes on.
   return base::BindOnce(&SplitDropView::PerformDrop, weak_factory_.GetWeakPtr(),
-                        *payload, right);
+                        *payload, /*right=*/true);
 }
 
 void SplitDropView::OnPaint(gfx::Canvas* canvas) {
   views::View::OnPaint(canvas);
-  if (!lit_right_.has_value()) {
-    return;
-  }
-  const int half = width() / 2;
-  const gfx::Rect lit = *lit_right_
-                            ? gfx::Rect(half, 0, width() - half, height())
-                            : gfx::Rect(0, 0, half, height());
+  const SkColor color = GetColorProvider()->GetColor(kColorArciumRowTextActive);
+  gfx::Rect band = GetLocalBounds();
+  band.Inset(gfx::Insets::VH(0, kInset));
   cc::PaintFlags flags;
   flags.setStyle(cc::PaintFlags::kFill_Style);
-  flags.setColor(SkColorSetA(
-      GetColorProvider()->GetColor(kColorArciumRowTextActive), kLitAlpha));
-  canvas->DrawRoundRect(lit, metrics::kContentCornerRadius, flags);
+  flags.setAntiAlias(true);
+  flags.setColor(SkColorSetA(color, lit_ ? kLitAlpha : kRestingAlpha));
+  canvas->DrawRoundRect(band, metrics::kContentCornerRadius, flags);
+  // The same two panes the sidebar marks a split row with, so the band says
+  // what dropping on it does.
+  const gfx::ImageSkia icon =
+      gfx::CreateVectorIcon(kSplitIcon, kIconSize, color);
+  canvas->DrawImageInt(icon, band.CenterPoint().x() - kIconSize / 2,
+                       band.CenterPoint().y() - kIconSize / 2);
 }
 
 void SplitDropView::PerformDrop(
@@ -123,11 +133,11 @@ void SplitDropView::PerformDrop(
   on_drop_.Run(payload, right);
 }
 
-void SplitDropView::SetLitHalf(std::optional<bool> right) {
-  if (lit_right_ == right) {
+void SplitDropView::SetLit(bool lit) {
+  if (lit_ == lit) {
     return;
   }
-  lit_right_ = right;
+  lit_ = lit;
   SchedulePaint();
 }
 

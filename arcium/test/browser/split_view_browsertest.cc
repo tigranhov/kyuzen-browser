@@ -15,13 +15,17 @@
 #include "arcium/test/browser/profile_browsertest_base.h"
 #include "arcium/ui/browser/browser_sidebar_controller.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "arcium/ui/browser/split_band.h"
 #include "arcium/ui/browser/split_controller.h"
+#include "arcium/ui/sidebar/row_drag_session.h"
+#include "arcium/ui/sidebar/sidebar_view.h"
 #include "base/strings/strcat.h"
 #include "base/test/run_until.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_drop_target_view.h"
+#include "chrome/browser/ui/views/frame/multi_contents_view.h"
 #include "chrome/browser/ui/views/frame/multi_contents_view_delegate.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/tabs/public/tab_interface.h"
@@ -32,6 +36,7 @@
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/views/test/views_test_utils.h"
 #include "url/gurl.h"
 
 namespace arcium::test {
@@ -50,6 +55,38 @@ void OpenTab(Browser* browser, const GURL& url) {
   ui_test_utils::NavigateToURLWithDisposition(
       browser, url, WindowOpenDisposition::NEW_FOREGROUND_TAB,
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+}
+
+// A page on macOS takes every drag that crosses it before anything drawn over
+// it can, so a target over the page never saw a row dropped on it. The band
+// sits in a strip the page gives up for the length of the drag, which is how
+// Chromium's own target for a dropped link works too.
+IN_PROC_BROWSER_TEST_F(SplitViewTest, DraggingARowMakesRoomBesideThePage) {
+  BrowserView* const window = BrowserView::GetBrowserViewForBrowser(browser());
+  BrowserSidebarController* const sidebar = window->arcium_sidebar();
+  views::View* const page = window->multi_contents_view();
+  views::test::RunScheduledLayout(window->GetWidget());
+  const int full_width = page->width();
+  ASSERT_GT(full_width, SplitBand::kWidth);
+  ASSERT_FALSE(sidebar->split_band()->view_for_testing());
+
+  RowDragSession* const session = sidebar->view()->drag_session();
+  session->Begin(nullptr);
+  views::test::RunScheduledLayout(window->GetWidget());
+
+  const views::View* const band = sidebar->split_band()->view_for_testing();
+  ASSERT_TRUE(band);
+  EXPECT_EQ(full_width - SplitBand::kWidth, page->width());
+  EXPECT_EQ(SplitBand::kWidth, band->width());
+  EXPECT_FALSE(band->GetBoundsInScreen().Intersects(page->GetBoundsInScreen()))
+      << "the band is over the page, where no drag reaches it";
+  EXPECT_GE(band->GetBoundsInScreen().x(), page->GetBoundsInScreen().right());
+
+  session->End();
+  views::test::RunScheduledLayout(window->GetWidget());
+
+  EXPECT_FALSE(sidebar->split_band()->view_for_testing());
+  EXPECT_EQ(full_width, page->width());
 }
 
 IN_PROC_BROWSER_TEST_F(SplitViewTest, MovingOneHalfToAnotherSpaceEndsTheSplit) {
