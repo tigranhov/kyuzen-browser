@@ -108,6 +108,8 @@ class FakeSidebarModel : public SidebarModel {
   // show what a split looks like without a tab strip to make one. Ignores an
   // index it does not have.
   void SplitRows(size_t first, size_t second);
+  // The row a drag names, by entry id or by tab index, or nothing.
+  std::optional<size_t> IndexOfDragged(EntryId entry, int tab_index) const;
 
   // SidebarModel:
   std::vector<SidebarRow> rows() const override;
@@ -134,6 +136,12 @@ class FakeSidebarModel : public SidebarModel {
   void ToggleSplit() override;
   void EndSplit(const SidebarRow& row) override;
   void CloseSplit(const SidebarRow& row) override;
+  bool CanSplitByDrop(const SidebarRow& target,
+                      EntryId dragged_entry,
+                      int dragged_tab) const override;
+  void SplitByDrop(const SidebarRow& target,
+                   EntryId dragged_entry,
+                   int dragged_tab) override;
   void MoveEntryToSection(EntryId id,
                           SidebarSection section,
                           int position) override;

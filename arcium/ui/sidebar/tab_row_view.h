@@ -94,6 +94,13 @@ class TabRowView : public views::Button,
   views::Label* title_for_testing() { return title_; }
   views::ImageView* favicon_for_testing() { return favicon_; }
 
+  // Marks this row as the one a drag would split with: its right half is
+  // tinted, the pane the dragged page would take. The list sets it while
+  // the pointer is over the middle of the row, and clears it when the
+  // pointer moves on.
+  void SetSplitTarget(bool target);
+  bool is_split_target() const { return split_target_; }
+
   // views::Button / View:
   bool OnMousePressed(const ui::MouseEvent& event) override;
   void OnMouseReleased(const ui::MouseEvent& event) override;
@@ -101,6 +108,7 @@ class TabRowView : public views::Button,
   void OnMouseExited(const ui::MouseEvent& event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   void OnThemeChanged() override;
+  void PaintButtonContents(gfx::Canvas* canvas) override;
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
 
@@ -140,6 +148,7 @@ class TabRowView : public views::Button,
   Delegate delegate_;
   SidebarRow row_;
   bool hovered_ = false;
+  bool split_target_ = false;
   // Set for the press that opened a rename, and read by the two things that
   // press must not also do: start a drag, and fire the button a second time.
   // A double-click's second press and a drag's first press are the same

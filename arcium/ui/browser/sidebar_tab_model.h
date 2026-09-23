@@ -112,6 +112,12 @@ class SidebarTabModel : public SidebarModel,
   void ToggleSplit() override;
   void EndSplit(const SidebarRow& row) override;
   void CloseSplit(const SidebarRow& row) override;
+  bool CanSplitByDrop(const SidebarRow& target,
+                      EntryId dragged_entry,
+                      int dragged_tab) const override;
+  void SplitByDrop(const SidebarRow& target,
+                   EntryId dragged_entry,
+                   int dragged_tab) override;
   // Puts the entry's page on screen, opening it when the entry is cold, and
   // nothing more: unlike ActivateEntry, a pinned split's other half is left
   // alone. What SplitController uses to open the half it is about to split,

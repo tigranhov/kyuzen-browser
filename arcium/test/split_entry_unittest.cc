@@ -263,5 +263,88 @@ TEST_F(SplitEntryTest, DraggingTheDividerDoesNotRebuildTheSidebar) {
   model_->RemoveObserver(&observer);
 }
 
+// The row a strip index is drawn as, found in rows() by that index.
+SidebarRow RowForTab(SidebarTabModel& model, int tab_index) {
+  for (const SidebarRow& row : model.rows()) {
+    if (!row.is_cold && row.tab_index == tab_index) {
+      return row;
+    }
+  }
+  return SidebarRow();
+}
+
+TEST_F(SplitEntryTest, DroppingATodayRowOnAnotherSplitsThemDroppedOnTheRight) {
+  AddTab("https://a.test/");
+  AddTab("https://b.test/");
+  AddTab("https://c.test/");
+  strip()->ActivateTabAt(2);
+  tabs::TabInterface* a = strip()->GetTabAtIndex(0);
+  tabs::TabInterface* b = strip()->GetTabAtIndex(1);
+
+  const SidebarRow target = RowForTab(*model_, 0);
+  ASSERT_TRUE(model_->CanSplitByDrop(target, EntryId(), 1));
+  model_->SplitByDrop(target, EntryId(), 1);
+
+  ASSERT_TRUE(controller_->ActiveIsSplit());
+  ASSERT_TRUE(a->GetSplit().has_value());
+  EXPECT_EQ(a->GetSplit(), b->GetSplit());
+  // The row dropped on keeps the left pane, the dropped one takes the right.
+  EXPECT_LT(strip()->GetIndexOfTab(a), strip()->GetIndexOfTab(b));
+}
+
+TEST_F(SplitEntryTest, DroppingOnAColdPinnedRowOpensItAndSplits) {
+  const EntryId cold = arcium_model_.AddEntryForTesting(
+      EntryKind::kPinned, GURL("https://cold.test/"), u"Cold");
+  AddTab("https://today.test/");
+  tabs::TabInterface* today = strip()->GetTabAtIndex(0);
+  SidebarRow target;
+  for (const SidebarRow& row : model_->rows()) {
+    if (row.entry_id == cold) {
+      target = row;
+    }
+  }
+  ASSERT_TRUE(target.is_cold);
+
+  model_->SplitByDrop(target, EntryId(), 0);
+
+  ASSERT_TRUE(controller_->ActiveIsSplit());
+  tabs::TabInterface* opened = binding_.TabForEntry(cold)->Get();
+  ASSERT_TRUE(opened);
+  EXPECT_EQ(opened->GetSplit(), today->GetSplit());
+  EXPECT_LT(strip()->GetIndexOfTab(opened), strip()->GetIndexOfTab(today));
+}
+
+TEST_F(SplitEntryTest, DroppingOnePinnedRowOnAnotherMakesThemOneEntry) {
+  AddTab("https://a.test/");
+  AddTab("https://b.test/");
+  model_->PinTab(0);
+  model_->PinTab(1);
+  ASSERT_EQ(2u, Pinned().size());
+  const EntryId a = Pinned()[0]->id;
+  const EntryId b = Pinned()[1]->id;
+  SidebarRow target;
+  for (const SidebarRow& row : model_->rows()) {
+    if (row.entry_id == a) {
+      target = row;
+    }
+  }
+
+  model_->SplitByDrop(target, b, -1);
+  task_environment()->RunUntilIdle();
+
+  EXPECT_TRUE(Linked(a, b));
+}
+
+TEST_F(SplitEntryTest, ARowSharingTheScreenIsNeitherTargetNorDropped) {
+  AddTab("https://a.test/");
+  AddTab("https://b.test/");
+  AddTab("https://c.test/");
+  SplitFirstTwo();
+
+  EXPECT_FALSE(model_->CanSplitByDrop(RowForTab(*model_, 0), EntryId(), 2));
+  EXPECT_FALSE(model_->CanSplitByDrop(RowForTab(*model_, 2), EntryId(), 1));
+  EXPECT_FALSE(model_->CanSplitByDrop(RowForTab(*model_, 2), EntryId(), 2));
+}
+
 }  // namespace
 }  // namespace arcium

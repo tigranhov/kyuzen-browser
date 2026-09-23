@@ -221,6 +221,19 @@ class SidebarModel {
   // Closes both halves of the split `row` is in. A pinned half keeps its
   // entry, cold, the way closing one pinned tab does. "Close both".
   virtual void CloseSplit(const SidebarRow& row) = 0;
+  // Whether a row dragged onto the middle of `target` may split with it. The
+  // dragged row is named the way a drag names it: an entry by id, a Today
+  // tab by strip index. False for the same row, for either one already
+  // sharing or joined to a partner, and for what the split rules refuse.
+  // Asked on every drag move, so it must not allocate.
+  virtual bool CanSplitByDrop(const SidebarRow& target,
+                              EntryId dragged_entry,
+                              int dragged_tab) const = 0;
+  // Puts `target` on screen, opening it when it is cold, and the dragged row
+  // beside it on the right. The drop on the middle of a row.
+  virtual void SplitByDrop(const SidebarRow& target,
+                           EntryId dragged_entry,
+                           int dragged_tab) = 0;
 
   // Puts `id` in `section` at `position` among that section's entries. What a
   // drop does, and one command rather than a kind change followed by a

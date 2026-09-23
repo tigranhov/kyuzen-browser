@@ -116,6 +116,9 @@ std::unique_ptr<FolderHeaderView> TabListView::MakeHeader() {
 }
 
 void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
+  // The rows are pooled, so a tint left on one would move to whatever it
+  // holds next. The next drag move puts it back if it still belongs.
+  SetSplitTarget(std::nullopt);
   std::vector<const SidebarRow*> mine;
   for (const SidebarRow& row : all_rows) {
     if (row.DrawnSection() == section_) {

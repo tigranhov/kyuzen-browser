@@ -15,14 +15,19 @@
 #include "arcium/ui/sidebar/unloaded_row_dimming.h"
 #include "arcium/ui/sidebar/vector_icons.h"
 #include "base/functional/bind.h"
+#include "cc/paint/paint_flags.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/color/color_provider.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
@@ -408,6 +413,30 @@ void TabRowView::OnThemeChanged() {
   } else {
     SetBackground(nullptr);
   }
+}
+
+void TabRowView::SetSplitTarget(bool target) {
+  if (split_target_ == target) {
+    return;
+  }
+  split_target_ = target;
+  SchedulePaint();
+}
+
+void TabRowView::PaintButtonContents(gfx::Canvas* canvas) {
+  if (!split_target_) {
+    return;
+  }
+  // Under the favicon and title, which paint after this as children, so the
+  // row stays readable through the tint.
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setColor(
+      SkColorSetA(GetColorProvider()->GetColor(kColorArciumSpaceAccent), 0x66));
+  gfx::RectF half(GetLocalBounds());
+  half.set_x(half.width() / 2);
+  half.set_width(half.width() / 2);
+  canvas->DrawRoundRect(half, metrics::kRowCornerRadius, flags);
 }
 
 gfx::Size TabRowView::CalculatePreferredSize(

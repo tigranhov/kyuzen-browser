@@ -279,6 +279,14 @@ int TabListView::OnDragUpdated(const ui::DropTargetEvent& event) {
     SetDropIndex(std::nullopt);
     return ui::DragDropTypes::DRAG_MOVE;
   }
+  if (const std::optional<size_t> target = SplitTargetAt(y, *drag_payload_)) {
+    // Over the middle of a row that may split: the tint says what a drop
+    // does, and a line as well would promise a move that will not happen.
+    SetDropIndex(std::nullopt);
+    SetSplitTarget(target);
+    return ui::DragDropTypes::DRAG_MOVE;
+  }
+  SetSplitTarget(std::nullopt);
   SetDropIndex(DropRowIndex(y));
   return ui::DragDropTypes::DRAG_MOVE;
 }
@@ -286,6 +294,7 @@ int TabListView::OnDragUpdated(const ui::DropTargetEvent& event) {
 void TabListView::OnDragExited() {
   drag_payload_.reset();
   SetDropIndex(std::nullopt);
+  SetSplitTarget(std::nullopt);
 }
 
 views::View::DropCallback TabListView::GetDropCallback(
@@ -297,8 +306,14 @@ views::View::DropCallback TabListView::GetDropCallback(
   const int y = event.location().y();
   drag_payload_.reset();
   SetDropIndex(std::nullopt);
+  SetSplitTarget(std::nullopt);
   if (!payload || DropRefusedByHeader(y, *payload)) {
     return base::NullCallback();
+  }
+  if (const std::optional<size_t> target = SplitTargetAt(y, *payload)) {
+    return base::BindOnce(&TabListView::PerformSplitDrop,
+                          weak_factory_.GetWeakPtr(), *payload,
+                          rows_[*target]->row());
   }
   const DropAnchor anchor = AnchorForDropIndex(DropRowIndex(y));
   // Weak, and with the payload and the anchor already resolved: the drop runs
@@ -347,6 +362,54 @@ void TabListView::PerformDrop(
     return;
   }
   MoveTabBeforeTab(payload.tab_index, anchor.before_tab);
+}
+
+std::optional<size_t> TabListView::SplitTargetAt(
+    int y,
+    const RowDragData& payload) const {
+  if (payload.is_folder()) {
+    return std::nullopt;
+  }
+  for (size_t i = 0; i < rows_.size(); ++i) {
+    const TabRowView* row = rows_[i];
+    // A row hidden in a collapsed folder keeps its old bounds.
+    if (row->parent() != this || !row->GetVisible()) {
+      continue;
+    }
+    const int quarter = row->height() / 4;
+    if (y < row->y() + quarter || y >= row->bounds().bottom() - quarter) {
+      continue;
+    }
+    if (model_->CanSplitByDrop(row->row(), payload.entry_id,
+                               payload.tab_index)) {
+      return i;
+    }
+    return std::nullopt;
+  }
+  return std::nullopt;
+}
+
+void TabListView::SetSplitTarget(std::optional<size_t> index) {
+  if (split_target_ == index) {
+    return;
+  }
+  if (split_target_ && *split_target_ < rows_.size()) {
+    rows_[*split_target_]->SetSplitTarget(false);
+  }
+  split_target_ = index;
+  if (split_target_ && *split_target_ < rows_.size()) {
+    rows_[*split_target_]->SetSplitTarget(true);
+  }
+}
+
+void TabListView::PerformSplitDrop(
+    RowDragData payload,
+    SidebarRow target,
+    const ui::DropTargetEvent& event,
+    ui::mojom::DragOperation& output_drag_op,
+    std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
+  output_drag_op = ui::mojom::DragOperation::kMove;
+  model_->SplitByDrop(target, payload.entry_id, payload.tab_index);
 }
 
 int TabListView::ReorderPosition(EntryId id, int to) const {

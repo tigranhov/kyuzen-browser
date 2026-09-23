@@ -252,6 +252,53 @@ void FakeSidebarModel::CloseSplit(const SidebarRow& row) {
   }
 }
 
+std::optional<size_t> FakeSidebarModel::IndexOfDragged(EntryId entry,
+                                                       int tab_index) const {
+  for (size_t i = 0; i < rows_.size(); ++i) {
+    if (entry.is_valid()
+            ? rows_[i].entry_id == entry
+            : !rows_[i].is_cold && rows_[i].tab_index == tab_index) {
+      return i;
+    }
+  }
+  return std::nullopt;
+}
+
+bool FakeSidebarModel::CanSplitByDrop(const SidebarRow& target,
+                                      EntryId dragged_entry,
+                                      int dragged_tab) const {
+  // The fake has no tab strip or spaces to ask, so it keeps the rules it can
+  // answer: not the same row, and nothing already sharing.
+  if (target.split.has_value() || target.split_joins_previous ||
+      target.split_joins_next) {
+    return false;
+  }
+  const std::optional<size_t> dragged =
+      IndexOfDragged(dragged_entry, dragged_tab);
+  const std::optional<size_t> onto =
+      IndexOfDragged(target.entry_id, target.tab_index);
+  return dragged && onto && *dragged != *onto &&
+         !rows_[*dragged].split.has_value();
+}
+
+void FakeSidebarModel::SplitByDrop(const SidebarRow& target,
+                                   EntryId dragged_entry,
+                                   int dragged_tab) {
+  if (!CanSplitByDrop(target, dragged_entry, dragged_tab)) {
+    return;
+  }
+  const std::optional<size_t> dragged =
+      IndexOfDragged(dragged_entry, dragged_tab);
+  const std::optional<size_t> onto =
+      IndexOfDragged(target.entry_id, target.tab_index);
+  // The two halves become the page on screen, and nothing else is.
+  for (SidebarRow& r : rows_) {
+    r.is_active = false;
+  }
+  rows_[*onto].is_cold = false;
+  SplitRows(*onto, *dragged);
+}
+
 void FakeSidebarModel::SplitRows(size_t first, size_t second) {
   if (first >= rows_.size() || second >= rows_.size() || first == second) {
     return;

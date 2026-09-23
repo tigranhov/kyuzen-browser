@@ -70,6 +70,11 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // this list. An index into the laid-out rows; row_count() means "after the
   // last one".
   std::optional<size_t> drop_index_for_testing() const { return drop_index_; }
+  // The row a drop would split with, as an index into the laid-out rows, or
+  // nothing when the pointer is not over the middle of one that may split.
+  std::optional<size_t> split_target_for_testing() const {
+    return split_target_;
+  }
   // The top of the insertion line in this list's coordinates, or -1 when no
   // line is drawn.
   int drop_line_y_for_testing() const {
@@ -189,6 +194,20 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // Today only: turns the anchor into a tab-strip move.
   void MoveTabBeforeTab(int from_index, int before_tab);
   void SetDropIndex(std::optional<size_t> index);
+  // The row whose middle band holds `y`, when the dragged row may split with
+  // it. The top and bottom quarters of a row stay drop boundaries, so a
+  // reorder is still one short move away.
+  std::optional<size_t> SplitTargetAt(int y, const RowDragData& payload) const;
+  void SetSplitTarget(std::optional<size_t> index);
+  // The drop on the middle of a row, bound with a copy of that row: the
+  // lists can be rebuilt before it runs, and a copy names the row by what
+  // the model calls it rather than by a slot.
+  void PerformSplitDrop(
+      RowDragData payload,
+      SidebarRow target,
+      const ui::DropTargetEvent& event,
+      ui::mojom::DragOperation& output_drag_op,
+      std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner);
   // Bound at drop time with the payload and the anchor already resolved,
   // because the drop runs after the event that produced it.
   void PerformDrop(RowDragData payload,
@@ -235,6 +254,7 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // arrives on every pixel of pointer motion.
   std::optional<RowDragData> drag_payload_;
   std::optional<size_t> drop_index_;
+  std::optional<size_t> split_target_;
   base::ScopedObservation<RowDragSession, RowDragSession::Observer>
       drag_session_{this};
   base::WeakPtrFactory<TabListView> weak_factory_{this};

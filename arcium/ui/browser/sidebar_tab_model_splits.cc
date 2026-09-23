@@ -163,6 +163,85 @@ void SidebarTabModel::EndSplit(const SidebarRow& row) {
   NotifyChanged();
 }
 
+bool SidebarTabModel::CanSplitByDrop(const SidebarRow& target,
+                                     EntryId dragged_entry,
+                                     int dragged_tab) const {
+  if (!split_ || !tab_strip_model_) {
+    return false;
+  }
+  // A pair is taken apart before either half joins anything else, the same
+  // rule the split controller keeps for a live split.
+  if (target.split.has_value() || target.split_partner.is_valid() ||
+      target.split_joins_previous || target.split_joins_next) {
+    return false;
+  }
+  int dragged_index = dragged_tab;
+  if (dragged_entry.is_valid()) {
+    if (dragged_entry == target.entry_id) {
+      return false;
+    }
+    const TabEntry* entry = arcium_model_->GetEntry(dragged_entry);
+    if (!entry || entry->split_partner.is_valid()) {
+      return false;
+    }
+    tabs::TabInterface* tab = LiveTabForEntry(dragged_entry);
+    dragged_index = tab ? tab_strip_model_->GetIndexOfTab(tab) : -1;
+  } else if (!tab_strip_model_->ContainsIndex(dragged_tab)) {
+    return false;
+  }
+  const int target_index = target.is_cold ? -1 : target.tab_index;
+  if (target_index >= 0 && dragged_index >= 0) {
+    // Both open: every rule the other ways in apply, including the same
+    // row, which is one index twice.
+    return split_->CanSplit(target_index, dragged_index);
+  }
+  // At least one is cold. Both rows are drawn in the space on screen, and a
+  // cold entry is neither loose nor sharing, so the only refusal left is an
+  // open half that already shares the screen.
+  for (int index : {target_index, dragged_index}) {
+    if (tab_strip_model_->ContainsIndex(index) &&
+        tab_strip_model_->GetSplitForTab(index)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void SidebarTabModel::SplitByDrop(const SidebarRow& target,
+                                  EntryId dragged_entry,
+                                  int dragged_tab) {
+  if (!CanSplitByDrop(target, dragged_entry, dragged_tab)) {
+    return;
+  }
+  // A handle, because opening a cold target adds a tab and can move the
+  // dragged one's index.
+  const tabs::TabHandle dragged =
+      dragged_entry.is_valid()
+          ? tabs::TabHandle()
+          : tab_strip_model_->GetTabAtIndex(dragged_tab)->GetHandle();
+  tabs::TabInterface* shown = nullptr;
+  if (target.entry_id.is_valid()) {
+    ShowEntry(target.entry_id);
+    shown = LiveTabForEntry(target.entry_id);
+  } else {
+    ActivateTab(target.tab_index);
+    shown = tab_strip_model_->GetTabAtIndex(target.tab_index);
+  }
+  // The target's tab lives in another window, which was raised instead:
+  // there is nothing on this screen to put the dragged page beside.
+  if (!shown || shown != tab_strip_model_->GetActiveTab()) {
+    return;
+  }
+  // The target is the page on screen now, so the dragged page joins it, on
+  // the right: the half the drop showed it would take.
+  if (dragged_entry.is_valid()) {
+    split_->SplitWithActive(dragged_entry, /*on_right=*/true);
+  } else if (tabs::TabInterface* tab = dragged.Get()) {
+    split_->SplitWithActive(tab_strip_model_->GetIndexOfTab(tab),
+                            /*on_right=*/true);
+  }
+}
+
 void SidebarTabModel::CloseSplit(const SidebarRow& row) {
   tabs::TabInterface* tab = row.entry_id.is_valid()
                                 ? LiveTabForEntry(row.entry_id)
