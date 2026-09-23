@@ -81,8 +81,12 @@ each page twice.
 - A Today-only pair moved across profiles may not re-form on arrival,
   because the reopen replaces the tab it was going to split with. It still
   arrives in the right space.
-- Dragging a pair carries the half you picked up. Drops into Pinned and Today
-  act on both halves through the model's pair rules.
+- A split row can be dragged two ways. Its handle, between the halves, carries
+  the pair, which moves whole and stays split. Either half carries only
+  itself, and dropping it anywhere ends the split, even right below its own
+  row. A pinned pair dropped in a folder by its handle goes in whole by the
+  model's pair rule; the fake model the view tests use does not have that
+  rule, so only the half case is tested there.
 
 ## Open
 
@@ -96,7 +100,20 @@ each page twice.
 - A pinned row could not be dropped at the very bottom of Pinned: the line
   for that drop was drawn past the list's edge and clipped (3fc6eb7).
 - Dropping a row on the middle of another row splits the two, at the
-  owner's request (73314f4). Hand rows 9 to 11 cover it.
+  owner's request (73314f4). Hand rows 9 to 11 passed.
+- The strip beside the page was offered when dragging the row whose page was
+  already on screen, which could only put a page beside itself. It now shows
+  only for a row that may go there (ea29ff9).
+- A split row has a handle between its halves, at the owner's choice, so a
+  split can be both moved whole and ended by dragging a half away, the same in
+  Today and Pinned. Before, a Today half could be dragged out and a pinned
+  half could not, and a half dropped just below its own row kept its split.
+  Hand rows 12 to 18 cover it. Fifteen tests were written for it, and
+  thirteen were watched to fail with the piece they cover broken. The test
+  that a pair is never offered as a split target still passed with its guard
+  removed, because the model already refuses to split a tab that is split;
+  the guard stays as the view's own statement of the rule. The two tests
+  that nothing happens for a row sharing nothing were not broken on purpose.
 
 ## Owed
 

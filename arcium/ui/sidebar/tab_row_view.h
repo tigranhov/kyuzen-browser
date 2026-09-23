@@ -67,6 +67,9 @@ class TabRowView : public views::Button,
     // running" signal and the sidebar's empty sections need one, so the
     // source says so; see RowDragSession.
     base::RepeatingCallback<void(const RowDragData& payload)> drag_started;
+    // The pointer came onto the row or left it. A split row shows its grip
+    // while either half is under the pointer.
+    base::RepeatingClosure hover_changed;
   };
 
   // Ids for the two hover buttons, so a test can ask which one has the slot.
@@ -101,6 +104,7 @@ class TabRowView : public views::Button,
   // pointer moves on.
   void SetSplitTarget(bool target);
   bool is_split_target() const { return split_target_; }
+  bool hovered() const { return hovered_; }
 
   // views::Button / View:
   bool OnMousePressed(const ui::MouseEvent& event) override;

@@ -339,12 +339,28 @@ void TabListView::PerformDrop(
     model_->SetFolderParent(payload.folder_id, std::nullopt);
     return;
   }
+  // A half dragged on its own leaves its split wherever it lands, even right
+  // beside where it was, so the line always means what it shows. A pair
+  // dragged by its grip keeps its split. Everything the drop needs from the
+  // rows is read before the split is left, because leaving it rebuilds them.
+  const bool leaves = !payload.split_pair;
   if (section_ == SidebarSection::kPinned) {
     const int to = PositionForAnchor(anchor);
     if (payload.is_entry()) {
+      const int position = payload.split_pair
+                               ? PairReorderPosition(payload.entry_id, to)
+                               : ReorderPosition(payload.entry_id, to);
+      if (leaves) {
+        model_->LeaveSplit(payload.entry_id, payload.tab_index);
+      }
       model_->MoveEntryToSection(payload.entry_id, SidebarSection::kPinned,
-                                 ReorderPosition(payload.entry_id, to));
+                                 position);
     } else {
+      // A pair of Today tabs pinned by its grip is pinned whole, which is
+      // what pinning either half of a split already does.
+      if (leaves) {
+        model_->LeaveSplit(EntryId(), payload.tab_index);
+      }
       // A Today tab becomes a pinned entry bound to that same tab. The
       // section decides the kind, and the drop index decides the place — the
       // insertion line was drawn there before the gesture was taken.
@@ -356,18 +372,28 @@ void TabListView::PerformDrop(
     // Today holds tabs. The entry goes and its page stays; see
     // SidebarModel::MoveEntryToSection for why that needs no undo. The tab it
     // leaves behind lands where the line was drawn, because Today's order is
-    // the tab strip's and this is a strip move like any other.
+    // the tab strip's and this is a strip move like any other. A pinned pair
+    // dragged by its grip comes down whole, by the model's pair rule.
+    if (leaves) {
+      model_->LeaveSplit(payload.entry_id, payload.tab_index);
+    }
     model_->MoveEntryToSection(payload.entry_id, SidebarSection::kToday,
                                anchor.today_position);
     return;
   }
+  if (payload.split_pair) {
+    model_->MoveSplit(payload.tab_index, anchor.before_tab);
+    return;
+  }
+  model_->LeaveSplit(EntryId(), payload.tab_index);
   MoveTabBeforeTab(payload.tab_index, anchor.before_tab);
 }
 
 std::optional<size_t> TabListView::SplitTargetAt(
     int y,
     const RowDragData& payload) const {
-  if (payload.is_folder()) {
+  // A whole split is already sharing the screen.
+  if (payload.is_folder() || payload.split_pair) {
     return std::nullopt;
   }
   for (size_t i = 0; i < rows_.size(); ++i) {
@@ -410,6 +436,32 @@ void TabListView::PerformSplitDrop(
     std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
   output_drag_op = ui::mojom::DragOperation::kMove;
   model_->SplitByDrop(target, payload.entry_id, payload.tab_index);
+}
+
+int TabListView::PairReorderPosition(EntryId id, int to) const {
+  // The pair's halves are the entry's row and the row joined to it. Only a
+  // half that is this section's own has a position here: a Today tab drawn
+  // beside a pinned entry is not lifted out of anything.
+  int above = 0;
+  for (size_t i = 0; i < rows_.size() && i < row_positions_.size(); ++i) {
+    if (rows_[i]->row().entry_id != id) {
+      continue;
+    }
+    for (size_t half : {i, i + 1, i - 1}) {
+      if (half >= rows_.size() || half >= row_positions_.size()) {
+        continue;
+      }
+      const SidebarRow& row = rows_[half]->row();
+      const bool in_pair =
+          half == i || (half == i + 1 && rows_[i]->row().split_joins_next) ||
+          (half + 1 == i && rows_[i]->row().split_joins_previous);
+      if (in_pair && row.section == section_ && row_positions_[half] < to) {
+        ++above;
+      }
+    }
+    break;
+  }
+  return to - above;
 }
 
 int TabListView::ReorderPosition(EntryId id, int to) const {

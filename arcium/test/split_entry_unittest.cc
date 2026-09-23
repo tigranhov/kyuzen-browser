@@ -369,5 +369,66 @@ TEST_F(SplitEntryTest, OnlyARowThatMayGoBesideThePageIsOfferedTheBand) {
   EXPECT_FALSE(model_->CanPutBesideActive(folder));
 }
 
+TEST_F(SplitEntryTest, AHalfLeavingAPinnedSplitEndsItAndUnlinksThePair) {
+  AddTab("https://a.test/");
+  AddTab("https://b.test/");
+  SplitFirstTwo();
+  model_->PinTab(0);
+  ASSERT_EQ(2u, Pinned().size());
+  const EntryId a = Pinned()[0]->id;
+  const EntryId b = Pinned()[1]->id;
+  ASSERT_TRUE(Linked(a, b));
+
+  model_->LeaveSplit(b, -1);
+  task_environment()->RunUntilIdle();
+
+  EXPECT_FALSE(Linked(a, b));
+  EXPECT_FALSE(controller_->ActiveIsSplit());
+  EXPECT_EQ(2u, Pinned().size());
+}
+
+TEST_F(SplitEntryTest, LeavingIsNothingForATabSharingNothing) {
+  AddTab("https://a.test/");
+  AddTab("https://b.test/");
+  AddTab("https://c.test/");
+  SplitFirstTwo();
+
+  model_->LeaveSplit(EntryId(), 2);
+  task_environment()->RunUntilIdle();
+
+  EXPECT_TRUE(controller_->ActiveIsSplit());
+}
+
+TEST_F(SplitEntryTest, MovingASplitKeepsItWholeAndInOrder) {
+  AddTab("https://a.test/");
+  AddTab("https://b.test/");
+  AddTab("https://c.test/");
+  AddTab("https://d.test/");
+  SplitFirstTwo();
+  tabs::TabInterface* a = strip()->GetTabAtIndex(0);
+  tabs::TabInterface* b = strip()->GetTabAtIndex(1);
+  tabs::TabInterface* c = strip()->GetTabAtIndex(2);
+  tabs::TabInterface* d = strip()->GetTabAtIndex(3);
+
+  // Before d, counted with the pair still in the strip.
+  model_->MoveSplit(0, 3);
+
+  EXPECT_EQ(0, strip()->GetIndexOfTab(c));
+  EXPECT_EQ(1, strip()->GetIndexOfTab(a));
+  EXPECT_EQ(2, strip()->GetIndexOfTab(b));
+  EXPECT_EQ(3, strip()->GetIndexOfTab(d));
+  ASSERT_TRUE(a->GetSplit().has_value());
+  EXPECT_EQ(a->GetSplit(), b->GetSplit());
+
+  // To the end, and back to the front.
+  model_->MoveSplit(strip()->GetIndexOfTab(b), -1);
+  EXPECT_EQ(2, strip()->GetIndexOfTab(a));
+  EXPECT_EQ(3, strip()->GetIndexOfTab(b));
+  model_->MoveSplit(strip()->GetIndexOfTab(a), 0);
+  EXPECT_EQ(0, strip()->GetIndexOfTab(a));
+  EXPECT_EQ(1, strip()->GetIndexOfTab(b));
+  EXPECT_EQ(a->GetSplit(), b->GetSplit());
+}
+
 }  // namespace
 }  // namespace arcium

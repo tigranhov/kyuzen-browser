@@ -7,6 +7,8 @@
 // ArciumModel's, which keeps a linked pair together through every move; this
 // is where the tab strip's splits are turned into links and back.
 
+#include <algorithm>
+#include <optional>
 #include <vector>
 
 #include "arcium/browser/model/tab_entry.h"
@@ -208,7 +210,8 @@ bool SidebarTabModel::CanSplitByDrop(const SidebarRow& target,
 }
 
 bool SidebarTabModel::CanPutBesideActive(const RowDragData& payload) const {
-  if (payload.is_folder()) {
+  // A folder holds no page, and a whole split is already sharing.
+  if (payload.is_folder() || payload.split_pair) {
     return false;
   }
   // A warm row's payload carries its tab's index and a cold one's carries
@@ -218,6 +221,68 @@ bool SidebarTabModel::CanPutBesideActive(const RowDragData& payload) const {
   row.tab_index = payload.tab_index;
   row.is_cold = payload.tab_index < 0;
   return CanSplitRow(row);
+}
+
+void SidebarTabModel::LeaveSplit(EntryId entry, int tab_index) {
+  const bool linked = entry.is_valid() && arcium_model_->GetEntry(entry) &&
+                      arcium_model_->GetEntry(entry)->split_partner.is_valid();
+  tabs::TabInterface* tab = entry.is_valid() ? LiveTabForEntry(entry)
+                            : tab_strip_model_->ContainsIndex(tab_index)
+                                ? tab_strip_model_->GetTabAtIndex(tab_index)
+                                : nullptr;
+  const bool sharing = tab && tab->GetSplit().has_value();
+  if (!linked && !sharing) {
+    return;
+  }
+  // The row menu's End split, which is what leaving is when there are only
+  // two halves.
+  SidebarRow row;
+  row.entry_id = entry;
+  row.tab_index = tab ? tab_strip_model_->GetIndexOfTab(tab) : tab_index;
+  EndSplit(row);
+}
+
+void SidebarTabModel::MoveSplit(int tab_index, int before_tab) {
+  if (!tab_strip_model_->ContainsIndex(tab_index)) {
+    return;
+  }
+  const std::optional<split_tabs::SplitTabId> split =
+      tab_strip_model_->GetTabAtIndex(tab_index)->GetSplit();
+  if (!split) {
+    return;
+  }
+  const split_tabs::SplitTabData* const data =
+      tab_strip_model_->GetSplitData(*split);
+  if (!data) {
+    return;
+  }
+  const std::vector<tabs::TabInterface*> halves = data->ListTabs();
+  const int first = tab_strip_model_->GetIndexOfTab(halves.front());
+  const int size = static_cast<int>(halves.size());
+  const int count = tab_strip_model_->count();
+  // Landing inside another split would pull it apart, and the strip treats
+  // that as a broken invariant rather than a request, so such a place is no
+  // place at all. Only the second half of a split has its first half before
+  // it; landing before a first half is between two splits, which is fine.
+  if (tab_strip_model_->ContainsIndex(before_tab) && before_tab > 0) {
+    const std::optional<split_tabs::SplitTabId> there =
+        tab_strip_model_->GetTabAtIndex(before_tab)->GetSplit();
+    if (there && there != split &&
+        tab_strip_model_->GetTabAtIndex(before_tab - 1)->GetSplit() == there) {
+      return;
+    }
+  }
+  // `before_tab` counts the strip with the pair still in it; the strip wants
+  // the index the pair's first tab ends up at once it has been lifted out.
+  int to = before_tab < 0       ? count - size
+           : before_tab > first ? before_tab - size
+                                : before_tab;
+  to = std::clamp(to, 0, count - size);
+  if (to == first) {
+    return;
+  }
+  tab_strip_model_->MoveSplitTo(*split, to, /*pinned=*/false,
+                                /*group_id=*/std::nullopt);
 }
 
 void SidebarTabModel::SplitByDrop(const SidebarRow& target,

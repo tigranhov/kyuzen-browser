@@ -349,9 +349,9 @@ void FolderHeaderView::PerformDrop(
     drop.Run(payload.folder_id, folder);
     return;
   }
-  base::RepeatingCallback<void(EntryId, const SidebarFolder&)> drop =
+  base::RepeatingCallback<void(const RowDragData&, const SidebarFolder&)> drop =
       delegate_.drop_entry;
-  drop.Run(payload.entry_id, folder);
+  drop.Run(payload, folder);
 }
 
 gfx::Size FolderHeaderView::CalculatePreferredSize(

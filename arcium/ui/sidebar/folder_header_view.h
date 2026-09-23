@@ -57,7 +57,8 @@ class FolderHeaderView : public views::Button,
                                  const gfx::Point& point)>
         show_context_menu;
     // A row dropped on this header: the entry it names goes into the folder.
-    base::RepeatingCallback<void(EntryId id, const SidebarFolder& folder)>
+    base::RepeatingCallback<void(const RowDragData& payload,
+                                 const SidebarFolder& folder)>
         drop_entry;
     // Whether a folder may hold `id` at all. A header cannot tell a favourite
     // from a pinned entry — the payload carries an id and nothing else — and

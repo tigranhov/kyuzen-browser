@@ -234,6 +234,16 @@ class SidebarModel {
   virtual void SplitByDrop(const SidebarRow& target,
                            EntryId dragged_entry,
                            int dragged_tab) = 0;
+  // The half a drag names, an entry by id or a Today tab by strip index,
+  // leaves the split it is in: the split ends, and a pinned pair stops being
+  // one entry. Nothing when it shares nothing. Called before a dragged half
+  // is dropped anywhere, so dropping one always ends its split, even right
+  // beside where it was.
+  virtual void LeaveSplit(EntryId entry, int tab_index) = 0;
+  // Moves the split the Today tab at `tab_index` is in, both halves and in
+  // their order, so it lands before the tab at `before_tab`, or at the end
+  // for -1. The split stays. Today's reorder for a pair dragged by its grip.
+  virtual void MoveSplit(int tab_index, int before_tab) = 0;
 
   // Puts `id` in `section` at `position` among that section's entries. What a
   // drop does, and one command rather than a kind change followed by a

@@ -34,6 +34,7 @@ namespace arcium {
 
 class FolderHeaderView;
 class RowContextMenu;
+class SplitGripView;
 class TabRowView;
 
 // A vertical list for one section: folder headers, each followed by its
@@ -74,6 +75,10 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // nothing when the pointer is not over the middle of one that may split.
   std::optional<size_t> split_target_for_testing() const {
     return split_target_;
+  }
+  // One grip per split drawn here as one row, in laid-out order.
+  const std::vector<raw_ptr<SplitGripView>>& grips_for_testing() const {
+    return grips_;
   }
   // The top of the insertion line in this list's coordinates, or -1 when no
   // line is drawn.
@@ -143,7 +148,7 @@ class TabListView : public views::View, public RowDragSession::Observer {
                         const SidebarFolder& folder,
                         const gfx::Point& point);
   // A row dropped on one of this list's folder headers.
-  void OnDropOnFolder(EntryId id, const SidebarFolder& folder);
+  void OnDropOnFolder(const RowDragData& payload, const SidebarFolder& folder);
   // Whether one of this list's folders could hold `id` at all. Folders hold
   // pinned entries only — Task 7's rule — so a favourite dropped on a header
   // has to be refused rather than accepted and silently discarded by
@@ -191,6 +196,10 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // The drop boundary `to` turned into the position ReorderEntry wants, which
   // differ by one whenever the entry is moving down inside its own section.
   int ReorderPosition(EntryId id, int to) const;
+  // The same for a whole split dragged by its grip: both halves of a pinned
+  // pair are lifted out before the pair goes back in, so every half above
+  // the boundary moves it up one.
+  int PairReorderPosition(EntryId id, int to) const;
   // Today only: turns the anchor into a tab-strip move.
   void MoveTabBeforeTab(int from_index, int before_tab);
   void SetDropIndex(std::optional<size_t> index);
@@ -222,11 +231,21 @@ class TabListView : public views::View, public RowDragSession::Observer {
   void UpdateVisibility();
 
   TabRowView* MakeRow();
+  SplitGripView* MakeGrip();
+  // Gives each split drawn as one row a grip, reusing the pool.
+  void SetGrips();
+  // Shows each grip while either half of its row, or the grip, is under the
+  // pointer.
+  void UpdateGrips();
   std::unique_ptr<FolderHeaderView> MakeHeader();
 
   raw_ptr<SidebarModel> model_;
   const SidebarSection section_;
   std::vector<raw_ptr<TabRowView>> rows_;
+  // Pooled like the rows. Parallel to `grip_rows_`, which holds the index in
+  // `rows_` of each grip's first half.
+  std::vector<raw_ptr<SplitGripView>> grips_;
+  std::vector<size_t> grip_rows_;
   // Parallel to `rows_`: each row's position among this section's rows, which
   // for an entry section is the position the model orders by. Kept because
   // `rows_` is in laid-out order and that order is not the model's. A row

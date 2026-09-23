@@ -304,7 +304,10 @@ bool FavoritesGridView::CanDrop(const ui::OSExchangeData& data) {
   // what keeps the gap indicator honest -- accepting would open a gap, follow
   // the pointer, and then quietly do nothing, which is an affordance that
   // lies about what a release will do.
-  return payload.has_value() && !payload->is_folder();
+  //
+  // A whole split is refused for the same reason: a favourite is one tile,
+  // and a pair cannot become one without being taken apart first.
+  return payload.has_value() && !payload->is_folder() && !payload->split_pair;
 }
 
 void FavoritesGridView::OnDragEntered(const ui::DropTargetEvent& event) {
@@ -352,6 +355,11 @@ void FavoritesGridView::PerformDrop(
     std::unique_ptr<ui::LayerTreeOwner> drag_image_layer_owner) {
   output_drag_op = ui::mojom::DragOperation::kMove;
   const int to = PositionForAnchor(anchor);
+  // A half dragged here leaves its split, as it does wherever it is dropped.
+  // Read before, because leaving rebuilds the tiles.
+  const std::optional<size_t> from =
+      payload.is_entry() ? IndexOfEntry(payload.entry_id) : std::nullopt;
+  model_->LeaveSplit(payload.entry_id, payload.tab_index);
   if (payload.is_entry()) {
     // Favourites have no folders, so a tile's index is the position the model
     // orders by; reordering inside the grid is the same command as arriving
@@ -363,7 +371,6 @@ void FavoritesGridView::PerformDrop(
     // than "one place up", but it is the same rule and the same function; a
     // tile arriving from Pinned is not in this count, which is the nullopt
     // case.
-    const std::optional<size_t> from = IndexOfEntry(payload.entry_id);
     model_->MoveEntryToSection(
         payload.entry_id, SidebarSection::kFavorites,
         LiftThenInsertIndex(

@@ -34,6 +34,7 @@ void RowDragData::Write(ui::OSExchangeData* data) const {
   pickle.WriteString(entry_id.value());
   pickle.WriteString(folder_id.value());
   pickle.WriteInt(tab_index);
+  pickle.WriteBool(split_pair);
   data->SetPickledData(Format(), pickle);
 }
 
@@ -48,7 +49,7 @@ std::optional<RowDragData> RowDragData::Read(const ui::OSExchangeData& data) {
   std::string folder;
   RowDragData payload;
   if (!it.ReadString(&entry) || !it.ReadString(&folder) ||
-      !it.ReadInt(&payload.tab_index)) {
+      !it.ReadInt(&payload.tab_index) || !it.ReadBool(&payload.split_pair)) {
     return std::nullopt;
   }
   // An empty string is a row that is not that kind of thing, which is
@@ -62,6 +63,10 @@ std::optional<RowDragData> RowDragData::Read(const ui::OSExchangeData& data) {
     return std::nullopt;
   }
   if (!payload.is_entry() && !payload.is_folder() && !payload.is_tab()) {
+    return std::nullopt;
+  }
+  // A folder is not a split.
+  if (payload.split_pair && payload.is_folder()) {
     return std::nullopt;
   }
   return payload;

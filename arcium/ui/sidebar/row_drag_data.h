@@ -34,6 +34,11 @@ struct RowDragData {
   // The dragged row's index in the tab strip. -1 for a cold entry and for a
   // folder, neither of which has a tab.
   int tab_index = -1;
+  // Set when what was dragged is a whole split, by the grip between its
+  // halves, rather than one half of it. The pair is named by one of its
+  // halves as above. A half dragged on its own leaves its split wherever it
+  // is dropped; a pair keeps it.
+  bool split_pair = false;
 
   // The custom clipboard format the payload rides in, registered once for the
   // process. Private to Arcium: nothing outside the sidebar writes it, so a

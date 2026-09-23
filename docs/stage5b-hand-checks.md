@@ -46,10 +46,34 @@ drag in plain Chromium, through `--arcium-no-sidebar`, lags the same way. The
 lag left is Chromium's own page resize, not Arcium's. Closed as upstream.
 
 Added after the pass at the owner's request (73314f4): dropping a sidebar row
-on the middle of another row splits the two. Not yet walked by hand:
+on the middle of another row splits the two. Rows 9-11 were walked by the
+owner on 2026-09-23 and all three passed:
 
 | # | Do this | Look for |
 |---|---|---|
 | 9 | Drag a Today row over the middle of another Today row, hold, then let go | While held there, that row's right half is tinted. Letting go splits the two, the dragged page on the right, drawn as one row |
 | 10 | Drag a row near the top or bottom edge of another row | The line shows, no tint, and letting go moves the row as before |
 | 11 | Drag a Today row over the middle of a pinned row that is not open | The pinned page opens on the left, the dragged page on the right |
+
+Found while walking them: dragging the row whose page is already on screen
+still offered the strip beside the page, which could only put a page beside
+itself. The strip now asks, as the drag starts, whether the dragged row may go
+beside the page, and does not appear when it may not (ea29ff9).
+
+Also raised: a Today half could be dragged away to end its split, but a pinned
+half could not, and a half dropped just below its own row kept its split,
+because that drop moved nothing. At the owner's choice a split row now has a
+handle between its halves. Dragging the handle moves the split whole and
+keeps it; dragging either half pulls that half out and ends the split
+wherever it lands, in Today, Pinned, a folder or Favourites. Not yet walked
+by hand:
+
+| # | Do this | Look for |
+|---|---|---|
+| 12 | Point at a split row, then move away | A small six-dot handle appears in the gap between the halves, and goes when the pointer leaves the row |
+| 13 | In Today, drag a split by its handle a few rows down and let go | Both pages move together, still one row side by side, landing where the line was |
+| 14 | In Pinned, drag a split by its handle a few rows down and let go | The same: one row, both pages, still split, in the gap the line showed |
+| 15 | In Today, drag one half of a split and let go just below its own row | The split ends: two separate rows, and one page on screen |
+| 16 | In Pinned, drag one half of a split and let go just below its own row | The split ends and both stay pinned, as two rows |
+| 17 | Drag a split by its handle over the middle of another row, then over Favourites | No tint on the row and no place to drop in Favourites: a split cannot join a third page or become one favourite |
+| 18 | Drag a Today split by its handle into Pinned | It becomes one pinned row, still split |

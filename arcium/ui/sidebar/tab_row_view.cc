@@ -370,12 +370,18 @@ void TabRowView::OnMouseEntered(const ui::MouseEvent& event) {
   hovered_ = true;
   UpdateTrailingButtons();
   OnThemeChanged();
+  if (delegate_.hover_changed) {
+    delegate_.hover_changed.Run();
+  }
 }
 
 void TabRowView::OnMouseExited(const ui::MouseEvent& event) {
   hovered_ = false;
   UpdateTrailingButtons();
   OnThemeChanged();
+  if (delegate_.hover_changed) {
+    delegate_.hover_changed.Run();
+  }
 }
 
 bool TabRowView::OnKeyPressed(const ui::KeyEvent& event) {

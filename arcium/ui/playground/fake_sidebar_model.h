@@ -142,6 +142,8 @@ class FakeSidebarModel : public SidebarModel {
   void SplitByDrop(const SidebarRow& target,
                    EntryId dragged_entry,
                    int dragged_tab) override;
+  void LeaveSplit(EntryId entry, int tab_index) override;
+  void MoveSplit(int tab_index, int before_tab) override;
   void MoveEntryToSection(EntryId id,
                           SidebarSection section,
                           int position) override;

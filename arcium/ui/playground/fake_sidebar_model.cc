@@ -299,6 +299,43 @@ void FakeSidebarModel::SplitByDrop(const SidebarRow& target,
   SplitRows(*onto, *dragged);
 }
 
+void FakeSidebarModel::LeaveSplit(EntryId entry, int tab_index) {
+  const std::optional<size_t> index = IndexOfDragged(entry, tab_index);
+  if (!index || !rows_[*index].split.has_value()) {
+    return;
+  }
+  const split_tabs::SplitTabId split = *rows_[*index].split;
+  for (SidebarRow& r : rows_) {
+    if (r.split == split) {
+      r.split.reset();
+    }
+  }
+  Notify();
+}
+
+void FakeSidebarModel::MoveSplit(int tab_index, int before_tab) {
+  SidebarRow* named = FindByTabIndex(tab_index);
+  if (!named || !named->split.has_value()) {
+    return;
+  }
+  const split_tabs::SplitTabId split = *named->split;
+  // Lifted out in their order, then put back together before the row that
+  // holds `before_tab`, or at the end.
+  std::vector<SidebarRow> pair;
+  std::vector<SidebarRow> rest;
+  for (SidebarRow& r : rows_) {
+    (r.split == split ? pair : rest).push_back(std::move(r));
+  }
+  auto at = std::find_if(rest.begin(), rest.end(), [&](const SidebarRow& r) {
+    return !r.is_cold && r.tab_index == before_tab;
+  });
+  rest.insert(at, std::make_move_iterator(pair.begin()),
+              std::make_move_iterator(pair.end()));
+  rows_ = std::move(rest);
+  Reindex();
+  Notify();
+}
+
 void FakeSidebarModel::SplitRows(size_t first, size_t second) {
   if (first >= rows_.size() || second >= rows_.size() || first == second) {
     return;
@@ -496,6 +533,7 @@ void FakeSidebarModel::MoveEntryToSection(EntryId id,
   }
   // Copied out before the erase below invalidates it.
   SidebarRow moved = *found;
+  const size_t moved_at = static_cast<size_t>(found - rows_.data());
   std::erase_if(rows_, [id](const SidebarRow& r) { return r.entry_id == id; });
 
   if (section == SidebarSection::kToday) {
@@ -517,13 +555,37 @@ void FakeSidebarModel::MoveEntryToSection(EntryId id,
     return;
   }
 
-  moved.section = section;
-  // A favourite is a tile in the grid; it has nowhere to be indented to, so
-  // it leaves any folder behind. ArciumModel::SetEntryKind does the same.
-  if (section == SidebarSection::kFavorites) {
-    moved.folder_id.reset();
+  // The real model moves a linked pinned pair as one when either is
+  // reordered. The fake has no links, so two entries sharing a split inside
+  // the section being reordered stand in for one, in their order.
+  const std::optional<split_tabs::SplitTabId> split =
+      moved.section == section ? moved.split : std::nullopt;
+  std::vector<SidebarRow> together = {std::move(moved)};
+  if (split.has_value()) {
+    for (auto it = rows_.begin(); it != rows_.end(); ++it) {
+      if (it->split == split && it->section == section &&
+          it->entry_id.is_valid()) {
+        // Rows before the moved one kept their index through the erase.
+        const bool before = static_cast<size_t>(it - rows_.begin()) < moved_at;
+        SidebarRow partner = std::move(*it);
+        rows_.erase(it);
+        together.insert(before ? together.begin() : together.end(),
+                        std::move(partner));
+        break;
+      }
+    }
   }
-  rows_.insert(SlotIn(section, position), std::move(moved));
+  for (SidebarRow& row : together) {
+    row.section = section;
+    // A favourite is a tile in the grid; it has nowhere to be indented to, so
+    // it leaves any folder behind. ArciumModel::SetEntryKind does the same.
+    if (section == SidebarSection::kFavorites) {
+      row.folder_id.reset();
+    }
+  }
+  rows_.insert(SlotIn(section, position),
+               std::make_move_iterator(together.begin()),
+               std::make_move_iterator(together.end()));
   Reindex();
   Notify();
 }

@@ -18,6 +18,7 @@
 #include "arcium/ui/sidebar/row_context_menu.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
+#include "arcium/ui/sidebar/split_grip_view.h"
 #include "arcium/ui/sidebar/tab_row_view.h"
 #include "arcium/ui/sidebar/vector_icons.h"
 #include "base/functional/bind.h"
@@ -71,6 +72,12 @@ void TabListView::Layout(PassKey) {
         slot.right() - (slot.x() + left_width + metrics::kSplitHalfGap),
         slot.height());
   }
+  // Each grip in the gap its row leaves between the halves.
+  for (size_t g = 0; g < grips_.size() && g < grip_rows_.size(); ++g) {
+    const TabRowView* first = rows_[grip_rows_[g]];
+    grips_[g]->SetBounds(first->bounds().right(), first->y(),
+                         metrics::kSplitHalfGap, first->height());
+  }
 }
 
 TabListView::~TabListView() = default;
@@ -89,7 +96,55 @@ TabRowView* TabListView::MakeRow() {
       base::BindRepeating(&TabListView::OnShowRowMenu, base::Unretained(this));
   delegate.drag_started = base::BindRepeating(&TabListView::OnRowDragStarted,
                                               base::Unretained(this));
+  delegate.hover_changed =
+      base::BindRepeating(&TabListView::UpdateGrips, base::Unretained(this));
   return AddChildView(std::make_unique<TabRowView>(std::move(delegate)));
+}
+
+SplitGripView* TabListView::MakeGrip() {
+  SplitGripView::Delegate delegate;
+  delegate.drag_started = base::BindRepeating(&TabListView::OnRowDragStarted,
+                                              base::Unretained(this));
+  delegate.hover_changed =
+      base::BindRepeating(&TabListView::UpdateGrips, base::Unretained(this));
+  SplitGripView* grip =
+      AddChildView(std::make_unique<SplitGripView>(std::move(delegate)));
+  // Placed by Layout in the gap between a split row's halves.
+  grip->SetProperty(views::kViewIgnoredByLayoutKey, true);
+  return grip;
+}
+
+void TabListView::SetGrips() {
+  grip_rows_.clear();
+  for (size_t i = 0; i + 1 < rows_.size(); ++i) {
+    if (rows_[i]->row().split_joins_next &&
+        rows_[i + 1]->row().split_joins_previous) {
+      grip_rows_.push_back(i);
+    }
+  }
+  while (grips_.size() < grip_rows_.size()) {
+    grips_.push_back(MakeGrip());
+  }
+  while (grips_.size() > grip_rows_.size()) {
+    SplitGripView* grip = grips_.back();
+    grips_.pop_back();
+    RemoveChildViewT(grip);
+  }
+  for (size_t g = 0; g < grips_.size(); ++g) {
+    const size_t first = grip_rows_[g];
+    grips_[g]->SetPair(rows_[first]->row(), rows_[first + 1]->row());
+    // Above the rows it sits between, so it is what the pointer finds there.
+    ReorderChildView(grips_[g], children().size());
+  }
+  UpdateGrips();
+}
+
+void TabListView::UpdateGrips() {
+  for (size_t g = 0; g < grips_.size() && g < grip_rows_.size(); ++g) {
+    const size_t first = grip_rows_[g];
+    grips_[g]->SetShown(grips_[g]->hovered() || rows_[first]->hovered() ||
+                        rows_[first + 1]->hovered());
+  }
 }
 
 std::unique_ptr<FolderHeaderView> TabListView::MakeHeader() {
@@ -256,6 +311,7 @@ void TabListView::SetRows(const std::vector<SidebarRow>& all_rows) {
         gfx::Insets::TLBR(0, item.depth * metrics::kFolderIndent, 0, 0));
     ReorderChildView(view, child_index++);
   }
+  SetGrips();
 
   UpdateVisibility();
   InvalidateLayout();
@@ -343,8 +399,14 @@ void TabListView::OnShowFolderMenu(FolderHeaderView* source,
                           source->GetWeakPtr()));
 }
 
-void TabListView::OnDropOnFolder(EntryId id, const SidebarFolder& folder) {
-  model_->MoveEntryToFolder(id, folder.id);
+void TabListView::OnDropOnFolder(const RowDragData& payload,
+                                 const SidebarFolder& folder) {
+  // A half filed on its own leaves its split; a pair dragged by its grip
+  // goes in whole, which the model's pair rule does for a pinned pair.
+  if (!payload.split_pair) {
+    model_->LeaveSplit(payload.entry_id, payload.tab_index);
+  }
+  model_->MoveEntryToFolder(payload.entry_id, folder.id);
 }
 
 bool TabListView::CanFolderAcceptEntry(EntryId id) const {

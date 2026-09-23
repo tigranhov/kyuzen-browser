@@ -123,6 +123,8 @@ class SidebarTabModel : public SidebarModel,
   // the band at the page's edge offers. The row menu's rule, asked of a
   // drag's payload instead of a row.
   bool CanPutBesideActive(const RowDragData& payload) const;
+  void LeaveSplit(EntryId entry, int tab_index) override;
+  void MoveSplit(int tab_index, int before_tab) override;
   // Puts the entry's page on screen, opening it when the entry is cold, and
   // nothing more: unlike ActivateEntry, a pinned split's other half is left
   // alone. What SplitController uses to open the half it is about to split,

@@ -12,8 +12,9 @@ inline constexpr int kSidebarWidth = 250;
 inline constexpr int kSidebarPadding = 8;
 inline constexpr int kRowHeight = 32;
 inline constexpr int kRowCornerRadius = 8;
-// Between the two halves of a split drawn as one row.
-inline constexpr int kSplitHalfGap = 2;
+// Between the two halves of a split drawn as one row: room for the grip that
+// moves the pair, which is drawn there while the row is under the pointer.
+inline constexpr int kSplitHalfGap = 12;
 inline constexpr int kRowHorizontalPadding = 8;
 inline constexpr int kRowIconTextGap = 9;
 inline constexpr int kFaviconSize = 16;
