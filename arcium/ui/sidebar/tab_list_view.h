@@ -157,7 +157,7 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // A folder header dropped on one of this list's folder headers.
   void OnDropFolderOnFolder(FolderId id, const SidebarFolder& folder);
   // One of this list's rows started a drag.
-  void OnRowDragStarted();
+  void OnRowDragStarted(const RowDragData& payload);
 
   // Where in the laid-out rows a drop at `y` would insert: 0..rows_.size().
   size_t DropRowIndex(int y) const;

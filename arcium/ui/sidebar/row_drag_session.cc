@@ -10,7 +10,8 @@ RowDragSession::RowDragSession() = default;
 
 RowDragSession::~RowDragSession() = default;
 
-void RowDragSession::Begin(views::Widget* widget) {
+void RowDragSession::Begin(views::Widget* widget, const RowDragData& payload) {
+  payload_ = payload;
   // A second Begin without an End means the first drag ended somewhere this
   // never heard about; re-pointing the observation is the recovery.
   observation_.Reset();
@@ -22,6 +23,7 @@ void RowDragSession::Begin(views::Widget* widget) {
 
 void RowDragSession::End() {
   observation_.Reset();
+  payload_.reset();
   SetInFlight(false);
 }
 

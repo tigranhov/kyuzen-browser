@@ -207,6 +207,19 @@ bool SidebarTabModel::CanSplitByDrop(const SidebarRow& target,
   return true;
 }
 
+bool SidebarTabModel::CanPutBesideActive(const RowDragData& payload) const {
+  if (payload.is_folder()) {
+    return false;
+  }
+  // A warm row's payload carries its tab's index and a cold one's carries
+  // none, which is all CanSplitRow reads of a row.
+  SidebarRow row;
+  row.entry_id = payload.entry_id;
+  row.tab_index = payload.tab_index;
+  row.is_cold = payload.tab_index < 0;
+  return CanSplitRow(row);
+}
+
 void SidebarTabModel::SplitByDrop(const SidebarRow& target,
                                   EntryId dragged_entry,
                                   int dragged_tab) {

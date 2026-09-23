@@ -16,6 +16,7 @@
 #include "arcium/browser/tab_binding.h"
 #include "arcium/ui/browser/cold_favicon_cache.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
@@ -118,6 +119,10 @@ class SidebarTabModel : public SidebarModel,
   void SplitByDrop(const SidebarRow& target,
                    EntryId dragged_entry,
                    int dragged_tab) override;
+  // Whether the dragged row may go beside the page on screen, which is what
+  // the band at the page's edge offers. The row menu's rule, asked of a
+  // drag's payload instead of a row.
+  bool CanPutBesideActive(const RowDragData& payload) const;
   // Puts the entry's page on screen, opening it when the entry is cold, and
   // nothing more: unlike ActivateEntry, a pinned split's other half is left
   // alone. What SplitController uses to open the half it is about to split,

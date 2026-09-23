@@ -78,7 +78,7 @@ class FolderHeaderView : public views::Button,
         drop_folder;
     // Once per drag, at the one moment a source knows one is starting -- the
     // signal an empty section needs to reserve a band to be dropped on.
-    base::RepeatingClosure drag_started;
+    base::RepeatingCallback<void(const RowDragData& payload)> drag_started;
   };
 
   explicit FolderHeaderView(Delegate delegate);

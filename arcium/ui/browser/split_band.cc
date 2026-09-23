@@ -15,9 +15,11 @@ namespace arcium {
 
 SplitBand::SplitBand(BrowserView* browser_view,
                      RowDragSession* session,
+                     CanDropCallback can_drop,
                      SplitDropView::DropCallback on_drop)
     : browser_view_(browser_view),
       session_(session),
+      can_drop_(std::move(can_drop)),
       on_drop_(std::move(on_drop)) {
   observation_.Observe(session_);
 }
@@ -41,7 +43,10 @@ void SplitBand::Layout(const gfx::Rect& page) {
 }
 
 void SplitBand::OnRowDragInFlightChanged() {
-  if (session_->in_flight()) {
+  // Asked once, as the drag starts: the page gives up its strip for the
+  // whole drag or not at all, so it never jumps while the pointer moves.
+  if (session_->in_flight() && session_->payload() &&
+      can_drop_.Run(*session_->payload())) {
     Show();
   } else {
     TakeAway();

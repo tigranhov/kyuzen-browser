@@ -5,6 +5,9 @@
 #ifndef ARCIUM_UI_SIDEBAR_ROW_DRAG_SESSION_H_
 #define ARCIUM_UI_SIDEBAR_ROW_DRAG_SESSION_H_
 
+#include <optional>
+
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "base/observer_list.h"
 #include "base/observer_list_types.h"
 #include "base/scoped_observation.h"
@@ -47,11 +50,15 @@ class RowDragSession : public views::WidgetObserver {
   ~RowDragSession() override;
 
   bool in_flight() const { return in_flight_; }
+  // What the running drag carries, so a target outside the sidebar can decide
+  // before the pointer reaches it whether to offer itself at all. Empty when
+  // no drag is running.
+  const std::optional<RowDragData>& payload() const { return payload_; }
 
   // Called by a drag source as it writes its payload. `widget` is the source's
   // own widget and is what ends the session; a null one leaves End() to the
   // caller, which is how a unit test with no nested loop to run drives it.
-  void Begin(views::Widget* widget);
+  void Begin(views::Widget* widget, const RowDragData& payload);
   void End();
 
   void AddObserver(Observer* observer);
@@ -65,6 +72,7 @@ class RowDragSession : public views::WidgetObserver {
   void SetInFlight(bool in_flight);
 
   bool in_flight_ = false;
+  std::optional<RowDragData> payload_;
   base::ScopedObservation<views::Widget, views::WidgetObserver> observation_{
       this};
   base::ObserverList<Observer> observers_;

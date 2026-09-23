@@ -191,7 +191,7 @@ void FavoritesGridView::WriteDragDataForView(views::View* sender,
   // Once per drag, at the one moment a source knows a drag is starting: the
   // empty sections need a band to be droppable at all.
   if (drag_session_.IsObserving()) {
-    drag_session_.GetSource()->Begin(GetWidget());
+    drag_session_.GetSource()->Begin(GetWidget(), payload);
   }
 }
 

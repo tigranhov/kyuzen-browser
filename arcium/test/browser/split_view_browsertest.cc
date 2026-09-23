@@ -19,6 +19,7 @@
 #include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/browser/split_band.h"
 #include "arcium/ui/browser/split_controller.h"
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/row_drag_session.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
@@ -65,6 +66,8 @@ void OpenTab(Browser* browser, const GURL& url) {
 // sits in a strip the page gives up for the length of the drag, which is how
 // Chromium's own target for a dropped link works too.
 IN_PROC_BROWSER_TEST_F(SplitViewTest, DraggingARowMakesRoomBesideThePage) {
+  OpenTab(browser(), PageUrl("a.test", ""));
+  OpenTab(browser(), PageUrl("b.test", ""));
   BrowserView* const window = BrowserView::GetBrowserViewForBrowser(browser());
   BrowserSidebarController* const sidebar = window->arcium_sidebar();
   views::View* const page = window->multi_contents_view();
@@ -73,8 +76,11 @@ IN_PROC_BROWSER_TEST_F(SplitViewTest, DraggingARowMakesRoomBesideThePage) {
   ASSERT_GT(full_width, SplitBand::kWidth);
   ASSERT_FALSE(sidebar->split_band()->view_for_testing());
 
+  // The page before the one on screen, which may go beside it.
+  RowDragData other;
+  other.tab_index = browser()->tab_strip_model()->active_index() - 1;
   RowDragSession* const session = sidebar->view()->drag_session();
-  session->Begin(nullptr);
+  session->Begin(nullptr, other);
   views::test::RunScheduledLayout(window->GetWidget());
 
   const views::View* const band = sidebar->split_band()->view_for_testing();
@@ -90,6 +96,29 @@ IN_PROC_BROWSER_TEST_F(SplitViewTest, DraggingARowMakesRoomBesideThePage) {
 
   EXPECT_FALSE(sidebar->split_band()->view_for_testing());
   EXPECT_EQ(full_width, page->width());
+}
+
+// Dragging the page already on screen offers nothing to drop it on: it
+// cannot go beside itself, and a band that lights up and then does nothing
+// says otherwise.
+IN_PROC_BROWSER_TEST_F(SplitViewTest, ThePageOnScreenGetsNoBandBesideItself) {
+  OpenTab(browser(), PageUrl("a.test", ""));
+  OpenTab(browser(), PageUrl("b.test", ""));
+  BrowserView* const window = BrowserView::GetBrowserViewForBrowser(browser());
+  BrowserSidebarController* const sidebar = window->arcium_sidebar();
+  views::View* const page = window->multi_contents_view();
+  views::test::RunScheduledLayout(window->GetWidget());
+  const int full_width = page->width();
+
+  RowDragData on_screen;
+  on_screen.tab_index = browser()->tab_strip_model()->active_index();
+  RowDragSession* const session = sidebar->view()->drag_session();
+  session->Begin(nullptr, on_screen);
+  views::test::RunScheduledLayout(window->GetWidget());
+
+  EXPECT_FALSE(sidebar->split_band()->view_for_testing());
+  EXPECT_EQ(full_width, page->width());
+  session->End();
 }
 
 IN_PROC_BROWSER_TEST_F(SplitViewTest, MovingOneHalfToAnotherSpaceEndsTheSplit) {

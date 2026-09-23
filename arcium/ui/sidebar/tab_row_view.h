@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
@@ -65,7 +66,7 @@ class TabRowView : public views::Button,
     // This row is about to be dragged. Views has no ambient "a drag is
     // running" signal and the sidebar's empty sections need one, so the
     // source says so; see RowDragSession.
-    base::RepeatingClosure drag_started;
+    base::RepeatingCallback<void(const RowDragData& payload)> drag_started;
   };
 
   // Ids for the two hover buttons, so a test can ask which one has the slot.

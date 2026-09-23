@@ -17,6 +17,7 @@
 #include "arcium/test/space_test_util.h"
 #include "arcium/ui/browser/sidebar_tab_model.h"
 #include "arcium/ui/browser/split_controller.h"
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -344,6 +345,28 @@ TEST_F(SplitEntryTest, ARowSharingTheScreenIsNeitherTargetNorDropped) {
   EXPECT_FALSE(model_->CanSplitByDrop(RowForTab(*model_, 0), EntryId(), 2));
   EXPECT_FALSE(model_->CanSplitByDrop(RowForTab(*model_, 2), EntryId(), 1));
   EXPECT_FALSE(model_->CanSplitByDrop(RowForTab(*model_, 2), EntryId(), 2));
+}
+
+// The band at the page's edge asks the same question of a drag's payload.
+TEST_F(SplitEntryTest, OnlyARowThatMayGoBesideThePageIsOfferedTheBand) {
+  AddTab("https://a.test/");
+  AddTab("https://b.test/");
+  AddTab("https://c.test/");
+  strip()->ActivateTabAt(0);
+  RowDragData payload;
+
+  payload.tab_index = 0;
+  EXPECT_FALSE(model_->CanPutBesideActive(payload)) << "the page on screen";
+  payload.tab_index = 1;
+  EXPECT_TRUE(model_->CanPutBesideActive(payload));
+
+  SplitFirstTwo();
+  payload.tab_index = 2;
+  EXPECT_FALSE(model_->CanPutBesideActive(payload)) << "the screen is shared";
+
+  RowDragData folder;
+  folder.folder_id = FolderId::Generate();
+  EXPECT_FALSE(model_->CanPutBesideActive(folder));
 }
 
 }  // namespace

@@ -154,6 +154,8 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   // beside the page is built when that starts and freed when it ends.
   split_band_ = std::make_unique<SplitBand>(
       browser_view_, view_->drag_session(),
+      base::BindRepeating(&SidebarTabModel::CanPutBesideActive,
+                          base::Unretained(model_.get())),
       base::BindRepeating(&BrowserSidebarController::OnSplitDrop,
                           weak_factory_.GetWeakPtr()));
   UpdateNavButtons();

@@ -339,7 +339,7 @@ void TabRowView::WriteDragDataForView(views::View* sender,
   SetRowDragImage(row_, sender, press_pt, data);
   // Once per drag, at the one moment a source knows one is starting.
   if (delegate_.drag_started) {
-    delegate_.drag_started.Run();
+    delegate_.drag_started.Run(payload);
   }
 }
 

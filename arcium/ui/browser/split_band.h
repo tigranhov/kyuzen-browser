@@ -6,7 +6,9 @@
 #define ARCIUM_UI_BROWSER_SPLIT_BAND_H_
 
 #include "arcium/ui/browser/split_drop_view.h"
+#include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/row_drag_session.h"
+#include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/scoped_observation.h"
 
@@ -35,8 +37,15 @@ class SplitBand : public RowDragSession::Observer {
   // How much of the page's width the band takes while it is up.
   static constexpr int kWidth = 80;
 
+  // Whether the dragged row may go beside the page on screen. The band is
+  // not offered for one that may not: the page on screen itself, a half of
+  // the split already up, a folder.
+  using CanDropCallback =
+      base::RepeatingCallback<bool(const RowDragData& payload)>;
+
   SplitBand(BrowserView* browser_view,
             RowDragSession* session,
+            CanDropCallback can_drop,
             SplitDropView::DropCallback on_drop);
   SplitBand(const SplitBand&) = delete;
   SplitBand& operator=(const SplitBand&) = delete;
@@ -61,6 +70,7 @@ class SplitBand : public RowDragSession::Observer {
 
   raw_ptr<BrowserView> browser_view_;
   raw_ptr<RowDragSession> session_;
+  CanDropCallback can_drop_;
   SplitDropView::DropCallback on_drop_;
   // A child of the window, owned by it, and alive only during a drag.
   raw_ptr<SplitDropView> view_ = nullptr;

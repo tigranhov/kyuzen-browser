@@ -69,9 +69,9 @@ bool TabListView::ReservesDropBand() const {
          headers_.empty() && !new_tab_;
 }
 
-void TabListView::OnRowDragStarted() {
+void TabListView::OnRowDragStarted(const RowDragData& payload) {
   if (drag_session_.IsObserving()) {
-    drag_session_.GetSource()->Begin(GetWidget());
+    drag_session_.GetSource()->Begin(GetWidget(), payload);
   }
 }
 
