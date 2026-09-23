@@ -57,9 +57,12 @@ Put such changes in one patch, or far enough apart to clear the three lines of c
    stage's requirements in the spec. Execute plans task by task.
 3. Test-driven: unit tests in `arcium/test/` for models and services, browser tests for tab-to-space
    mapping, partition isolation and persistence. Write the failing test first.
-   The whole browser suite takes over the screen and the pointer for several minutes, so it is
-   skipped by default: run the few tests a change touches, and before running the full suite ask
-   whether the machine is free. Say so in the report when it was skipped, and which tests did run.
+   **Never run a full suite without the owner's explicit approval** — neither the whole
+   `arcium_unittests` nor the whole `arcium_browsertests`, however quiet the machine looks. The
+   unit suite loads every core for minutes on a shared machine, and the browser suite also takes
+   over the screen and the pointer. Run only the tests a change touches, by `--gtest_filter`, and
+   ask before anything wider. Say so in the report when a full suite was skipped, and which tests
+   did run.
 4. Iterate on Views UI in the standalone Views playground first, then wire into the browser.
 5. Verify before claiming done: build passes, tests pass, the stage's acceptance list executed by
    hand, perf result recorded. Report failures with output, not summaries.
