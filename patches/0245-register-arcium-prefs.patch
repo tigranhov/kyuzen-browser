@@ -1,37 +1,43 @@
-Seam: RegisterLocalState in chrome/browser/prefs/browser_prefs.cc, among the
-      calls that ask each subsystem to register the settings it owns, and the
-      dep that lets that file see them.
+Seam: RegisterLocalState and RegisterProfilePrefs in
+      chrome/browser/prefs/browser_prefs.cc, among the calls that ask each
+      subsystem to register the settings it owns, and the deps that let that
+      file see them.
 Why: how updates are allowed to arrive is one setting for the installation
      rather than one per profile -- there is one application on disk and
      every profile runs from it -- and local state is where Chromium keeps
-     settings of that kind. No seam existed here yet, because this is the
-     first setting Arcium owns that is not part of its own model file.
-Delegates to: arcium::RegisterUpdatePrefs
+     settings of that kind. A profile's startup behaviour is its own setting,
+     and Arcium's default differs from Chromium's: a Today tab lives only in
+     the session, so a profile that opens a new tab page at launch loses all
+     of them at every quit. The profile call sits last so every setting it
+     changes the default of is already registered.
+Delegates to: arcium::RegisterUpdatePrefs, arcium::SetProfileDefaults
 diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
-index cc6f81920f..4d182f1b58 100644
+index cc6f81920f..72b3b5a66b 100644
 --- a/chrome/browser/prefs/BUILD.gn
 +++ b/chrome/browser/prefs/BUILD.gn
-@@ -58,6 +58,7 @@ source_set("impl") {
+@@ -58,6 +58,8 @@ source_set("impl") {
    ]
  
    deps = [
++    "//arcium/browser:profile_defaults",
 +    "//arcium/browser/update",
      ":prefs",
      ":util",
      "//chrome/browser:browser_process",
 diff --git a/chrome/browser/prefs/browser_prefs.cc b/chrome/browser/prefs/browser_prefs.cc
-index c2fba47e0d..d7dc3c1e15 100644
+index c2fba47e0d..2880b7b366 100644
 --- a/chrome/browser/prefs/browser_prefs.cc
 +++ b/chrome/browser/prefs/browser_prefs.cc
-@@ -3,6 +3,7 @@
+@@ -3,6 +3,8 @@
  // found in the LICENSE file.
  
  #include "chrome/browser/prefs/browser_prefs.h"
++#include "arcium/browser/profile_defaults.h"
 +#include "arcium/browser/update/update_preference.h"
  
  #include <array>
  #include <optional>
-@@ -1418,6 +1419,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
+@@ -1418,6 +1420,7 @@ void RegisterLocalState(PrefRegistrySimple* registry) {
    accessibility::AccessibilityPrefsController::RegisterLocalStatePrefs(
        registry);
  #endif
@@ -39,3 +45,12 @@ index c2fba47e0d..d7dc3c1e15 100644
    autofill::prefs::RegisterLocalStatePrefs(registry);
    breadcrumbs::RegisterPrefs(registry);
    browser_shutdown::RegisterPrefs(registry);
+@@ -2263,6 +2266,8 @@ void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry,
+ #endif  // BUILDFLAG(IS_ANDROID)
+ 
+   registry->RegisterBooleanPref(prefs::kStaticStorageQuotaEnabled, false);
++
++  arcium::SetProfileDefaults(registry);
+ }
+ 
+ void RegisterUserProfilePrefs(user_prefs::PrefRegistrySyncable* registry) {

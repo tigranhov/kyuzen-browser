@@ -23,6 +23,7 @@ test("arcium_unittests") {
     "pill_label_unittest.cc",
     "product_version_unittest.cc",
     "profile_data_unittest.cc",
+    "profile_defaults_unittest.cc",
     "profile_menu_unittest.cc",
     "profile_partition_unittest.cc",
     "profile_reopen_unittest.cc",
@@ -71,6 +72,7 @@ test("arcium_unittests") {
   }
   deps = [
     "//arcium/browser",
+    "//arcium/browser:profile_defaults",
     "//arcium/browser/model",
     "//arcium/browser/update",
     "//arcium/browser/update:about_page",
@@ -86,6 +88,7 @@ test("arcium_unittests") {
     "//components/os_crypt/async/browser:test_support",
     "//components/segmentation_platform/public",
     "//components/sessions",
+    "//components/sync_preferences:test_support",
     "//components/version_info",
     "//content/test:test_support",
     "//testing/gmock",
@@ -120,6 +123,7 @@ test("arcium_browsertests") {
     "browser/sidebar_ui_browsertest_base.cc",
     "browser/sidebar_ui_browsertest_base.h",
     "browser/split_view_browsertest.cc",
+    "browser/startup_restore_browsertest.cc",
     "browser/update_browsertest.cc",
     "browser/window_drag_browsertest.cc",
     "fake_update_status.h",

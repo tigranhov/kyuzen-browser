@@ -54,3 +54,19 @@ source_set("browser") {
     "//components/favicon/content",
   ]
 }
+
+# Arcium's defaults for a profile's own settings. Kept apart from :browser
+# because Chromium's settings registration calls it (patch 0245), and that
+# target sits beneath everything :browser depends on.
+source_set("profile_defaults") {
+  sources = [
+    "profile_defaults.cc",
+    "profile_defaults.h",
+  ]
+  deps = [
+    "//base",
+    "//chrome/browser/prefs:util",
+    "//chrome/common:constants",
+    "//components/pref_registry",
+  ]
+}
