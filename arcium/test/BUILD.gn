@@ -67,6 +67,7 @@ test("arcium_unittests") {
     "update_preference_unittest.cc",
     "update_settings_unittest.cc",
     "url_pill_unittest.cc",
+    "welcome_view_unittest.cc",
     "zen_reader_unittest.cc",
   ]
 
@@ -94,7 +95,9 @@ test("arcium_unittests") {
     "//arcium/common",
     "//arcium/ui/browser",
     "//arcium/ui/playground:fake_model",
+    "//arcium/ui/playground:fake_welcome",
     "//arcium/ui/sidebar",
+    "//arcium/ui/welcome",
     "//base/test:test_support",
     "//chrome/browser/ui",
     "//chrome/test:test_support",

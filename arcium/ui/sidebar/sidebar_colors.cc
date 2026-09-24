@@ -51,6 +51,34 @@ void AddArciumColorMixer(ui::ColorProvider* provider,
   mixer[kColorArciumSpaceAccent] = {kAccent};
   mixer[kColorArciumSpaceChipActiveBackground] = {ui::SetAlpha(kAccent, 0x38)};
 
+  // The welcome card, from the approved mockups: a page a shade darker (or
+  // lighter) than the card, so the card reads as the one thing on it, and a
+  // violet accent that sits beside the sidebar's own without matching it.
+  const SkColor welcome_accent =
+      dark ? SkColorSetRGB(0x7C, 0x6D, 0xF6) : SkColorSetRGB(0x5B, 0x4C, 0xEB);
+  mixer[kColorArciumWelcomeBackground] = {
+      dark ? SkColorSetRGB(0x15, 0x15, 0x1B) : SkColorSetRGB(0xF4, 0xF4, 0xF8)};
+  mixer[kColorArciumWelcomeCard] = {dark ? SkColorSetRGB(0x1E, 0x1E, 0x25)
+                                         : SK_ColorWHITE};
+  mixer[kColorArciumWelcomeCardBorder] = {
+      dark ? SkColorSetRGB(0x2E, 0x2E, 0x37) : SkColorSetRGB(0xE4, 0xE4, 0xEC)};
+  mixer[kColorArciumWelcomePanel] = {dark ? SkColorSetRGB(0x25, 0x25, 0x2D)
+                                          : SkColorSetRGB(0xF3, 0xF3, 0xF7)};
+  mixer[kColorArciumWelcomeTile] = {dark ? SkColorSetRGB(0x22, 0x22, 0x2A)
+                                         : SK_ColorWHITE};
+  mixer[kColorArciumWelcomeTileBorder] = {
+      dark ? SkColorSetRGB(0x34, 0x34, 0x3D) : SkColorSetRGB(0xE2, 0xE2, 0xEA)};
+  mixer[kColorArciumWelcomeText] = {dark ? SkColorSetRGB(0xF2, 0xF2, 0xF5)
+                                         : SkColorSetRGB(0x16, 0x16, 0x1C)};
+  mixer[kColorArciumWelcomeTextSecondary] = {
+      dark ? SkColorSetRGB(0xA0, 0xA0, 0xAC) : SkColorSetRGB(0x6B, 0x6B, 0x78)};
+  mixer[kColorArciumWelcomeAccent] = {welcome_accent};
+  mixer[kColorArciumWelcomeAccentSoft] = {
+      ui::SetAlpha(welcome_accent, dark ? 0x33 : 0x1F)};
+  mixer[kColorArciumWelcomeOnAccent] = {SK_ColorWHITE};
+  mixer[kColorArciumWelcomeDotIdle] = {dark ? SkColorSetRGB(0x4A, 0x4A, 0x55)
+                                            : SkColorSetRGB(0xCF, 0xCF, 0xD9)};
+
   // The window frame, in the sidebar's own colour. Arcium hides the toolbar,
   // so the frame is not a title bar here -- it is whatever window shows
   // behind the page, and left at Chromium's default it reads as a pale line

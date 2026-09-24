@@ -21,6 +21,20 @@ source_set("fake_model") {
   ]
 }
 
+# The in-memory WelcomeModel the playground's welcome runs on, shared with the
+# welcome view tests for the same reason as the sidebar's fake.
+source_set("fake_welcome") {
+  testonly = true
+  sources = [
+    "fake_welcome_model.cc",
+    "fake_welcome_model.h",
+  ]
+  public_deps = [
+    "//arcium/ui/welcome",
+    "//base",
+  ]
+}
+
 # Standalone Views host for Arcium's sidebar components. No //chrome deps.
 executable("arcium_playground") {
   testonly = true
@@ -30,16 +44,21 @@ executable("arcium_playground") {
     "sidebar_example.h",
     "snapshot.cc",
     "snapshot.h",
+    "welcome_example.cc",
+    "welcome_example.h",
   ]
   deps = [
     ":fake_model",
+    ":fake_welcome",
     "//arcium/ui/sidebar",
     "//base",
     "//base/test:test_support",
     "//cc/paint",
+    "//components/viz/common",
     "//skia",
     "//ui/base",
     "//ui/color",
+    "//ui/compositor",
     "//ui/gfx",
     "//ui/views",
     "//ui/views/examples:views_examples_lib",

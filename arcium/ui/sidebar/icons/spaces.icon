@@ -1,0 +1,13 @@
+// Copyright 2026 The Chromium Authors
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Four squares, one for each space: what the welcome counts spaces with.
+CANVAS_DIMENSIONS, 20,
+ROUND_RECT, 3, 3, 6, 6, 1.5f,
+NEW_PATH,
+ROUND_RECT, 11, 3, 6, 6, 1.5f,
+NEW_PATH,
+ROUND_RECT, 3, 11, 6, 6, 1.5f,
+NEW_PATH,
+ROUND_RECT, 11, 11, 6, 6, 1.5f

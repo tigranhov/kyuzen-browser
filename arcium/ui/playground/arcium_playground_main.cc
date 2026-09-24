@@ -10,6 +10,7 @@
 #include <utility>
 
 #include "arcium/ui/playground/sidebar_example.h"
+#include "arcium/ui/playground/welcome_example.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "base/at_exit.h"
 #include "base/command_line.h"
@@ -29,8 +30,16 @@ int main(int argc, char** argv) {
   ui::ColorProviderManager::Get().AppendColorProviderInitializer(
       base::BindRepeating(&arcium::AddArciumColorMixer));
 
+  // Every example writes a snapshot of itself when asked, and the runner
+  // sorts them by title, so --welcome hosts the welcome alone.
   views::examples::ExampleVector examples;
-  examples.push_back(std::make_unique<arcium::SidebarExample>());
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          arcium::kWelcomeSwitch)) {
+    examples.push_back(std::make_unique<arcium::WelcomeExample>());
+  } else {
+    examples.push_back(std::make_unique<arcium::SidebarExample>());
+    examples.push_back(std::make_unique<arcium::WelcomeExample>());
+  }
   return static_cast<int>(views::examples::ExamplesMainProc(
       /*under_test=*/false, std::move(examples)));
 }

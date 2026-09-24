@@ -37,6 +37,21 @@ enum ArciumColorIds : ui::ColorId {
   kColorArciumDivider,
   kColorArciumSpaceAccent,
   kColorArciumSpaceChipActiveBackground,
+  // The welcome card (arcium/ui/welcome/): the page area around it, the card
+  // and its right-hand panel, the tiles and rows on it, its two weights of
+  // text, and the accent its choices and its Continue button are drawn in.
+  kColorArciumWelcomeBackground,
+  kColorArciumWelcomeCard,
+  kColorArciumWelcomeCardBorder,
+  kColorArciumWelcomePanel,
+  kColorArciumWelcomeTile,
+  kColorArciumWelcomeTileBorder,
+  kColorArciumWelcomeText,
+  kColorArciumWelcomeTextSecondary,
+  kColorArciumWelcomeAccent,
+  kColorArciumWelcomeAccentSoft,
+  kColorArciumWelcomeOnAccent,
+  kColorArciumWelcomeDotIdle,
   kArciumColorsEnd,
 };
 

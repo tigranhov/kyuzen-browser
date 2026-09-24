@@ -14,6 +14,7 @@ aggregate_vector_icons("sidebar_icons") {
     "reload.icon",
     "revert.icon",
     "sidebar.icon",
+    "spaces.icon",
     "split.icon",
   ]
 }

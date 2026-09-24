@@ -1,0 +1,33 @@
+# The welcome card: pure Views over a model interface, with no //chrome deps,
+# so the playground can host it on a fake and the view tests can drive it.
+# The browser's side of it lives in //arcium/ui/browser.
+source_set("welcome") {
+  sources = [
+    "welcome_default_step.cc",
+    "welcome_done_step.cc",
+    "welcome_logins_step.cc",
+    "welcome_model.cc",
+    "welcome_model.h",
+    "welcome_search_step.cc",
+    "welcome_setup_step.cc",
+    "welcome_steps.h",
+    "welcome_style.cc",
+    "welcome_style.h",
+    "welcome_sync_step.cc",
+    "welcome_view.cc",
+    "welcome_view.h",
+  ]
+  public_deps = [
+    "//base",
+    "//ui/color",
+    "//ui/views",
+  ]
+  deps = [
+    "//arcium/ui/sidebar",
+    "//cc/paint",
+    "//components/vector_icons",
+    "//skia",
+    "//ui/base",
+    "//ui/gfx",
+  ]
+}

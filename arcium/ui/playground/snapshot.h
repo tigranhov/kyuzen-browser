@@ -12,10 +12,15 @@ class View;
 namespace arcium {
 
 // Command line switch: --snapshot=<path.png>. When present, the example
-// paints `view` offscreen at 2x a moment after it is shown, writes the PNG,
-// and exits. Screen capture needs a macOS permission; this does not, and it
-// produces the images in docs/screens/.
+// copies the window's composited frame a moment after it is shown, writes the
+// part covering `view` as a PNG, and exits. If the compositor hands over no
+// frame, it paints the views offscreen at 2x instead, which leaves out
+// anything drawn on a layer of its own. Screen capture needs a macOS
+// permission; neither does, and they produce the images in docs/screens/.
 inline constexpr char kSnapshotSwitch[] = "snapshot";
+// --snapshot-size=<width>x<height>: the window size for the snapshot, 1100x720
+// when absent.
+inline constexpr char kSnapshotSizeSwitch[] = "snapshot-size";
 
 // Schedules the snapshot if the switch is present. No-op otherwise.
 void MaybeScheduleSnapshot(views::View* view);
