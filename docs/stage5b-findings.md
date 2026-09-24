@@ -119,9 +119,20 @@ each page twice.
   to 12px over 150ms as the handle fades in, then back when the pointer
   leaves; reduced motion switches at once. Hand row 19 passed.
 
-## Owed
+## Perf and the second whole-suite run
 
-- Perf.
+Measured 2026-09-24, see docs/perf/2026-09-24-stage5b.md: 1373 MB idle and a
+median of 10 processes, the tenth not reproduced in two further launches that
+listed 9; startup 3617 ms under a load of 16. Nothing here is read as a
+regression, but a quiet re-run of startup would settle it.
+
+Both suites ran again the same day, after the handle's sliding room, when the
+owner said the computer was free: all 93 browser tests passed with no retry,
+and 823 of 824 unit tests passed. The one that did not,
+`SidebarViewsTest.ClickingAnArchivedRowReopensItAndDropsIt`, hangs now and
+then just after moving the pointer into the archive list: 2 of 10 runs
+alone on this build, and 2 of 20 on the build from before this session's
+work, so it predates the split changes. It is reported, not fixed.
 
 Both whole suites ran on 2026-09-24 with the owner's approval: 800 unit
 tests and 93 browser tests, all passed. One browser test, a split coming back
