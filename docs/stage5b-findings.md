@@ -117,4 +117,10 @@ each page twice.
 
 ## Owed
 
-- Perf, and a whole-suite browser run.
+- Perf, and hand rows 12 to 18.
+
+Both whole suites ran on 2026-09-24 with the owner's approval: 800 unit
+tests and 93 browser tests, all passed. One browser test, a split coming back
+in a space that is not on screen, ran past the launcher's 45-second limit on
+its first try while the machine's load average was near 400, then passed in
+6 seconds on the retry and three more times on its own.
