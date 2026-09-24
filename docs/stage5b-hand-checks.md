@@ -80,7 +80,7 @@ walked by the owner on 2026-09-24 and all seven passed:
 
 Asked for after rows 12-18: the handle left a fixed gap between the halves.
 They now sit together at rest and part only while the pointer is on the row
-(0b283e4). Not yet walked by hand:
+(0b283e4). Walked by the owner on 2026-09-24 and passed:
 
 | # | Do this | Look for |
 |---|---|---|

@@ -117,7 +117,7 @@ each page twice.
 - The handle's room is opened only while the pointer is on the row, at the
   owner's request (0b283e4): at rest the halves sit 2px apart, and they slide
   to 12px over 150ms as the handle fades in, then back when the pointer
-  leaves; reduced motion switches at once. Hand row 19 covers it.
+  leaves; reduced motion switches at once. Hand row 19 passed.
 
 ## Owed
 
