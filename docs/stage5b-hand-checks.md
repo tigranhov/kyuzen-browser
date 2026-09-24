@@ -77,3 +77,11 @@ walked by the owner on 2026-09-24 and all seven passed:
 | 16 | In Pinned, drag one half of a split and let go just below its own row | The split ends and both stay pinned, as two rows |
 | 17 | Drag a split by its handle over the middle of another row, then over Favourites | No tint on the row and no place to drop in Favourites: a split cannot join a third page or become one favourite |
 | 18 | Drag a Today split by its handle into Pinned | It becomes one pinned row, still split |
+
+Asked for after rows 12-18: the handle left a fixed gap between the halves.
+They now sit together at rest and part only while the pointer is on the row
+(0b283e4). Not yet walked by hand:
+
+| # | Do this | Look for |
+|---|---|---|
+| 19 | Look at a split row, then point at it, then move away | At rest the halves nearly touch. Pointing slides them apart and the handle fades in; moving away fades it and slides them back. Neither outer edge of the row moves |

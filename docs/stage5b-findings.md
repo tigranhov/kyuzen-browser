@@ -114,6 +114,10 @@ each page twice.
   removed, because the model already refuses to split a tab that is split;
   the guard stays as the view's own statement of the rule. The two tests
   that nothing happens for a row sharing nothing were not broken on purpose.
+- The handle's room is opened only while the pointer is on the row, at the
+  owner's request (0b283e4): at rest the halves sit 2px apart, and they slide
+  to 12px over 150ms as the handle fades in, then back when the pointer
+  leaves; reduced motion switches at once. Hand row 19 covers it.
 
 ## Owed
 
