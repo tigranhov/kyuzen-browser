@@ -1,0 +1,11 @@
+{
+  "version": 6,
+  "lastUserContextId": 5,
+  "identities": [
+    { "userContextId": 1, "public": true, "icon": "fingerprint", "color": "blue", "l10nId": "user-context-personal" },
+    { "userContextId": 2, "public": true, "icon": "briefcase", "color": "orange", "l10nId": "user-context-work" },
+    { "userContextId": 6, "public": true, "icon": "tree", "color": "green", "name": "Side project" },
+    { "userContextId": 5, "public": false, "icon": "", "color": "", "name": "userContextIdInternal.thumbnail", "accessKey": "" }
+  ],
+  "siteAssociations": {}
+}

@@ -1,0 +1,464 @@
+{
+  "lastCollected": 1758700009999,
+  "tabs": [
+    {
+      "entries": [
+        {
+          "url": "https://mail.example.com/",
+          "title": "Example Mail",
+          "cacheKey": 0,
+          "ID": 101,
+          "docshellUUID": "{0e000000-0000-4000-8000-000000000101}",
+          "triggeringPrincipal_base64": "{\"1\":{\"0\":\"https://mail.example.com/\"}}",
+          "hasUserInteraction": false,
+          "persist": true,
+          "docIdentifier": 1101
+        }
+      ],
+      "lastAccessed": 1758700001000,
+      "pinned": true,
+      "hidden": false,
+      "zenWorkspace": null,
+      "zenSyncId": "1758700000001-0e7a5c1e-0000-4000-8000-000000000001",
+      "zenEssential": true,
+      "zenDefaultUserContextId": "true",
+      "zenPinnedIcon": null,
+      "zenIsEmpty": false,
+      "zenHasStaticIcon": false,
+      "zenGlanceId": null,
+      "zenIsGlance": false,
+      "_zenPinnedInitialState": {
+        "entry": {
+          "url": "https://mail.example.com/",
+          "title": "Example Mail"
+        },
+        "image": "https://mail.example.com/favicon.ico"
+      },
+      "_zenIsActiveTab": true,
+      "zenLiveFolderItemId": null,
+      "searchMode": null,
+      "userContextId": 0,
+      "attributes": {},
+      "index": 1,
+      "image": "https://mail.example.com/favicon.ico"
+    },
+    {
+      "entries": [
+        {
+          "url": "https://tracker.example.com/",
+          "title": "Example Tracker",
+          "cacheKey": 0,
+          "ID": 102,
+          "docshellUUID": "{0e000000-0000-4000-8000-000000000102}",
+          "triggeringPrincipal_base64": "{\"1\":{\"0\":\"https://tracker.example.com/\"}}",
+          "hasUserInteraction": false,
+          "persist": true,
+          "docIdentifier": 1102
+        }
+      ],
+      "lastAccessed": 1758700001100,
+      "pinned": true,
+      "hidden": false,
+      "zenWorkspace": null,
+      "zenSyncId": "1758700000002-0e7a5c1e-0000-4000-8000-000000000002",
+      "zenEssential": true,
+      "zenDefaultUserContextId": "true",
+      "zenPinnedIcon": null,
+      "zenIsEmpty": false,
+      "zenHasStaticIcon": false,
+      "zenGlanceId": null,
+      "zenIsGlance": false,
+      "_zenPinnedInitialState": {
+        "entry": {
+          "url": "https://tracker.example.com/",
+          "title": "Example Tracker"
+        },
+        "image": "https://tracker.example.com/favicon.ico"
+      },
+      "_zenIsActiveTab": true,
+      "zenLiveFolderItemId": null,
+      "searchMode": null,
+      "userContextId": 2,
+      "attributes": {},
+      "index": 1,
+      "image": "https://tracker.example.com/favicon.ico"
+    },
+    {
+      "entries": [
+        {
+          "url": "about:blank",
+          "cacheKey": 0,
+          "ID": 103,
+          "docshellUUID": "{0e000000-0000-4000-8000-000000000103}",
+          "triggeringPrincipal_base64": "{\"3\":{}}",
+          "hasUserInteraction": false,
+          "persist": true,
+          "docIdentifier": 1103
+        }
+      ],
+      "lastAccessed": 1758700000100,
+      "pinned": true,
+      "hidden": false,
+      "groupId": "1758700000100-17",
+      "zenWorkspace": "{a1b2c3d4-0000-4000-8000-000000000001}",
+      "zenSyncId": "1758700000003-0e7a5c1e-0000-4000-8000-000000000003",
+      "zenEssential": false,
+      "zenDefaultUserContextId": null,
+      "zenPinnedIcon": null,
+      "zenIsEmpty": true,
+      "zenHasStaticIcon": false,
+      "zenGlanceId": null,
+      "zenIsGlance": false,
+      "_zenPinnedInitialState": {
+        "entry": {
+          "url": "about:blank"
+        },
+        "image": null
+      },
+      "_zenIsActiveTab": true,
+      "zenLiveFolderItemId": null,
+      "searchMode": null,
+      "userContextId": 0,
+      "attributes": {},
+      "index": 1,
+      "image": null
+    },
+    {
+      "entries": [
+        {
+          "url": "https://example.com/articles/one",
+          "title": "Article One",
+          "cacheKey": 0,
+          "ID": 104,
+          "docshellUUID": "{0e000000-0000-4000-8000-000000000104}",
+          "triggeringPrincipal_base64": "{\"1\":{\"0\":\"https://example.com/articles/one\"}}",
+          "hasUserInteraction": false,
+          "persist": true,
+          "docIdentifier": 1104
+        }
+      ],
+      "lastAccessed": 1758700002000,
+      "pinned": true,
+      "hidden": false,
+      "groupId": "1758700000100-17",
+      "zenWorkspace": "{a1b2c3d4-0000-4000-8000-000000000001}",
+      "zenSyncId": "1758700000004-0e7a5c1e-0000-4000-8000-000000000004",
+      "zenEssential": false,
+      "zenDefaultUserContextId": null,
+      "zenPinnedIcon": null,
+      "zenIsEmpty": false,
+      "zenHasStaticIcon": false,
+      "zenGlanceId": null,
+      "zenIsGlance": false,
+      "_zenPinnedInitialState": {
+        "entry": {
+          "url": "https://example.com/articles/one",
+          "title": "Article One"
+        },
+        "image": "https://example.com/favicon.ico"
+      },
+      "_zenIsActiveTab": true,
+      "zenLiveFolderItemId": null,
+      "searchMode": null,
+      "userContextId": 0,
+      "attributes": {},
+      "index": 1,
+      "image": "https://example.com/favicon.ico"
+    },
+    {
+      "entries": [
+        {
+          "url": "about:blank",
+          "cacheKey": 0,
+          "ID": 105,
+          "docshellUUID": "{0e000000-0000-4000-8000-000000000105}",
+          "triggeringPrincipal_base64": "{\"3\":{}}",
+          "hasUserInteraction": false,
+          "persist": true,
+          "docIdentifier": 1105
+        }
+      ],
+      "lastAccessed": 1758700000200,
+      "pinned": true,
+      "hidden": false,
+      "groupId": "1758700000200-42",
+      "zenWorkspace": "{a1b2c3d4-0000-4000-8000-000000000001}",
+      "zenSyncId": "1758700000005-0e7a5c1e-0000-4000-8000-000000000005",
+      "zenEssential": false,
+      "zenDefaultUserContextId": null,
+      "zenPinnedIcon": null,
+      "zenIsEmpty": true,
+      "zenHasStaticIcon": false,
+      "zenGlanceId": null,
+      "zenIsGlance": false,
+      "_zenPinnedInitialState": {
+        "entry": {
+          "url": "about:blank"
+        },
+        "image": null
+      },
+      "_zenIsActiveTab": true,
+      "zenLiveFolderItemId": null,
+      "searchMode": null,
+      "userContextId": 0,
+      "attributes": {},
+      "index": 1,
+      "image": null
+    },
+    {
+      "entries": [
+        {
+          "url": "https://example.com/articles/deep",
+          "title": "Deep Article",
+          "cacheKey": 0,
+          "ID": 106,
+          "docshellUUID": "{0e000000-0000-4000-8000-000000000106}",
+          "triggeringPrincipal_base64": "{\"1\":{\"0\":\"https://example.com/articles/deep\"}}",
+          "hasUserInteraction": false,
+          "persist": true,
+          "docIdentifier": 1106
+        }
+      ],
+      "lastAccessed": 1758700002100,
+      "pinned": true,
+      "hidden": false,
+      "groupId": "1758700000200-42",
+      "zenWorkspace": "{a1b2c3d4-0000-4000-8000-000000000001}",
+      "zenSyncId": "1758700000006-0e7a5c1e-0000-4000-8000-000000000006",
+      "zenEssential": false,
+      "zenDefaultUserContextId": null,
+      "zenPinnedIcon": null,
+      "zenIsEmpty": false,
+      "zenHasStaticIcon": false,
+      "zenGlanceId": null,
+      "zenIsGlance": false,
+      "_zenPinnedInitialState": {
+        "entry": {
+          "url": "https://example.com/articles/deep",
+          "title": "Deep Article"
+        },
+        "image": "https://example.com/favicon.ico"
+      },
+      "_zenIsActiveTab": true,
+      "zenLiveFolderItemId": null,
+      "searchMode": null,
+      "userContextId": 0,
+      "attributes": {},
+      "index": 1,
+      "image": "https://example.com/favicon.ico"
+    },
+    {
+      "entries": [
+        {
+          "url": "https://docs.example.com/",
+          "title": "Example Docs",
+          "cacheKey": 0,
+          "ID": 107,
+          "docshellUUID": "{0e000000-0000-4000-8000-000000000107}",
+          "triggeringPrincipal_base64": "{\"1\":{\"0\":\"https://docs.example.com/\"}}",
+          "hasUserInteraction": true,
+          "persist": true,
+          "docIdentifier": 1107
+        },
+        {
+          "url": "https://docs.example.com/guide",
+          "title": "Example Docs - Guide",
+          "cacheKey": 0,
+          "ID": 108,
+          "docshellUUID": "{0e000000-0000-4000-8000-000000000107}",
+          "triggeringPrincipal_base64": "{\"1\":{\"0\":\"https://docs.example.com/\"}}",
+          "hasUserInteraction": false,
+          "persist": true,
+          "docIdentifier": 1108
+        }
+      ],
+      "lastAccessed": 1758700003000,
+      "pinned": true,
+      "hidden": false,
+      "zenWorkspace": "{a1b2c3d4-0000-4000-8000-000000000001}",
+      "zenSyncId": "1758700000007-0e7a5c1e-0000-4000-8000-000000000007",
+      "zenEssential": false,
+      "zenDefaultUserContextId": null,
+      "zenPinnedIcon": null,
+      "zenIsEmpty": false,
+      "zenStaticLabel": "Team docs",
+      "zenHasStaticIcon": false,
+      "zenGlanceId": null,
+      "zenIsGlance": false,
+      "_zenPinnedInitialState": {
+        "entry": {
+          "url": "https://docs.example.com/",
+          "title": "Example Docs"
+        },
+        "image": "https://docs.example.com/favicon.ico"
+      },
+      "_zenIsActiveTab": true,
+      "zenLiveFolderItemId": null,
+      "searchMode": null,
+      "userContextId": 0,
+      "attributes": {},
+      "index": 2,
+      "image": "https://docs.example.com/favicon.ico"
+    },
+    {
+      "entries": [
+        {
+          "url": "https://work.example.com/board",
+          "title": "Work Board",
+          "cacheKey": 0,
+          "ID": 109,
+          "docshellUUID": "{0e000000-0000-4000-8000-000000000109}",
+          "triggeringPrincipal_base64": "{\"1\":{\"0\":\"https://work.example.com/board\"}}",
+          "hasUserInteraction": false,
+          "persist": true,
+          "docIdentifier": 1109
+        }
+      ],
+      "lastAccessed": 1758700004000,
+      "pinned": true,
+      "hidden": false,
+      "zenWorkspace": "{a1b2c3d4-0000-4000-8000-000000000002}",
+      "zenSyncId": "1758700000008-0e7a5c1e-0000-4000-8000-000000000008",
+      "zenEssential": false,
+      "zenDefaultUserContextId": null,
+      "zenPinnedIcon": null,
+      "zenIsEmpty": false,
+      "zenHasStaticIcon": false,
+      "zenGlanceId": null,
+      "zenIsGlance": false,
+      "_zenPinnedInitialState": {
+        "entry": {
+          "url": "https://work.example.com/board",
+          "title": "Work Board"
+        },
+        "image": "https://work.example.com/favicon.ico"
+      },
+      "_zenIsActiveTab": true,
+      "zenLiveFolderItemId": null,
+      "searchMode": null,
+      "userContextId": 2,
+      "attributes": {},
+      "index": 1,
+      "image": "https://work.example.com/favicon.ico"
+    },
+    {
+      "entries": [
+        {
+          "url": "https://news.example.com/today",
+          "title": "Today's News",
+          "cacheKey": 0,
+          "ID": 110,
+          "docshellUUID": "{0e000000-0000-4000-8000-000000000110}",
+          "triggeringPrincipal_base64": "{\"1\":{\"0\":\"https://news.example.com/today\"}}",
+          "hasUserInteraction": false,
+          "persist": true,
+          "docIdentifier": 1110
+        }
+      ],
+      "lastAccessed": 1758700005000,
+      "pinned": false,
+      "hidden": false,
+      "zenWorkspace": "{a1b2c3d4-0000-4000-8000-000000000001}",
+      "zenSyncId": "1758700000009-0e7a5c1e-0000-4000-8000-000000000009",
+      "zenEssential": false,
+      "zenDefaultUserContextId": null,
+      "zenPinnedIcon": null,
+      "zenIsEmpty": false,
+      "zenHasStaticIcon": false,
+      "zenGlanceId": null,
+      "zenIsGlance": false,
+      "_zenIsActiveTab": true,
+      "zenLiveFolderItemId": null,
+      "searchMode": null,
+      "userContextId": 0,
+      "attributes": {},
+      "index": 1,
+      "image": "https://news.example.com/favicon.ico"
+    }
+  ],
+  "folders": [
+    {
+      "pinned": true,
+      "splitViewGroup": false,
+      "id": "1758700000100-17",
+      "name": "Reading",
+      "collapsed": false,
+      "saveOnWindowClose": false,
+      "parentId": null,
+      "prevSiblingInfo": {
+        "type": "start",
+        "id": null
+      },
+      "emptyTabIds": [
+        "1758700000003-0e7a5c1e-0000-4000-8000-000000000003"
+      ],
+      "workspaceId": "{a1b2c3d4-0000-4000-8000-000000000001}"
+    },
+    {
+      "pinned": true,
+      "splitViewGroup": false,
+      "id": "1758700000200-42",
+      "name": "Deep dive",
+      "collapsed": true,
+      "saveOnWindowClose": false,
+      "parentId": "1758700000100-17",
+      "prevSiblingInfo": {
+        "type": "tab",
+        "id": "1758700000004-0e7a5c1e-0000-4000-8000-000000000004"
+      },
+      "emptyTabIds": [
+        "1758700000005-0e7a5c1e-0000-4000-8000-000000000005"
+      ],
+      "workspaceId": "{a1b2c3d4-0000-4000-8000-000000000001}"
+    }
+  ],
+  "splitViewData": [],
+  "groups": [
+    {
+      "pinned": true,
+      "splitView": false,
+      "id": "1758700000100-17",
+      "name": "Reading",
+      "color": "zen-workspace-color",
+      "collapsed": false,
+      "saveOnWindowClose": false
+    },
+    {
+      "pinned": true,
+      "splitView": false,
+      "id": "1758700000200-42",
+      "name": "Deep dive",
+      "color": "zen-workspace-color",
+      "collapsed": true,
+      "saveOnWindowClose": false
+    }
+  ],
+  "spaces": [
+    {
+      "uuid": "{a1b2c3d4-0000-4000-8000-000000000001}",
+      "icon": "🏡",
+      "name": "Personal",
+      "theme": {
+        "type": "gradient",
+        "gradientColors": [],
+        "opacity": 0.5,
+        "texture": 0
+      },
+      "containerTabId": 0,
+      "hasCollapsedPinnedTabs": false
+    },
+    {
+      "uuid": "{a1b2c3d4-0000-4000-8000-000000000002}",
+      "icon": "💼",
+      "name": "Work",
+      "theme": {
+        "type": "gradient",
+        "gradientColors": [],
+        "opacity": 0.5,
+        "texture": 0
+      },
+      "containerTabId": 2,
+      "hasCollapsedPinnedTabs": false
+    }
+  ]
+}

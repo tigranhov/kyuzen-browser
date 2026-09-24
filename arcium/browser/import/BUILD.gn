@@ -1,0 +1,33 @@
+# Reading another browser's saved setup, and turning it into Kyuzen's own.
+# No Chromium UI or browser dependencies: the readers take bytes and give
+# back a plan, so they unit-test on synthetic files alone.
+source_set("import") {
+  sources = [
+    "arc_reader.cc",
+    "arc_reader.h",
+    "import_finder.cc",
+    "import_finder.h",
+    "import_plan.cc",
+    "import_plan.h",
+    "mozlz4.cc",
+    "mozlz4.h",
+    "zen_reader.cc",
+    "zen_reader.h",
+  ]
+  deps = [ "//base" ]
+  public_deps = [ "//url" ]
+}
+
+# Turns a plan into Kyuzen's own spaces, folders and entries. Apart from the
+# readers because it needs the model, and they need nothing but bytes.
+source_set("applier") {
+  sources = [
+    "import_applier.cc",
+    "import_applier.h",
+  ]
+  public_deps = [
+    ":import",
+    "//arcium/browser/model",
+  ]
+  deps = [ "//base" ]
+}

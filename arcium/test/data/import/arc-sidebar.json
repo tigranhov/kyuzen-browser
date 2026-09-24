@@ -1,0 +1,515 @@
+{
+  "version" : 1,
+  "sidebar" : {
+    "containers" : [
+      {
+        "global" : {}
+      },
+      {
+        "spaces" : [
+          "A1000000-0000-4000-8000-000000000001",
+          {
+            "id" : "A1000000-0000-4000-8000-000000000001",
+            "title" : "Personal",
+            "profile" : {
+              "default" : true
+            },
+            "containerIDs" : [
+              "pinned",
+              "B1000000-0000-4000-8000-000000000001",
+              "unpinned",
+              "B1000000-0000-4000-8000-000000000002"
+            ],
+            "newContainerIDs" : [
+              {
+                "pinned" : {}
+              },
+              "B1000000-0000-4000-8000-000000000001",
+              {
+                "unpinned" : {
+                  "_0" : {
+                    "shared" : {}
+                  }
+                }
+              },
+              "B1000000-0000-4000-8000-000000000002"
+            ],
+            "customInfo" : {
+              "iconType" : {
+                "emoji_v2" : "🏡",
+                "emoji" : 127969
+              },
+              "windowTheme" : {
+                "background" : {
+                  "single" : {
+                    "_0" : {
+                      "style" : {
+                        "color" : {
+                          "_0" : {
+                            "blendedSingleColor" : {
+                              "_0" : {
+                                "translucencyStyle" : "light",
+                                "modifiers" : {
+                                  "overlay" : "grain",
+                                  "noiseFactor" : 0.5,
+                                  "intensityFactor" : 0.7
+                                },
+                                "color" : {
+                                  "red" : 0.95,
+                                  "green" : 0.9,
+                                  "blue" : 0.85,
+                                  "alpha" : 1,
+                                  "colorSpace" : "extendedSRGB"
+                                }
+                              }
+                            }
+                          }
+                        }
+                      },
+                      "contentOverBackgroundAppearance" : "light",
+                      "isVibrant" : true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "A1000000-0000-4000-8000-000000000002",
+          {
+            "id" : "A1000000-0000-4000-8000-000000000002",
+            "title" : "Work",
+            "profile" : {
+              "custom" : {
+                "_0" : {
+                  "directoryBasename" : "Profile 1",
+                  "machineID" : "5A5A5A5A-0000-4000-8000-000000000001"
+                }
+              }
+            },
+            "containerIDs" : [
+              "unpinned",
+              "B1000000-0000-4000-8000-000000000004",
+              "pinned",
+              "B1000000-0000-4000-8000-000000000003"
+            ],
+            "newContainerIDs" : [
+              {
+                "unpinned" : {
+                  "_0" : {
+                    "shared" : {}
+                  }
+                }
+              },
+              "B1000000-0000-4000-8000-000000000004",
+              {
+                "pinned" : {}
+              },
+              "B1000000-0000-4000-8000-000000000003"
+            ],
+            "customInfo" : {
+              "iconType" : {
+                "icon" : "planet"
+              }
+            }
+          }
+        ],
+        "items" : [
+          "B1000000-0000-4000-8000-000000000001",
+          {
+            "id" : "B1000000-0000-4000-8000-000000000001",
+            "title" : null,
+            "parentID" : null,
+            "childrenIds" : [
+              "C1000000-0000-4000-8000-000000000001",
+              "D1000000-0000-4000-8000-000000000003",
+              "C1000000-0000-4000-8000-000000000003",
+              "C1000000-0000-4000-8000-000000000004"
+            ],
+            "createdAt" : 780000000.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "itemContainer" : {
+                "containerType" : {
+                  "spaceItems" : {
+                    "_0" : "A1000000-0000-4000-8000-000000000001"
+                  }
+                }
+              }
+            }
+          },
+          "B1000000-0000-4000-8000-000000000002",
+          {
+            "id" : "B1000000-0000-4000-8000-000000000002",
+            "title" : null,
+            "parentID" : null,
+            "childrenIds" : [
+              "D1000000-0000-4000-8000-000000000006"
+            ],
+            "createdAt" : 780000000.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "itemContainer" : {
+                "containerType" : {
+                  "spaceItems" : {
+                    "_0" : "A1000000-0000-4000-8000-000000000001"
+                  }
+                }
+              }
+            }
+          },
+          "B1000000-0000-4000-8000-000000000003",
+          {
+            "id" : "B1000000-0000-4000-8000-000000000003",
+            "title" : null,
+            "parentID" : null,
+            "childrenIds" : [
+              "D1000000-0000-4000-8000-000000000007"
+            ],
+            "createdAt" : 780000100.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "itemContainer" : {
+                "containerType" : {
+                  "spaceItems" : {
+                    "_0" : "A1000000-0000-4000-8000-000000000002"
+                  }
+                }
+              }
+            }
+          },
+          "B1000000-0000-4000-8000-000000000004",
+          {
+            "id" : "B1000000-0000-4000-8000-000000000004",
+            "title" : null,
+            "parentID" : null,
+            "childrenIds" : [],
+            "createdAt" : 780000100.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "itemContainer" : {
+                "containerType" : {
+                  "spaceItems" : {
+                    "_0" : "A1000000-0000-4000-8000-000000000002"
+                  }
+                }
+              }
+            }
+          },
+          "B1000000-0000-4000-8000-000000000005",
+          {
+            "id" : "B1000000-0000-4000-8000-000000000005",
+            "title" : null,
+            "parentID" : null,
+            "childrenIds" : [
+              "D1000000-0000-4000-8000-000000000008"
+            ],
+            "createdAt" : 780000000.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "itemContainer" : {
+                "containerType" : {
+                  "topApps" : {
+                    "_0" : {
+                      "default" : true
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "B1000000-0000-4000-8000-000000000006",
+          {
+            "id" : "B1000000-0000-4000-8000-000000000006",
+            "title" : null,
+            "parentID" : null,
+            "childrenIds" : [
+              "D1000000-0000-4000-8000-000000000009"
+            ],
+            "createdAt" : 780000100.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "itemContainer" : {
+                "containerType" : {
+                  "topApps" : {
+                    "_0" : {
+                      "custom" : {
+                        "_0" : {
+                          "directoryBasename" : "Profile 1",
+                          "machineID" : "5A5A5A5A-0000-4000-8000-000000000001"
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "C1000000-0000-4000-8000-000000000001",
+          {
+            "id" : "C1000000-0000-4000-8000-000000000001",
+            "title" : "Reading",
+            "parentID" : "B1000000-0000-4000-8000-000000000001",
+            "childrenIds" : [
+              "D1000000-0000-4000-8000-000000000001",
+              "C1000000-0000-4000-8000-000000000002"
+            ],
+            "createdAt" : 780000200.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "list" : {}
+            }
+          },
+          "C1000000-0000-4000-8000-000000000002",
+          {
+            "id" : "C1000000-0000-4000-8000-000000000002",
+            "title" : "Deep dive",
+            "parentID" : "C1000000-0000-4000-8000-000000000001",
+            "childrenIds" : [
+              "D1000000-0000-4000-8000-000000000002"
+            ],
+            "createdAt" : 780000300.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "list" : {}
+            }
+          },
+          "C1000000-0000-4000-8000-000000000003",
+          {
+            "id" : "C1000000-0000-4000-8000-000000000003",
+            "title" : null,
+            "parentID" : "B1000000-0000-4000-8000-000000000001",
+            "childrenIds" : [
+              "D1000000-0000-4000-8000-000000000004",
+              "D1000000-0000-4000-8000-000000000005"
+            ],
+            "createdAt" : 780000400.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "splitView" : {
+                "layoutOrientation" : "horizontal",
+                "itemWidthFactors" : [],
+                "customInfo" : null,
+                "focusItemID" : null
+              }
+            }
+          },
+          "C1000000-0000-4000-8000-000000000004",
+          {
+            "id" : "C1000000-0000-4000-8000-000000000004",
+            "title" : "Scratch note",
+            "parentID" : "B1000000-0000-4000-8000-000000000001",
+            "childrenIds" : [],
+            "createdAt" : 780000500.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "arcDocument" : {
+                "arcDocumentID" : "E1000000-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "D1000000-0000-4000-8000-000000000001",
+          {
+            "id" : "D1000000-0000-4000-8000-000000000001",
+            "title" : null,
+            "parentID" : "C1000000-0000-4000-8000-000000000001",
+            "childrenIds" : [],
+            "createdAt" : 780000210.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "tab" : {
+                "savedURL" : "https:\/\/example.com\/articles\/one",
+                "savedTitle" : "Article One",
+                "savedMuteStatus" : "allowAudio",
+                "timeLastActiveAt" : 780001000.0
+              }
+            }
+          },
+          "D1000000-0000-4000-8000-000000000002",
+          {
+            "id" : "D1000000-0000-4000-8000-000000000002",
+            "title" : null,
+            "parentID" : "C1000000-0000-4000-8000-000000000002",
+            "childrenIds" : [],
+            "createdAt" : 780000310.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "tab" : {
+                "savedURL" : "https:\/\/example.com\/articles\/deep",
+                "savedTitle" : "Deep Article",
+                "savedMuteStatus" : "allowAudio",
+                "timeLastActiveAt" : 780001100.0
+              }
+            }
+          },
+          "D1000000-0000-4000-8000-000000000003",
+          {
+            "id" : "D1000000-0000-4000-8000-000000000003",
+            "title" : "Team docs",
+            "parentID" : "B1000000-0000-4000-8000-000000000001",
+            "childrenIds" : [],
+            "createdAt" : 780000350.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "tab" : {
+                "savedURL" : "https:\/\/docs.example.com\/",
+                "savedTitle" : "Example Docs",
+                "savedMuteStatus" : "allowAudio",
+                "timeLastActiveAt" : 780001200.0
+              }
+            }
+          },
+          "D1000000-0000-4000-8000-000000000004",
+          {
+            "id" : "D1000000-0000-4000-8000-000000000004",
+            "title" : null,
+            "parentID" : "C1000000-0000-4000-8000-000000000003",
+            "childrenIds" : [],
+            "createdAt" : 780000410.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "tab" : {
+                "savedURL" : "https:\/\/left.example.com\/",
+                "savedTitle" : "Left Pane",
+                "savedMuteStatus" : "allowAudio",
+                "timeLastActiveAt" : 780001300.0
+              }
+            }
+          },
+          "D1000000-0000-4000-8000-000000000005",
+          {
+            "id" : "D1000000-0000-4000-8000-000000000005",
+            "title" : null,
+            "parentID" : "C1000000-0000-4000-8000-000000000003",
+            "childrenIds" : [],
+            "createdAt" : 780000420.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "tab" : {
+                "savedURL" : "https:\/\/right.example.com\/",
+                "savedTitle" : "Right Pane",
+                "savedMuteStatus" : "allowAudio",
+                "timeLastActiveAt" : 780001300.0
+              }
+            }
+          },
+          "D1000000-0000-4000-8000-000000000006",
+          {
+            "id" : "D1000000-0000-4000-8000-000000000006",
+            "title" : null,
+            "parentID" : "B1000000-0000-4000-8000-000000000002",
+            "childrenIds" : [],
+            "createdAt" : 780002000.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "tab" : {
+                "savedURL" : "https:\/\/news.example.com\/today",
+                "savedTitle" : "Today's News",
+                "savedMuteStatus" : "allowAudio",
+                "timeLastActiveAt" : 780002500.0,
+                "activeTabBeforeCreationID" : "D1000000-0000-4000-8000-000000000003"
+              }
+            }
+          },
+          "D1000000-0000-4000-8000-000000000007",
+          {
+            "id" : "D1000000-0000-4000-8000-000000000007",
+            "title" : null,
+            "parentID" : "B1000000-0000-4000-8000-000000000003",
+            "childrenIds" : [],
+            "createdAt" : 780000150.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "tab" : {
+                "savedURL" : "https:\/\/work.example.com\/board",
+                "savedTitle" : "Work Board",
+                "savedMuteStatus" : "allowAudio",
+                "timeLastActiveAt" : 780001400.0
+              }
+            }
+          },
+          "D1000000-0000-4000-8000-000000000008",
+          {
+            "id" : "D1000000-0000-4000-8000-000000000008",
+            "title" : null,
+            "parentID" : "B1000000-0000-4000-8000-000000000005",
+            "childrenIds" : [],
+            "createdAt" : 780000050.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "tab" : {
+                "savedURL" : "https:\/\/mail.example.com\/",
+                "savedTitle" : "Example Mail",
+                "savedMuteStatus" : "allowAudio",
+                "timeLastActiveAt" : 780001500.0
+              }
+            }
+          },
+          "D1000000-0000-4000-8000-000000000009",
+          {
+            "id" : "D1000000-0000-4000-8000-000000000009",
+            "title" : null,
+            "parentID" : "B1000000-0000-4000-8000-000000000006",
+            "childrenIds" : [],
+            "createdAt" : 780000160.0,
+            "isUnread" : false,
+            "originatingDevice" : "0D000000-0000-4000-8000-000000000001",
+            "data" : {
+              "tab" : {
+                "savedURL" : "https:\/\/tracker.example.com\/",
+                "savedTitle" : "Example Tracker",
+                "savedMuteStatus" : "allowAudio",
+                "timeLastActiveAt" : 780001600.0
+              }
+            }
+          }
+        ],
+        "topAppsContainerIDs" : [
+          {
+            "default" : true
+          },
+          "B1000000-0000-4000-8000-000000000005",
+          {
+            "custom" : {
+              "_0" : {
+                "directoryBasename" : "Profile 1",
+                "machineID" : "5A5A5A5A-0000-4000-8000-000000000001"
+              }
+            }
+          },
+          "B1000000-0000-4000-8000-000000000006"
+        ]
+      }
+    ]
+  },
+  "sidebarSyncState" : {
+    "container" : {
+      "value" : {
+        "orderedSpaceIDs" : [
+          "A1000000-0000-4000-8000-000000000001",
+          "A1000000-0000-4000-8000-000000000002"
+        ]
+      }
+    },
+    "spaceModels" : [],
+    "items" : []
+  },
+  "firebaseSyncState" : {}
+}
