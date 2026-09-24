@@ -4,10 +4,10 @@
 
 # Which application icon a build wears. A development build and a release sit
 # in the Dock beside each other and looked identical, so a development build
-# wears a grey one. Only an official build is a release, and only a release
-# gets the colour.
+# wears the same bow in amber. Only an official build is a release, and only a
+# release wears the violet one.
 #
-# scripts/make-dev-icon draws the grey pair from the real one.
+# scripts/make-icons draws both from arcium/branding/icon.
 
 if (is_official_build) {
   kyuzen_icon_dir = "mac"

@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# Draw the application icons from their vector sources. The icon is a drawn
+# bow, after the "kyu" in Kyuzen. A release wears it in violet and a
+# development build in amber, because the two sit in the Dock beside each
+# other and have to be told apart at a glance.
+#
+# Run this after changing arcium/branding/icon/kyuzen.svg or kyuzen-dev.svg.
+# It writes the release icon into arcium/branding/theme/mac, the development
+# icon into arcium/branding/theme/mac/dev, and the product logos the browser
+# shows of itself. All of it is committed, so an ordinary build needs neither
+# this script nor the tools it uses: Google Chrome to draw the SVGs, and
+# Xcode's iconutil and actool to package them.
+source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
+
+ICON="$ARCIUM_ROOT/arcium/branding/icon"
+BRANDING="$ARCIUM_ROOT/arcium/branding"
+MAC="$BRANDING/theme/mac"
+CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
+
+[ -x "$CHROME" ] || die "no Chrome at $CHROME to draw the icons with; set CHROME"
+command -v iconutil >/dev/null || die "iconutil is missing; install Xcode's command line tools"
+command -v actool >/dev/null || die "actool is missing; install Xcode's command line tools"
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+# Each size is drawn from the vector rather than shrunk from the largest, so
+# the small ones stay sharp.
+draw() {  # draw <svg> <pixels> <out.png>
+  local svg="$1" px="$2" out="$3" page="$TMP/draw-$2.html"
+  printf '<!doctype html><style>html,body{margin:0;background:transparent}img{display:block;width:%spx;height:%spx}</style><img src="file://%s">' \
+    "$px" "$px" "${svg// /%20}" > "$page"
+  rm -f "$out"
+  # Headless Chrome makes a throwaway profile of its own; naming one makes it
+  # set that profile up in full, which takes a minute a drawing. The alarm is
+  # the backstop if it ever stalls.
+  perl -e 'alarm shift; exec @ARGV' 60 "$CHROME" --headless=new --disable-gpu \
+    --hide-scrollbars --force-device-scale-factor=1 \
+    --default-background-color=00000000 \
+    --window-size="$px,$px" --screenshot="$out" "file://${page// /%20}" \
+    >/dev/null 2>&1 || true
+  [ "$(sips -g pixelWidth "$out" 2>/dev/null | awk '/pixelWidth/ {print $2}')" = "$px" ] ||
+    die "Chrome drew no ${px}px image of $svg"
+}
+
+# package <svg> <out dir>: app.icns, the icon the Dock falls back to, and
+# Assets.car, the catalogue macOS actually reads on a recent system. Leaves
+# the catalogue's source in $TMP/<name>/Assets.xcassets.
+package() {
+  local svg="$1" out="$2" work="$TMP/$(basename "$1" .svg)"
+  local set="$work/Assets.xcassets/AppIcon.appiconset" icns="$work/icon.iconset"
+  mkdir -p "$set" "$icns" "$work/car"
+  cp "$MAC/Assets.xcassets/Contents.json" "$work/Assets.xcassets/Contents.json"
+  cp "$MAC/Assets.xcassets/AppIcon.appiconset/Contents.json" "$set/Contents.json"
+
+  for px in 16 32 64 128 256 512 1024; do
+    draw "$svg" "$px" "$set/appicon_$px.png"
+  done
+  for pt in 16 32 128 256 512; do
+    cp "$set/appicon_$pt.png" "$icns/icon_${pt}x${pt}.png"
+    cp "$set/appicon_$((pt * 2)).png" "$icns/icon_${pt}x${pt}@2x.png"
+  done
+  iconutil --convert icns --output "$work/app.icns" "$icns"
+
+  actool --compile "$work/car" --platform macosx --minimum-deployment-target 13.0 \
+    --app-icon AppIcon --output-partial-info-plist "$work/car/partial.plist" \
+    --notices --warnings "$work/Assets.xcassets" >/dev/null
+  [ -f "$work/car/Assets.car" ] || die "actool wrote no Assets.car for $svg"
+
+  mkdir -p "$out"
+  cp "$work/app.icns" "$work/car/Assets.car" "$out/"
+}
+
+package "$ICON/kyuzen.svg" "$MAC"
+package "$ICON/kyuzen-dev.svg" "$MAC/dev"
+
+# The release catalogue's source is committed beside what it compiles to.
+cp "$TMP/kyuzen/Assets.xcassets/AppIcon.appiconset/"appicon_*.png \
+   "$MAC/Assets.xcassets/AppIcon.appiconset/"
+cp "$TMP/kyuzen/Assets.xcassets/AppIcon.appiconset/appicon_256.png" \
+   "$MAC/Assets.xcassets/Icon.iconset/icon_256x256.png"
+cp "$TMP/kyuzen/Assets.xcassets/AppIcon.appiconset/appicon_512.png" \
+   "$MAC/Assets.xcassets/Icon.iconset/icon_256x256@2x.png"
+
+# The logos the browser shows of itself, on its About page and elsewhere.
+# They are the release icon in every build.
+for px in 16 24 48 64 128 256; do
+  draw "$ICON/kyuzen.svg" "$px" "$BRANDING/theme/product_logo_$px.png"
+done
+for pt in 16 32; do
+  draw "$ICON/kyuzen.svg" "$pt" "$BRANDING/default_100_percent/product_logo_$pt.png"
+  draw "$ICON/kyuzen.svg" "$((pt * 2))" "$BRANDING/default_200_percent/product_logo_$pt.png"
+done
+
+log "wrote the release icon to $MAC, the development icon to $MAC/dev, and the product logos"
