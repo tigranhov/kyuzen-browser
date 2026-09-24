@@ -27,9 +27,9 @@ Why: four things the application has to say about itself and could not.
 
      A development build and a release sit in the Dock beside each other and
      wore the same icon, so there was no telling which was which. Only a
-     release is an official build, so only a release gets the coloured icon;
-     everything else wears the grey pair in arcium/branding/theme/mac/dev,
-     drawn from it by scripts/make-dev-icon.
+     release is an official build, so only a release wears the violet icon;
+     everything else wears the amber one in arcium/branding/theme/mac/dev,
+     and scripts/make-icons draws both from arcium/branding/icon.
 
      Taken here because this is the only file those keys can live in: the
      code reads them from the outer application, and the values come from

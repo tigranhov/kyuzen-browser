@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" fill="none">
+  <defs>
+    <linearGradient id="body" x1="300" y1="100" x2="700" y2="924" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7466FF"/><stop offset="1" stop-color="#4935CC"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="380" y1="250" x2="620" y2="780" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF"/><stop offset="1" stop-color="#D9D2FF"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="512" y1="100" x2="512" y2="924" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FFFFFF" stop-opacity="0.48"/><stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.04"/><stop offset="1" stop-color="#261867" stop-opacity="0.24"/>
+    </linearGradient>
+    <filter id="dock-shadow" x="0" y="0" width="1024" height="1024" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="18" stdDeviation="18" flood-color="#000000" flood-opacity="0.22"/>
+      <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000000" flood-opacity="0.12"/>
+    </filter>
+    <filter id="relief" x="180" y="170" width="664" height="684" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
+      <feDropShadow dx="0" dy="16" stdDeviation="13" flood-color="#261867" flood-opacity="0.28"/>
+      <feDropShadow dx="0" dy="3" stdDeviation="2" flood-color="#261867" flood-opacity="0.18"/>
+    </filter>
+    <clipPath id="body-clip"><rect x="100" y="100" width="824" height="824" rx="185"/></clipPath>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#body)" filter="url(#dock-shadow)"/>
+  <g clip-path="url(#body-clip)">
+    <rect x="102" y="102" width="820" height="820" rx="183" stroke="url(#edge)" stroke-width="4"/>
+    <g filter="url(#relief)">
+      <!-- The solid limb and the drawn string share two asymmetric tips. -->
+      <path d="M 548 238 C 351 300 255 431 306 595 C 343 713 466 785 633 786 C 494 722 425 646 408 550 C 384 420 437 321 548 238 Z" fill="url(#mark)"/>
+      <path d="M 547 255 L 706 490 L 624 766" fill="none" stroke="#D9D2FF" stroke-width="38" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M 548 238 C 374 336 322 445 356 570 C 385 679 477 750 633 786 C 466 785 343 713 306 595 C 255 431 351 300 548 238 Z" fill="#AAA0FF" opacity="0.38"/>
+    </g>
+  </g>
+</svg>
