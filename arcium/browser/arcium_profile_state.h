@@ -15,6 +15,7 @@
 #include "arcium/browser/model_store.h"
 #include "arcium/browser/tab_binding.h"
 #include "base/files/file_path.h"
+#include "base/functional/callback.h"
 #include "base/supports_user_data.h"
 #include "base/task/sequenced_task_runner.h"
 #include "components/tabs/public/tab_interface.h"
@@ -92,6 +93,17 @@ class ArciumProfileState : public base::SupportsUserData::Data,
     return store_ && store_->load_succeeded();
   }
 
+  // Whether the load found no model file: a profile nobody has used yet,
+  // which is when the welcome shows itself. False until the load finishes,
+  // and always false off the record.
+  bool model_file_was_absent() const {
+    return store_ && store_->model_file_was_absent();
+  }
+  // Runs `done` once the model has loaded, or now if it already has. For
+  // whatever has to judge the model as the user's rather than the one-space
+  // placeholder it starts as.
+  void RunWhenModelLoaded(base::OnceClosure done);
+
   // The profile's archive — one SQLite file, shared by every window on the
   // profile, which is why it lives here rather than beside a window's
   // ArchiveService.
@@ -118,8 +130,9 @@ class ArciumProfileState : public base::SupportsUserData::Data,
 
  private:
   ArciumProfileState(const base::FilePath& profile_path, bool off_the_record);
-  // Runs when the load has applied the file: the binds BindWhenLoaded held.
-  void BindHeldTabs();
+  // Runs when the load has applied the file: the binds BindWhenLoaded held,
+  // then whatever RunWhenModelLoaded was asked to wait.
+  void OnModelLoaded();
 
   ArciumModel model_;
   TabBinding binding_;
@@ -133,6 +146,8 @@ class ArciumProfileState : public base::SupportsUserData::Data,
   // Restored tabs waiting for the model to load, each with the entry its
   // session named. Emptied once, when the load finishes.
   std::vector<std::pair<EntryId, tabs::TabHandle>> held_binds_;
+  // Emptied once, after the held binds, when the load finishes.
+  std::vector<base::OnceClosure> when_loaded_;
 };
 
 }  // namespace arcium

@@ -47,6 +47,10 @@ class ModelStore : public ArciumModel::Observer,
   // it had to move aside: the model is then empty, not the user's, and
   // anything that deletes what the model does not name must not run.
   bool load_succeeded() const { return load_succeeded_; }
+  // Whether Load() found no file at all, which is what a first launch looks
+  // like. False until the load finishes, and false for a file that was there
+  // but could not be read: somebody has used this profile before.
+  bool model_file_was_absent() const { return file_absent_; }
 
   // If there is a pending write, performs it immediately. For tests only:
   // production code relies on the debounced schedule, not a forced flush.
@@ -104,6 +108,7 @@ class ModelStore : public ArciumModel::Observer,
   bool saves_suppressed_ = false;
   bool load_finished_ = false;
   bool load_succeeded_ = false;
+  bool file_absent_ = false;
   base::WeakPtrFactory<ModelStore> weak_factory_{this};
 };
 

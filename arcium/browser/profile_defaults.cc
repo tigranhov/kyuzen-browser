@@ -20,6 +20,8 @@ void SetProfileDefaults(user_prefs::PrefRegistrySyncable* registry) {
   registry->SetDefaultPrefValue(
       prefs::kRestoreOnStartup,
       base::Value(SessionStartupPref::kPrefValueLast));
+  // Never synced: a second Mac is its own first launch.
+  registry->RegisterIntegerPref(kWelcomeStepPref, kWelcomeNotStarted);
 }
 
 }  // namespace arcium

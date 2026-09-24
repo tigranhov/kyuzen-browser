@@ -13,6 +13,7 @@
 #include "arcium/browser/model_store.h"
 #include "arcium/browser/tab_binding.h"
 #include "base/files/file_util.h"
+#include "base/functional/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
 #include "chrome/browser/profiles/profile.h"
@@ -204,6 +205,35 @@ TEST_F(ArciumProfileStateTest, IncognitoIsLoadedButNeverASuccessfulRead) {
   ArciumProfileState* state = ArciumProfileState::GetForBrowserContext(otr);
   EXPECT_TRUE(state->model_load_finished());
   EXPECT_FALSE(state->model_load_succeeded());
+}
+
+// Something that has to wait for the model -- the welcome, deciding whether
+// this is a first launch -- runs once it has loaded, and at once when it
+// already has.
+TEST_F(ArciumProfileStateTest, WaitingForTheModelRunsOnceItHasLoaded) {
+  ArciumProfileState* state =
+      ArciumProfileState::GetForBrowserContext(profile());
+  int runs = 0;
+  const bool loaded = state->model_load_finished();
+  state->RunWhenModelLoaded(base::BindOnce([](int* runs) { ++*runs; }, &runs));
+  EXPECT_EQ(loaded ? 1 : 0, runs);
+  task_environment()->RunUntilIdle();
+  ASSERT_TRUE(state->model_load_finished());
+  EXPECT_EQ(1, runs);
+  state->RunWhenModelLoaded(base::BindOnce([](int* runs) { ++*runs; }, &runs));
+  EXPECT_EQ(2, runs);
+}
+
+// The test profile's directory starts empty, so its first load is a fresh
+// install; incognito has no file and is never one.
+TEST_F(ArciumProfileStateTest, AFreshProfileIsAFreshInstallAndIncognitoIsNot) {
+  ArciumProfileState* state =
+      ArciumProfileState::GetForBrowserContext(profile());
+  task_environment()->RunUntilIdle();
+  EXPECT_TRUE(state->model_file_was_absent());
+  Profile* otr = profile()->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  EXPECT_FALSE(
+      ArciumProfileState::GetForBrowserContext(otr)->model_file_was_absent());
 }
 
 }  // namespace

@@ -51,5 +51,13 @@ TEST_F(ProfileDefaultsTest, AChoiceMadeInSettingsStillWins) {
   EXPECT_EQ(SessionStartupPref::DEFAULT, StartupType());
 }
 
+// The welcome's progress starts unset, which is what a profile nobody has
+// shown it to reads as.
+TEST_F(ProfileDefaultsTest, TheWelcomeStartsNotStarted) {
+  SetProfileDefaults(prefs_.registry());
+
+  EXPECT_EQ(kWelcomeNotStarted, prefs_.GetInteger(kWelcomeStepPref));
+}
+
 }  // namespace
 }  // namespace arcium

@@ -158,6 +158,7 @@ void ModelStore::OnLoaded(base::OnceClosure done, LoadResult result) {
   loading_ = false;
   load_finished_ = true;
   load_succeeded_ = understood || result.file_absent;
+  file_absent_ = result.file_absent;
   std::move(done).Run();
 }
 

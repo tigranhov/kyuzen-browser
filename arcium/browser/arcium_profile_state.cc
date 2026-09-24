@@ -56,7 +56,7 @@ ArciumProfileState* ArciumProfileState::GetForBrowserContext(
     // Reads on a background sequence; the sidebar draws live tabs meanwhile
     // and entries appear when the read completes. Once per profile, not per
     // window.
-    state->store_->Load(base::BindOnce(&ArciumProfileState::BindHeldTabs,
+    state->store_->Load(base::BindOnce(&ArciumProfileState::OnModelLoaded,
                                        base::Unretained(state)));
   }
   return state;
@@ -138,7 +138,15 @@ void ArciumProfileState::BindWhenLoaded(EntryId id, tabs::TabHandle tab) {
   held_binds_.emplace_back(id, tab);
 }
 
-void ArciumProfileState::BindHeldTabs() {
+void ArciumProfileState::RunWhenModelLoaded(base::OnceClosure done) {
+  if (model_load_finished()) {
+    std::move(done).Run();
+    return;
+  }
+  when_loaded_.push_back(std::move(done));
+}
+
+void ArciumProfileState::OnModelLoaded() {
   // Unretained above is safe: the store owns the callback, and the store is
   // this object's member.
   std::vector<std::pair<EntryId, tabs::TabHandle>> held;
@@ -155,6 +163,11 @@ void ArciumProfileState::BindHeldTabs() {
     // when restore finished, without this tab's entry, so this one has to
     // ask for a rebuild or the next launch would lose it again.
     binding_.Bind(id, tab);
+  }
+  std::vector<base::OnceClosure> waiting;
+  waiting.swap(when_loaded_);
+  for (base::OnceClosure& done : waiting) {
+    std::move(done).Run();
   }
 }
 

@@ -8,8 +8,9 @@ Why: how updates are allowed to arrive is one setting for the installation
      settings of that kind. A profile's startup behaviour is its own setting,
      and Arcium's default differs from Chromium's: a Today tab lives only in
      the session, so a profile that opens a new tab page at launch loses all
-     of them at every quit. The profile call sits last so every setting it
-     changes the default of is already registered.
+     of them at every quit. The same call registers the welcome's progress,
+     the one profile setting Arcium adds. The profile call sits last so every
+     setting it changes the default of is already registered.
 Delegates to: arcium::RegisterUpdatePrefs, arcium::SetProfileDefaults
 diff --git a/chrome/browser/prefs/BUILD.gn b/chrome/browser/prefs/BUILD.gn
 index cc6f81920f..72b3b5a66b 100644

@@ -386,5 +386,38 @@ TEST_F(ModelStoreTest, ACorruptFileFinishesButDoesNotSucceed) {
   EXPECT_FALSE(store.load_succeeded());
 }
 
+// A first launch has no file, which is how the welcome knows to show
+// itself; a file of any kind, even one it could not read, is not a first
+// launch.
+TEST_F(ModelStoreTest, OnlyAMissingFileIsAFreshInstall) {
+  {
+    ArciumModel model;
+    ModelStore store(&model, path());
+    EXPECT_FALSE(store.model_file_was_absent());
+    base::RunLoop loop;
+    store.Load(loop.QuitClosure());
+    loop.Run();
+    EXPECT_TRUE(store.model_file_was_absent());
+    model.AddSpace(u"Work");
+    store.SaveNowForTesting();
+    task_environment_.RunUntilIdle();
+  }
+  {
+    ArciumModel model;
+    ModelStore store(&model, path());
+    base::RunLoop loop;
+    store.Load(loop.QuitClosure());
+    loop.Run();
+    EXPECT_FALSE(store.model_file_was_absent());
+  }
+  ASSERT_TRUE(base::WriteFile(path(), "{ this is not json"));
+  ArciumModel model;
+  ModelStore store(&model, path());
+  base::RunLoop loop;
+  store.Load(loop.QuitClosure());
+  loop.Run();
+  EXPECT_FALSE(store.model_file_was_absent());
+}
+
 }  // namespace
 }  // namespace arcium
