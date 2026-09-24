@@ -65,8 +65,8 @@ half could not, and a half dropped just below its own row kept its split,
 because that drop moved nothing. At the owner's choice a split row now has a
 handle between its halves. Dragging the handle moves the split whole and
 keeps it; dragging either half pulls that half out and ends the split
-wherever it lands, in Today, Pinned, a folder or Favourites. Not yet walked
-by hand:
+wherever it lands, in Today, Pinned, a folder or Favourites. Rows 12-18 were
+walked by the owner on 2026-09-24 and all seven passed:
 
 | # | Do this | Look for |
 |---|---|---|

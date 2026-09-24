@@ -108,7 +108,7 @@ each page twice.
   split can be both moved whole and ended by dragging a half away, the same in
   Today and Pinned. Before, a Today half could be dragged out and a pinned
   half could not, and a half dropped just below its own row kept its split.
-  Hand rows 12 to 18 cover it. Fifteen tests were written for it, and
+  Hand rows 12 to 18 passed on 2026-09-24. Fifteen tests were written for it, and
   thirteen were watched to fail with the piece they cover broken. The test
   that a pair is never offered as a split target still passed with its guard
   removed, because the model already refuses to split a tab that is split;
@@ -117,7 +117,7 @@ each page twice.
 
 ## Owed
 
-- Perf, and hand rows 12 to 18.
+- Perf.
 
 Both whole suites ran on 2026-09-24 with the owner's approval: 800 unit
 tests and 93 browser tests, all passed. One browser test, a split coming back
