@@ -134,6 +134,18 @@ then just after moving the pointer into the archive list: 2 of 10 runs
 alone on this build, and 2 of 20 on the build from before this session's
 work, so it predates the split changes. It is reported, not fixed.
 
+It was fixed later the same day (b0ecf1e), and the pointer had nothing to do
+with it. That log line is printed once, at the first generated mouse event,
+so it only said the hang came after the archive button was clicked. Six hung
+runs sampled alive all stopped in the drain before the click in the bubble:
+`TaskEnvironment::RunUntilIdle()` halts the thread pool and then drains the
+main thread, the widgets' compositor draws on the main thread, and a draw
+needing a Skia pipeline not built yet waits for Dawn to compile it on the
+halted pool. The fixture now drains the main thread alone, which is all its
+tests wait for, and hides `task_environment()` so the old drain cannot come
+back. Alternating the two binaries under the same load, the old test hung 4
+times in 100 runs and the new one passed all 100, and 230 in a row in all.
+
 Both whole suites ran on 2026-09-24 with the owner's approval: 800 unit
 tests and 93 browser tests, all passed. One browser test, a split coming back
 in a space that is not on screen, ran past the launcher's 45-second limit on
