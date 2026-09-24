@@ -32,6 +32,7 @@
 #include "base/functional/callback_helpers.h"
 #include "base/logging.h"
 #include "base/memory/scoped_refptr.h"
+#include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "cc/paint/display_item_list.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -163,6 +164,22 @@ class SidebarViewsTest : public views::ViewsTestBase {
   }
 
  protected:
+  // Hidden, so that the drain which hangs here cannot be written again. A
+  // test waits with RunPendingMessages() instead.
+  //
+  // TaskEnvironment::RunUntilIdle() halts the thread pool and then drains
+  // this thread, and this thread is where the widgets' compositor draws. A
+  // draw that needs a pipeline Skia has not built yet waits for Dawn to
+  // compile it, and Dawn compiles on the thread pool, which stays halted
+  // until the drain returns — so neither ever does. It hung whenever a draw
+  // that needed a new pipeline fell inside that drain, which is now and then.
+  //
+  // Nothing these tests wait for is on the thread pool: a rename finishes
+  // from a task posted here, and the fake archive's reply and the bubble's
+  // teardown are posted here too. So draining this thread alone is the whole
+  // of what they need, and the pool stays free to finish the compile.
+  base::test::TaskEnvironment* task_environment() = delete;
+
   TabListView* MakeList(SidebarSection section) {
     list_ = contents_->AddChildView(
         std::make_unique<TabListView>(&model_, section));
@@ -553,7 +570,7 @@ TEST_F(SidebarViewsTest, EnterCommitsARenameThroughTheModel) {
   generator().PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
   // The finish is posted: it deletes the field, which must not happen inside
   // the key event the field is still on the stack of.
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   EXPECT_FALSE(row->is_renaming());
   ASSERT_EQ(1u, model_.rows().size());
@@ -574,7 +591,7 @@ TEST_F(SidebarViewsTest, EscapeAbandonsARename) {
   ASSERT_TRUE(field);
   field->SetText(u"Discarded");
   generator().PressAndReleaseKey(ui::VKEY_ESCAPE, ui::EF_NONE);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   EXPECT_FALSE(row->is_renaming());
   EXPECT_EQ(u"One", model_.rows()[0].title);
@@ -604,7 +621,7 @@ TEST_F(SidebarViewsTest, ARenameCommitsAgainstTheEntryItStartedOn) {
   model_.AddFolderWith(u"Work", {u"Two"});
   Refresh();
   ASSERT_EQ(u"One", second->row().title);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   ASSERT_EQ(2u, model_.rows().size());
   EXPECT_EQ(u"One", model_.rows()[0].title);
@@ -629,7 +646,7 @@ TEST_F(SidebarViewsTest, RepointingARowsSlotAbandonsItsOpenRename) {
 
   model_.AddFolderWith(u"Work", {u"Two"});
   Refresh();
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   EXPECT_FALSE(second->is_renaming());
   // Abandoned, so nothing was written anywhere.
@@ -658,7 +675,7 @@ TEST_F(SidebarViewsTest, RepointingAHeadersSlotAbandonsItsOpenRename) {
   model_.SetFolderPosition(work, 1);
   model_.SetFolderPosition(reading, 0);
   Refresh();
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   EXPECT_EQ(reading, first->folder().id);
   EXPECT_FALSE(first->is_renaming());
@@ -689,7 +706,7 @@ TEST_F(SidebarViewsTest, DeactivatingTheWindowLeavesTheRenameOpen) {
   ASSERT_FALSE(widget_->IsActive());
   // Whichever route the platform takes to the blur, this is where it lands.
   field->OnBlur();
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   EXPECT_TRUE(row->is_renaming());
   EXPECT_EQ(u"Half typed", field->GetText());
@@ -711,7 +728,7 @@ TEST_F(SidebarViewsTest, BlurInsideAnActiveWindowAbandonsTheRename) {
   field->SetText(u"Discarded");
   ASSERT_TRUE(widget_->IsActive());
   field->OnBlur();
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   EXPECT_FALSE(row->is_renaming());
   EXPECT_EQ(u"One", model_.rows()[0].title);
@@ -731,7 +748,7 @@ TEST_F(SidebarViewsTest, RenamingAFolderHeaderCommitsThroughTheModel) {
   ASSERT_TRUE(field);
   field->SetText(u"Renamed");
   PressKey(field, ui::VKEY_RETURN);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   ASSERT_EQ(1u, model_.folders().size());
   EXPECT_EQ(u"Renamed", model_.folders()[0].name);
@@ -749,7 +766,7 @@ TEST_F(SidebarViewsTest, AnEmptyRenameIsNotCommitted) {
   ASSERT_TRUE(field);
   field->SetText(std::u16string());
   PressKey(field, ui::VKEY_RETURN);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   EXPECT_EQ(u"One", model_.rows()[0].title);
 }
@@ -887,7 +904,7 @@ TEST_F(SidebarViewsTest, F2RenamesAFolderHeader) {
 
   FocusedField()->SetText(u"Renamed");
   generator().PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   ASSERT_EQ(1u, model_.folders().size());
   EXPECT_EQ(u"Renamed", model_.folders()[0].name);
 }
@@ -1164,7 +1181,7 @@ TEST_F(SidebarViewsTest, EnterCommitsAFavouriteRenameThroughTheModel) {
   ASSERT_TRUE(field);
   field->SetText(u"Renamed");
   generator().PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   ASSERT_EQ(1u, model_.rows().size());
   EXPECT_EQ(u"Renamed", model_.rows()[0].title);
@@ -1208,7 +1225,7 @@ TEST_F(SidebarViewsTest, RepointingAFavouriteTilesIndexAbandonsItsOpenRename) {
     EXPECT_TRUE(tile->GetVisible());
   }
   generator().PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   // Abandoned: nothing was renamed anywhere in the model.
   for (const SidebarRow& row : model_.rows()) {
@@ -1265,7 +1282,7 @@ TEST_F(SidebarViewsTest,
 
   field->SetText(u"Renamed");
   generator().PressAndReleaseKey(ui::VKEY_RETURN, ui::EF_NONE);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   views::test::RunScheduledLayout(widget_.get());
 
   EXPECT_TRUE(one->GetVisible());
@@ -1311,7 +1328,7 @@ TEST_F(SidebarViewsTest, AbandoningAFavouriteRenameRestoresTheRowItCovered) {
 
   field->SetText(u"Renamed");
   generator().PressAndReleaseKey(ui::VKEY_ESCAPE, ui::EF_NONE);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   views::test::RunScheduledLayout(widget_.get());
 
   EXPECT_TRUE(one->GetVisible());
@@ -2003,7 +2020,7 @@ TEST_F(SidebarViewsTest, TheArchiveListFillsWhenTheReadComesBack) {
   EXPECT_EQ(0u, list->row_count_for_testing());
   EXPECT_EQ(u"", list->status_message_for_testing());
 
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   EXPECT_EQ(2u, list->row_count_for_testing());
   EXPECT_EQ(u"", list->status_message_for_testing());
 }
@@ -2017,7 +2034,7 @@ TEST_F(SidebarViewsTest, ClickingAnArchivedRowReopensItAndDropsIt) {
   model_.AddArchived(u"Two", "https://two.example/", now - base::Hours(5));
   SidebarView* sidebar = MakeSidebar();
   OpenArchiveList(sidebar);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   ArchiveListView* list = sidebar->archive_list_for_testing();
   ASSERT_EQ(2u, list->row_count_for_testing());
 
@@ -2038,7 +2055,7 @@ TEST_F(SidebarViewsTest, ClickingAnArchivedRowReopensItAndDropsIt) {
 TEST_F(SidebarViewsTest, AnEmptyArchiveSaysSo) {
   SidebarView* sidebar = MakeSidebar();
   OpenArchiveList(sidebar);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   ArchiveListView* list = sidebar->archive_list_for_testing();
   ASSERT_TRUE(list);
@@ -2060,7 +2077,7 @@ TEST_F(SidebarViewsTest, AnUnreadableArchiveSaysSoRatherThanNothingArchived) {
   ASSERT_TRUE(sidebar->divider()->archive_button());
 
   OpenArchiveList(sidebar);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   ArchiveListView* list = sidebar->archive_list_for_testing();
   ASSERT_TRUE(list);
   EXPECT_EQ(0u, list->row_count_for_testing());
@@ -2088,14 +2105,14 @@ TEST_F(SidebarViewsTest, ClosingTheListWhileTheReadIsInFlightIsSafe) {
   ASSERT_TRUE(sidebar->archive_list_for_testing());
 
   // The request has left the view and the answer is parked, not delivered.
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   ASSERT_EQ(1u, model_.held_archive_reply_count());
   ASSERT_TRUE(model_.has_pending_archive_request());
   ASSERT_EQ(0u, sidebar->archive_list_for_testing()->row_count_for_testing());
 
   // What close-on-deactivate does, and then the turn that frees the delegate.
   CloseArchiveList(sidebar);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   ASSERT_EQ(nullptr, sidebar->archive_list_for_testing());
 
   // Now the read comes back, into a delegate that no longer exists. Without
@@ -2118,7 +2135,7 @@ TEST_F(SidebarViewsTest, OpeningTheListTwiceReusesTheOpenBubble) {
                      base::Time::Now() - base::Hours(2));
   SidebarView* sidebar = MakeSidebar();
   OpenArchiveList(sidebar);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   ArchiveListView* first = sidebar->archive_list_for_testing();
   ASSERT_TRUE(first);
   ASSERT_EQ(1u, first->row_count_for_testing());
@@ -2133,7 +2150,7 @@ TEST_F(SidebarViewsTest, OpeningTheListTwiceReusesTheOpenBubble) {
   EXPECT_EQ(1u, first->row_count_for_testing());
 
   // And it survives the turn: nothing was closed, so nothing frees it.
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   EXPECT_EQ(first, sidebar->archive_list_for_testing());
 }
 
@@ -2144,7 +2161,7 @@ TEST_F(SidebarViewsTest, OpeningTheListTwiceReusesTheOpenBubble) {
 TEST_F(SidebarViewsTest, PressingTheButtonWhileTheListIsClosingOpensNothing) {
   SidebarView* sidebar = MakeSidebar();
   OpenArchiveList(sidebar);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   ArchiveListView* first = sidebar->archive_list_for_testing();
   ASSERT_TRUE(first);
 
@@ -2154,7 +2171,7 @@ TEST_F(SidebarViewsTest, PressingTheButtonWhileTheListIsClosingOpensNothing) {
   OpenArchiveList(sidebar);
   EXPECT_EQ(first, sidebar->archive_list_for_testing());
 
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
   EXPECT_EQ(nullptr, sidebar->archive_list_for_testing());
 
   // And the next press opens a fresh one, which issues its own read.
@@ -2199,7 +2216,7 @@ TEST_F(SidebarViewsTest, DISABLED_ArchiveListBubbleRendersItsRows) {
                      now - base::Days(4));
   SidebarView* sidebar = MakeSidebar();
   OpenArchiveList(sidebar);
-  task_environment()->RunUntilIdle();
+  RunPendingMessages();
 
   ArchiveListView* list = sidebar->archive_list_for_testing();
   ASSERT_TRUE(list);
