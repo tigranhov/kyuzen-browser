@@ -24,7 +24,9 @@
 #include "base/functional/bind.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/gfx/animation/tween.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/layout/box_layout.h"
@@ -58,25 +60,41 @@ TabListView::TabListView(SidebarModel* model, SidebarSection section)
 void TabListView::Layout(PassKey) {
   LayoutSuperclass<views::View>(this);
   // A split is one row: the second half is left out of the vertical layout,
-  // and the two share the slot the first half was given.
-  for (size_t i = 1; i < rows_.size(); ++i) {
-    if (!rows_[i]->row().split_joins_previous ||
-        !rows_[i - 1]->row().split_joins_next) {
-      continue;
-    }
-    const gfx::Rect slot = rows_[i - 1]->bounds();
-    const int left_width = (slot.width() - metrics::kSplitHalfGap) / 2;
-    rows_[i - 1]->SetBounds(slot.x(), slot.y(), left_width, slot.height());
-    rows_[i]->SetBounds(
-        slot.x() + left_width + metrics::kSplitHalfGap, slot.y(),
-        slot.right() - (slot.x() + left_width + metrics::kSplitHalfGap),
-        slot.height());
-  }
-  // Each grip in the gap its row leaves between the halves.
+  // and the two share the slot the first half was given. Every split has a
+  // grip, so the grips name them.
   for (size_t g = 0; g < grips_.size() && g < grip_rows_.size(); ++g) {
-    const TabRowView* first = rows_[grip_rows_[g]];
-    grips_[g]->SetBounds(first->bounds().right(), first->y(),
-                         metrics::kSplitHalfGap, first->height());
+    PlaceSplit(g, rows_[grip_rows_[g]]->bounds());
+  }
+}
+
+void TabListView::PlaceSplit(size_t grip, const gfx::Rect slot) {
+  // `slot` is a copy: Layout passes the first half's own bounds, which the
+  // first SetBounds below changes.
+  const int gap = gfx::Tween::IntValueBetween(grips_[grip]->openness(),
+                                              metrics::kSplitHalfGap,
+                                              metrics::kSplitHalfGapOpen);
+  const int left_width = (slot.width() - gap) / 2;
+  const int right_x = slot.x() + left_width + gap;
+  rows_[grip_rows_[grip]]->SetBounds(slot.x(), slot.y(), left_width,
+                                     slot.height());
+  grips_[grip]->SetBounds(slot.x() + left_width, slot.y(), gap, slot.height());
+  rows_[grip_rows_[grip] + 1]->SetBounds(right_x, slot.y(),
+                                         slot.right() - right_x, slot.height());
+}
+
+void TabListView::OnGripOpenChanged() {
+  // A layout on its way places every split anyway. Otherwise each split is
+  // placed again inside the slot its halves already span, which moves one
+  // row and nothing around it.
+  if (needs_layout()) {
+    return;
+  }
+  for (size_t g = 0; g < grips_.size() && g < grip_rows_.size(); ++g) {
+    const TabRowView* left = rows_[grip_rows_[g]];
+    const TabRowView* right = rows_[grip_rows_[g] + 1];
+    PlaceSplit(
+        g, gfx::Rect(left->x(), left->y(), right->bounds().right() - left->x(),
+                     left->height()));
   }
 }
 
@@ -107,6 +125,8 @@ SplitGripView* TabListView::MakeGrip() {
                                               base::Unretained(this));
   delegate.hover_changed =
       base::BindRepeating(&TabListView::UpdateGrips, base::Unretained(this));
+  delegate.open_changed = base::BindRepeating(&TabListView::OnGripOpenChanged,
+                                              base::Unretained(this));
   SplitGripView* grip =
       AddChildView(std::make_unique<SplitGripView>(std::move(delegate)));
   // Placed by Layout in the gap between a split row's halves.

@@ -107,6 +107,7 @@ source_set("sidebar") {
     "//ui/base/dragdrop/mojom",
     "//ui/compositor",
     "//ui/gfx",
+    "//ui/gfx/animation",
     "//ui/gfx/codec",
     "//ui/menus",
   ]

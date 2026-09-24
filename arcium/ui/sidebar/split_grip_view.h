@@ -9,6 +9,8 @@
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "base/functional/callback.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/gfx/animation/animation_delegate.h"
+#include "ui/gfx/animation/slide_animation.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/drag_controller.h"
 #include "ui/views/view.h"
@@ -17,10 +19,12 @@ namespace arcium {
 
 // The handle between the two halves of a split row. Dragging it carries the
 // pair, which keeps the split and moves it; dragging either half pulls that
-// half out and ends it. Drawn only while the pointer is over the row, and
-// sitting in the gap the row leaves between its halves, so it takes nothing
-// from either one.
-class SplitGripView : public views::View, public views::DragController {
+// half out and ends it. At rest the halves sit almost together and the grip
+// is a sliver between them; while the pointer is over the row they part to
+// make room and the grip fades in, and they close again when it leaves.
+class SplitGripView : public views::View,
+                      public views::DragController,
+                      public gfx::AnimationDelegate {
   METADATA_HEADER(SplitGripView, views::View)
 
  public:
@@ -29,6 +33,8 @@ class SplitGripView : public views::View, public views::DragController {
     base::RepeatingCallback<void(const RowDragData& payload)> drag_started;
     // The pointer came onto the grip or left it.
     base::RepeatingClosure hover_changed;
+    // The room between the halves grew or shrank a step.
+    base::RepeatingClosure open_changed;
   };
 
   explicit SplitGripView(Delegate delegate);
@@ -42,10 +48,13 @@ class SplitGripView : public views::View, public views::DragController {
   void SetPair(const SidebarRow& first, const SidebarRow& second);
   const RowDragData& payload() const { return payload_; }
 
-  // Whether the handle is drawn. The grip is always there to be grabbed;
-  // this is only whether it shows.
+  // Whether the row is making room for the handle. Opening and closing
+  // slide, unless the system asks for reduced motion.
   void SetShown(bool shown);
   bool shown() const { return shown_; }
+  // How far open the room is, from 0 at rest to 1 with the handle drawn.
+  double openness() const { return open_.GetCurrentValue(); }
+  gfx::SlideAnimation* animation_for_testing() { return &open_; }
   bool hovered() const { return hovered_; }
 
   // views::View:
@@ -64,6 +73,10 @@ class SplitGripView : public views::View, public views::DragController {
                            const gfx::Point& press_pt,
                            const gfx::Point& p) override;
 
+  // gfx::AnimationDelegate:
+  void AnimationProgressed(const gfx::Animation* animation) override;
+  void AnimationEnded(const gfx::Animation* animation) override;
+
  private:
   Delegate delegate_;
   RowDragData payload_;
@@ -71,6 +84,7 @@ class SplitGripView : public views::View, public views::DragController {
   SidebarRow image_row_;
   bool shown_ = false;
   bool hovered_ = false;
+  gfx::SlideAnimation open_{this};
 };
 
 }  // namespace arcium

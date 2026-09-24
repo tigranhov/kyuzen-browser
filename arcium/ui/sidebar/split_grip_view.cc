@@ -4,17 +4,22 @@
 
 #include "arcium/ui/sidebar/split_grip_view.h"
 
+#include <algorithm>
 #include <utility>
 
 #include "arcium/ui/sidebar/row_drag_image.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
+#include "base/numerics/safe_conversions.h"
+#include "base/time/time.h"
 #include "cc/paint/paint_flags.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/cursor/cursor.h"
 #include "ui/base/cursor/mojom/cursor_type.mojom-shared.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/color/color_provider.h"
+#include "ui/gfx/animation/animation.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/point_f.h"
 
@@ -25,6 +30,7 @@ namespace {
 // Two columns of three dots, the usual mark for "grab here".
 constexpr float kDotRadius = 1.25f;
 constexpr int kDotStep = 4;
+constexpr base::TimeDelta kOpenDuration = base::Milliseconds(150);
 
 }  // namespace
 
@@ -50,17 +56,27 @@ void SplitGripView::SetShown(bool shown) {
     return;
   }
   shown_ = shown;
-  SchedulePaint();
+  // Reduced motion gets the end state at once, which a zero length does.
+  open_.SetSlideDuration(gfx::Animation::ShouldRenderRichAnimation()
+                             ? kOpenDuration
+                             : base::TimeDelta());
+  shown ? open_.Show() : open_.Hide();
 }
 
 void SplitGripView::OnPaint(gfx::Canvas* canvas) {
   views::View::OnPaint(canvas);
-  if (!shown_) {
+  // The dots come in over the second half of the opening, once there is room
+  // for them, and go first on the way back.
+  const double alpha = std::clamp(openness() * 2 - 1, 0.0, 1.0);
+  if (alpha <= 0) {
     return;
   }
+  const SkColor color =
+      GetColorProvider()->GetColor(kColorArciumRowTextSecondary);
   cc::PaintFlags flags;
   flags.setAntiAlias(true);
-  flags.setColor(GetColorProvider()->GetColor(kColorArciumRowTextSecondary));
+  flags.setColor(
+      SkColorSetA(color, base::ClampRound<U8CPU>(SkColorGetA(color) * alpha)));
   const gfx::PointF center(width() / 2.0f, height() / 2.0f);
   for (int column : {-1, 1}) {
     for (int row : {-1, 0, 1}) {
@@ -111,6 +127,17 @@ bool SplitGripView::CanStartDragForView(views::View* sender,
                                         const gfx::Point& press_pt,
                                         const gfx::Point& p) {
   return true;
+}
+
+void SplitGripView::AnimationProgressed(const gfx::Animation* animation) {
+  SchedulePaint();
+  if (delegate_.open_changed) {
+    delegate_.open_changed.Run();
+  }
+}
+
+void SplitGripView::AnimationEnded(const gfx::Animation* animation) {
+  AnimationProgressed(animation);
 }
 
 BEGIN_METADATA(SplitGripView)

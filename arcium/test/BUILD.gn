@@ -102,6 +102,7 @@ test("arcium_unittests") {
     "//ui/base/dragdrop:types",
     "//ui/base/dragdrop/mojom",
     "//ui/compositor",
+    "//ui/gfx:test_support",
     "//ui/views:test_support",
   ]
 }

@@ -14,6 +14,7 @@
 #include "arcium/ui/playground/fake_sidebar_model.h"
 #include "arcium/ui/sidebar/favorites_grid_view.h"
 #include "arcium/ui/sidebar/folder_header_view.h"
+#include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "arcium/ui/sidebar/split_grip_view.h"
 #include "arcium/ui/sidebar/tab_list_view.h"
@@ -23,7 +24,10 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
+#include "ui/gfx/animation/animation.h"
+#include "ui/gfx/animation/animation_test_api.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/scoped_animation_duration_scale_mode.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
 
@@ -76,6 +80,12 @@ class SidebarSplitGripTest : public test::SplitDropFixture {
     return nullptr;
   }
 
+  // The room between a split row's halves, as laid out.
+  int Gap(TabRowView* left, TabRowView* right) {
+    views::test::RunScheduledLayout(widget_.get());
+    return right->x() - left->bounds().right();
+  }
+
   std::vector<std::u16string> Titles(SidebarSection section) {
     std::vector<std::u16string> titles;
     for (const SidebarRow& row : model_.rows()) {
@@ -108,6 +118,65 @@ TEST_F(SidebarSplitGripTest, ASplitRowShowsItsGripBetweenItsHalvesOnHover) {
   EXPECT_TRUE(grip->shown());
   Hover(two, false);
   EXPECT_FALSE(grip->shown());
+}
+
+// At rest the halves sit together. Pointing at the row pushes them apart to
+// make room for the grip, a step at a time, and leaving closes them again.
+TEST_F(SidebarSplitGripTest, ASplitRowOpensRoomForItsGripOnlyUnderThePointer) {
+  const auto rich = gfx::AnimationTestApi::SetRichAnimationRenderMode(
+      gfx::Animation::RichAnimationRenderMode::FORCE_ENABLED);
+  // Views tests on Mac run every animation at zero length unless told not to.
+  gfx::ScopedAnimationDurationScaleMode normal_speed(
+      gfx::ScopedAnimationDurationScaleMode::NORMAL_DURATION);
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, true);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kToday, false);
+  MakeLists();
+  Split(u"One", u"Two");
+  SplitGripView* grip = today_->grips_for_testing()[0];
+  TabRowView* one = RowTitled(today_, u"One");
+  TabRowView* two = RowTitled(today_, u"Two");
+  ASSERT_TRUE(one && two);
+  const int left = one->x();
+  const int right = two->bounds().right();
+  EXPECT_EQ(metrics::kSplitHalfGap, Gap(one, two));
+
+  Hover(two, true);
+  const base::TimeTicks start = base::TimeTicks::Now();
+  gfx::AnimationTestApi opening(grip->animation_for_testing());
+  opening.SetStartTime(start);
+  opening.Step(start + base::Milliseconds(40));
+  EXPECT_GT(Gap(one, two), metrics::kSplitHalfGap);
+  EXPECT_LT(Gap(one, two), metrics::kSplitHalfGapOpen);
+  opening.Step(start + base::Seconds(1));
+  EXPECT_EQ(metrics::kSplitHalfGapOpen, Gap(one, two));
+  // The grip fills the room, and the row keeps its outer edges.
+  EXPECT_EQ(one->bounds().right(), grip->x());
+  EXPECT_EQ(two->x(), grip->bounds().right());
+  EXPECT_EQ(left, one->x());
+  EXPECT_EQ(right, two->bounds().right());
+
+  Hover(two, false);
+  gfx::AnimationTestApi closing(grip->animation_for_testing());
+  closing.SetStartTime(start + base::Seconds(2));
+  closing.Step(start + base::Seconds(3));
+  EXPECT_EQ(metrics::kSplitHalfGap, Gap(one, two));
+}
+
+TEST_F(SidebarSplitGripTest, WithReducedMotionTheRoomOpensAtOnce) {
+  const auto still = gfx::AnimationTestApi::SetRichAnimationRenderMode(
+      gfx::Animation::RichAnimationRenderMode::FORCE_DISABLED);
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, true);
+  model_.AddTab(u"Two", "https://two.example/", SidebarSection::kToday, false);
+  MakeLists();
+  Split(u"One", u"Two");
+  TabRowView* one = RowTitled(today_, u"One");
+  TabRowView* two = RowTitled(today_, u"Two");
+  ASSERT_TRUE(one && two);
+
+  Hover(one, true);
+  EXPECT_EQ(metrics::kSplitHalfGapOpen, Gap(one, two));
+  Hover(one, false);
+  EXPECT_EQ(metrics::kSplitHalfGap, Gap(one, two));
 }
 
 TEST_F(SidebarSplitGripTest, ARowSharingNothingHasNoGrip) {

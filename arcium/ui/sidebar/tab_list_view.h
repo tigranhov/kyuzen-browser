@@ -19,6 +19,7 @@
 #include "base/scoped_observation.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/gfx/geometry/point.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/views/view.h"
 
 namespace ui {
@@ -237,6 +238,11 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // Shows each grip while either half of its row, or the grip, is under the
   // pointer.
   void UpdateGrips();
+  // Lays out the split named by `grip` across `slot`: its halves either side
+  // of a gap as wide as the grip is open, and the grip in the gap.
+  void PlaceSplit(size_t grip, gfx::Rect slot);
+  // One step of a grip opening or closing.
+  void OnGripOpenChanged();
   std::unique_ptr<FolderHeaderView> MakeHeader();
 
   raw_ptr<SidebarModel> model_;
