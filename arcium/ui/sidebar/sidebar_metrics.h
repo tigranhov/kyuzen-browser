@@ -34,9 +34,22 @@ inline constexpr int kPillIconSize = 14;
 // Zen's own stylesheet fades these over 150ms. Copied rather than guessed.
 inline constexpr int kPillRevealMs = 150;
 // The pinned-extension buttons above the favourites. Smaller than a favourite
-// tile on purpose: an extension is a control, not a destination.
-inline constexpr int kExtensionButtonSize = 26;
-inline constexpr int kExtensionButtonGap = 6;
+// tile on purpose: an extension is a control, not a destination. Chromium
+// draws the icon at 16 whatever the button, so the button fits it closely:
+// 4 round the icon and 4 between buttons leave 12 between icons, and eight to
+// a line. Codex Astra's compact proposal, chosen by the owner on 2026-09-25.
+inline constexpr int kExtensionButtonSize = 24;
+inline constexpr int kExtensionButtonGap = 4;
+// Where the first button starts inside the row, so that its icon sits in the
+// column the favicons below make: a row's padding plus the margin it gives
+// its icon, less the room round the icon in its button.
+inline constexpr int kExtensionRowInset =
+    kRowHorizontalPadding + kRowIconTextGap / 2 -
+    (kExtensionButtonSize - kFaviconSize) / 2;
+// The clear space above and below the row. Nearer the pill than what
+// follows, because the row reads as one of the controls above it.
+inline constexpr int kExtensionRowSpaceAbove = 4;
+inline constexpr int kExtensionRowSpaceBelow = 6;
 // The page's own corners. It runs to the window's edges, so the two on the
 // window side land on the corners macOS already rounds and read as one
 // curve; the two against the sidebar are where this shows as a choice.

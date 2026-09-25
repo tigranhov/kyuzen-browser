@@ -19,7 +19,7 @@ namespace arcium {
 // Chromium already builds a strip of extension buttons, and this is where
 // that strip is put and how it is laid out -- in lines that wrap, because the
 // strip's own layout is one line that drops whatever does not fit, and a
-// sidebar this narrow holds about seven.
+// sidebar this narrow holds eight.
 //
 // It names no extension type, because this target must not depend on
 // //chrome: it hosts a view and positions that view's children.

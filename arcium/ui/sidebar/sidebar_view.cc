@@ -56,6 +56,10 @@ constexpr base::TimeDelta kSwitchSlideDuration = base::Milliseconds(200);
 // their first movement, not by this; see SidebarView::OnScrollEvent.
 constexpr float kSwipeThreshold = metrics::kSidebarWidth / 4;
 
+// The margin every child of the sidebar carries above and below, so two
+// neighbours sit twice this apart.
+constexpr int kChildMargin = 3;
+
 }  // namespace
 
 // Hands SidebarView the scroll events headed for any view inside it, before
@@ -88,7 +92,7 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   layout->SetOrientation(views::LayoutOrientation::kVertical)
       .SetCrossAxisAlignment(views::LayoutAlignment::kStretch)
       .SetInteriorMargin(gfx::Insets(metrics::kSidebarPadding))
-      .SetDefault(views::kMarginsKey, gfx::Insets::VH(3, 0));
+      .SetDefault(views::kMarginsKey, gfx::Insets::VH(kChildMargin, 0));
   auto tint = std::make_unique<TintBackground>();
   tint_ = tint.get();
   SetBackground(std::move(tint));
@@ -109,6 +113,12 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
   // Between the address and the favourites: an extension is a control you
   // reach for, which puts it nearer the controls than the destinations.
   extensions_row_ = AddChildView(std::make_unique<ExtensionsRowView>());
+  // Its neighbours keep their own margins, so the row's make up the rest. An
+  // empty row is hidden by the layout, and its margins go with it.
+  extensions_row_->SetProperty(
+      views::kMarginsKey,
+      gfx::Insets::TLBR(metrics::kExtensionRowSpaceAbove - kChildMargin, 0,
+                        metrics::kExtensionRowSpaceBelow - kChildMargin, 0));
   favorites_ = AddChildView(std::make_unique<FavoritesGridView>(model_));
 
   // Pinned, the divider and Today scroll as one column. Pinned outside the

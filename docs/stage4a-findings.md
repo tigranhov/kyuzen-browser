@@ -122,6 +122,14 @@ written first and watched to fail.
   button still lights up by itself
   (`ExtensionsRowTest.TheStripDrawsNoOutlineAroundItself`).
 
+The owner then found the row roomier than its icons, which was the design and
+not a defect: 26-point buttons 6 apart round icons Chromium always draws at
+16, so 16 points of nothing between two icons. Codex Astra proposed two
+tighter layouts and the owner took the compact one: 24-point buttons 4 apart,
+12 between icons, eight to a line, the first icon in the favicons' column, 4
+above the row and 6 below (`ExtensionsRowLayoutTest`). A badge's outer edge
+may lose 2 points to the smaller button, which the proposal accepted.
+
 ## What this stage does not cover
 
 The command bar's non-navigation half — commands rather than destinations —

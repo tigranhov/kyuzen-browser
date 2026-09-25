@@ -80,8 +80,8 @@ void ExtensionsRowView::Layout(PassKey) {
                         metrics::kExtensionButtonSize);
       continue;
     }
-    button->SetBounds((index % per_line) * step, (index / per_line) * step,
-                      metrics::kExtensionButtonSize,
+    button->SetBounds(metrics::kExtensionRowInset + (index % per_line) * step,
+                      (index / per_line) * step, metrics::kExtensionButtonSize,
                       metrics::kExtensionButtonSize);
     ++index;
   }
@@ -123,7 +123,7 @@ void ExtensionsRowView::OnViewVisibilityChanged(views::View* observed,
 
 int ExtensionsRowView::ButtonsPerLine(int width) const {
   return std::max(
-      1, (width + metrics::kExtensionButtonGap) /
+      1, (width - metrics::kExtensionRowInset + metrics::kExtensionButtonGap) /
              (metrics::kExtensionButtonSize + metrics::kExtensionButtonGap));
 }
 

@@ -14,6 +14,7 @@ test("arcium_unittests") {
     "cold_favicon_cache_unittest.cc",
     "fake_update_status.h",
     "fake_updater_backend.h",
+    "extensions_row_unittest.cc",
     "folder_tree_unittest.cc",
     "home_boundary_throttle_unittest.cc",
     "home_boundary_unittest.cc",

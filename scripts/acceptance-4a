@@ -150,7 +150,7 @@ cat <<EOF
          come back, Cmd+T and type its title: the row must say it is an open
          tab, and Enter must switch to it -- and to its space -- rather than
          loading a second copy.
-  A4a.7  Pin nine extensions. Seven fit on a line, the row wraps to a second,
+  A4a.7  Pin nine extensions. Eight fit on a line, the row wraps to a second,
          and none are clipped or missing.
 
   Close the browser to stop the site.
