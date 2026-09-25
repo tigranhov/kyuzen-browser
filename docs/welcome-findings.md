@@ -42,7 +42,7 @@ holding the welcome's step.
 beside it, drawn from the approved mockups with the agreed changes. It knows
 nothing of the browser and runs in the playground on a fake.
 
-**The browser side** (this commit). The card shows when a fresh install's
+**The browser side** (`183a6e9`). The card shows when a fresh install's
 model has loaded, or at the step a quit left it on, and never for someone
 updating. It looks for Zen and Arc on the thread pool once the card is up,
 imports into this profile's model, moves the window to the first space that
