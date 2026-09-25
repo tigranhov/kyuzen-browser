@@ -9,12 +9,23 @@
 
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/view_class_properties.h"
 
 namespace arcium {
 
-ExtensionsRowView::ExtensionsRowView() = default;
+ExtensionsRowView::ExtensionsRowView() {
+  // The row's edge has to cut off what the strip draws beyond it, and a view's
+  // bounds clip only what paints into its parent. The strip paints to a layer
+  // of its own and so does any of its buttons while it is lit, which escaped:
+  // the menu button tucked above the row, lit while the menu hanging from it
+  // was open, sat over the pill as a large puzzle piece. A layer that masks to
+  // the row's bounds clips those too.
+  SetPaintToLayer();
+  layer()->SetFillsBoundsOpaquely(false);
+  layer()->SetMasksToBounds(true);
+}
 
 ExtensionsRowView::~ExtensionsRowView() = default;
 
@@ -60,9 +71,10 @@ void ExtensionsRowView::Layout(PassKey) {
       continue;
     }
     if (button == skipped_) {
-      // Above the row, where the row's own bounds cut it off. Left where the
+      // Above the row, where the row's own layer cuts it off. Left where the
       // strip can still call it visible, because arguing with the strip about
-      // that ends with it hiding everything else too.
+      // that ends with it hiding everything else too -- and at its full size,
+      // because a button with no room makes the strip drop pinned ones.
       button->SetBounds(0, -metrics::kExtensionButtonSize,
                         metrics::kExtensionButtonSize,
                         metrics::kExtensionButtonSize);

@@ -17,7 +17,10 @@
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_desktop.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_action_view.h"
 #include "content/public/test/browser_test.h"
+#include "ui/compositor/layer.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/views/animation/ink_drop.h"
+#include "ui/views/animation/ink_drop_host.h"
 #include "ui/views/layout/animating_layout_manager_test_util.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
@@ -51,6 +54,48 @@ IN_PROC_BROWSER_TEST_F(ExtensionsRowTest,
   EXPECT_FALSE(Row()->GetLocalBounds().Intersects(
       Container()->GetExtensionsButton()->bounds()))
       << "the strip's menu button is drawn inside the row";
+
+  // Nor over the pill while it is lit, as it is while the menu hanging from
+  // it is open. A lit button draws on a layer of its own, and the row's edge
+  // cut off only what painted into the strip, so a large puzzle piece sat
+  // over the pill.
+  views::View* menu = Container()->GetExtensionsButton();
+  views::InkDrop::Get(menu)->GetInkDrop()->SnapToActivated();
+  // The button puts its highlight and its icon on layers of child views.
+  std::vector<ui::Layer*> layers;
+  std::vector<views::View*> pending = {menu};
+  while (!pending.empty()) {
+    views::View* view = pending.back();
+    pending.pop_back();
+    if (view->layer()) {
+      layers.push_back(view->layer());
+    }
+    for (views::View* child : view->children()) {
+      pending.push_back(child);
+    }
+  }
+  ASSERT_FALSE(layers.empty()) << "a lit button draws on a layer of its own";
+  ASSERT_TRUE(Row()->layer());
+  ASSERT_TRUE(Row()->layer()->GetMasksToBounds())
+      << "the row does not cut off layers at its edge";
+  for (ui::Layer* layer : layers) {
+    EXPECT_TRUE(Row()->layer()->Contains(layer))
+        << "the lit menu button draws outside the row, over the pill";
+  }
+}
+
+IN_PROC_BROWSER_TEST_F(ExtensionsRowTest, TheStripDrawsNoOutlineAroundItself) {
+  const std::string id = LoadTestExtension();
+  PinExtension(id);
+  RunLoopUntilIdle();
+  views::test::WaitForAnimatingLayoutManager(Container());
+
+  // Chromium outlines the strip while the pointer is over it, on a layer of
+  // its own beside the strip's. In a toolbar the outline hugs the icons; here
+  // the strip is as wide as the sidebar, so it drew a large, mostly empty box
+  // around a few small buttons, with the buttons in its corner.
+  EXPECT_TRUE(Container()->GetLayersInOrder(views::ViewLayer::kExclude).empty())
+      << "the strip still carries its outline";
 }
 
 IN_PROC_BROWSER_TEST_F(ExtensionsRowTest, UnpinningTakesItBackOut) {

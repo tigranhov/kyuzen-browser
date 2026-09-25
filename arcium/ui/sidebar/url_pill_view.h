@@ -61,6 +61,7 @@ class UrlPillView : public views::View, public views::FocusChangeListener {
   bool has_hosted_view() const { return hosted_ != nullptr; }
 
   const std::u16string& label_for_testing() const { return label_; }
+  views::Label* text_for_testing() { return text_; }
   views::ImageButton* site_button_for_testing() { return site_; }
   views::ImageButton* extensions_button_for_testing() { return extensions_; }
   views::ImageButton* copy_button_for_testing() { return copy_; }
@@ -85,8 +86,9 @@ class UrlPillView : public views::View, public views::FocusChangeListener {
   void OnDidChangeFocus(views::View* before, views::View* now) override;
 
  private:
-  views::ImageButton* AddButton(base::RepeatingClosure action,
-                                const std::u16string& tooltip);
+  static std::unique_ptr<views::ImageButton> MakeButton(
+      base::RepeatingClosure action,
+      const std::u16string& tooltip);
   // Recomputes all three buttons from `revealed_`, `secure_` and `speaking_`.
   void UpdateButtons();
   void SetButtonShown(views::ImageButton* button, bool shown);
@@ -95,6 +97,8 @@ class UrlPillView : public views::View, public views::FocusChangeListener {
 
   Actions actions_;
   raw_ptr<views::Label> text_ = nullptr;
+  // Keeps the site button's room whether it shows or not.
+  raw_ptr<views::View> site_slot_ = nullptr;
   raw_ptr<views::ImageButton> site_ = nullptr;
   raw_ptr<views::ImageButton> extensions_ = nullptr;
   raw_ptr<views::ImageButton> copy_ = nullptr;

@@ -349,6 +349,17 @@ void BrowserSidebarController::HostExtensionsContainer() {
       container->parent()->RemoveChildViewT(container);
   view_->extensions_row()->SetHostedView(std::move(owned));
 
+  // The strip outlines itself while the pointer is over it, on a layer of its
+  // own beside the strip's. In a toolbar the outline hugs a few icons; the
+  // row makes the strip as wide as the sidebar, so here it was a large,
+  // mostly empty box with the buttons in its corner. That outline is the one
+  // layer Chromium puts beside the strip, and each button still lights up
+  // under the pointer by itself.
+  for (ui::Layer* layer :
+       container->GetLayersInOrder(views::ViewLayer::kExclude)) {
+    container->RemoveLayerFromRegions(layer);
+  }
+
   // The strip carries its own button for opening the extensions menu, and the
   // pill has one already. Auto-hide mode was expected to take care of that
   // and does not: it only lets the button drop out when the strip is

@@ -26,6 +26,7 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/highlight_path_generator.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/layout/fill_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
 #include "ui/views/layout/layout_types.h"
@@ -50,6 +51,11 @@ UrlPillView::UrlPillView(Actions actions) : actions_(std::move(actions)) {
   // that role set before it can carry a name.
   GetViewAccessibility().SetRole(ax::mojom::Role::kButton);
   GetViewAccessibility().SetName(u"Address");
+  // Its buttons are part of it. Without this the pointer arriving on one
+  // read as the pointer leaving the pill, which hid the buttons, which put
+  // the pointer back on the pill, which showed them again: a flicker for as
+  // long as the pointer moved where a button sits.
+  SetNotifyEnterExitOnChild(true);
 
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
@@ -58,7 +64,17 @@ UrlPillView::UrlPillView(Actions actions) : actions_(std::move(actions)) {
       .SetDefault(views::kMarginsKey,
                   gfx::Insets::VH(0, metrics::kPillButtonGap));
 
-  site_ = AddButton(actions_.open_site_info, u"Site information");
+  // The site button comes and goes at the start of the pill, so it sits in a
+  // slot that keeps its room either way: the address beside it never moves
+  // when the buttons arrive, and a warning puts it nowhere new. A click on
+  // the empty slot falls through to the pill and opens the box.
+  auto slot = std::make_unique<views::View>();
+  slot->SetLayoutManager(std::make_unique<views::FillLayout>());
+  slot->SetPreferredSize(
+      gfx::Size(metrics::kPillButtonSize, metrics::kPillButtonSize));
+  site_slot_ = AddChildView(std::move(slot));
+  site_ = site_slot_->AddChildView(
+      MakeButton(actions_.open_site_info, u"Site information"));
 
   auto text = std::make_unique<views::Label>();
   text->SetHorizontalAlignment(gfx::ALIGN_LEFT);
@@ -70,8 +86,9 @@ UrlPillView::UrlPillView(Actions actions) : actions_(std::move(actions)) {
                                views::MaximumFlexSizeRule::kUnbounded));
   text_ = AddChildView(std::move(text));
 
-  extensions_ = AddButton(actions_.open_extensions, u"Extensions");
-  copy_ = AddButton(actions_.copy_link, u"Copy link");
+  extensions_ =
+      AddChildView(MakeButton(actions_.open_extensions, u"Extensions"));
+  copy_ = AddChildView(MakeButton(actions_.copy_link, u"Copy link"));
   RefreshIcons();
   UpdateButtons();
 }
@@ -101,6 +118,9 @@ void UrlPillView::SetHostedBarSpeaking(bool speaking) {
   // question where this text sits, and two lines of writing in one pill is
   // nobody's idea of a question.
   text_->SetVisible(!speaking_);
+  // And the site button's room with it, which is where the bar's question
+  // starts, and which would otherwise take the click meant for it.
+  site_slot_->SetVisible(!speaking_);
   // A question is there to be answered, so the bar takes clicks again for as
   // long as it is asking one. See SetHostedView.
   if (hosted_) {
@@ -133,8 +153,9 @@ base::AutoReset<bool> UrlPillView::DisableRevealAnimationForTesting() {
   return base::AutoReset<bool>(&g_animate_reveal, false);
 }
 
-views::ImageButton* UrlPillView::AddButton(base::RepeatingClosure action,
-                                           const std::u16string& tooltip) {
+std::unique_ptr<views::ImageButton> UrlPillView::MakeButton(
+    base::RepeatingClosure action,
+    const std::u16string& tooltip) {
   auto button = std::make_unique<views::ImageButton>(base::BindRepeating(
       [](const base::RepeatingClosure& run) {
         // A delegate with nothing behind it -- the playground's smallest
@@ -157,7 +178,7 @@ views::ImageButton* UrlPillView::AddButton(base::RepeatingClosure action,
   button->SetPaintToLayer();
   button->layer()->SetFillsBoundsOpaquely(false);
   button->SetVisible(false);
-  return AddChildView(std::move(button));
+  return button;
 }
 
 void UrlPillView::RefreshIcons() {

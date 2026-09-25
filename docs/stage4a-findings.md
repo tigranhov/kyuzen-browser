@@ -92,6 +92,36 @@ implementation. Running them is the first thing to do before this stage can be
 called done. The seven hand rows in `scripts/acceptance-4a` have not been run
 either, and no perf measurement has been taken.
 
+## Defects found in use, 2026-09-25
+
+The owner reported three things wrong with the pill and the extensions row in
+daily use, and all three were defects rather than design. Each has a test
+written first and watched to fail.
+
+- **The pill flickered under the pointer.** It read the pointer arriving on one
+  of its own buttons as the pointer leaving, hid the buttons, which put the
+  pointer back on the pill, which showed them again, for as long as the pointer
+  moved. The pill now counts its buttons as part of itself
+  (`UrlPillTest.ReachingForAButtonDoesNotHideIt`). The address also moved
+  aside when the site button arrived; at the owner's choice the site button's
+  room is now kept at all times, so the address never moves, and that room is
+  given up while the bar behind the pill is asking a question, because the
+  question starts there (`TheAddressStaysPutWhenTheButtonsArrive`,
+  `AQuestionFromTheBarIsClickableAllTheWayAcross`).
+- **A large puzzle piece sat over the pill.** The strip's own menu button is
+  tucked above the row, where the row's edge cuts it off -- but only for what
+  paints into the strip. Lit, as it is while the menu hanging from it is open,
+  it draws on layers of its own, which nothing clipped. The row now paints to
+  a layer that masks to its bounds. Giving the button no room instead was
+  tried and is wrong: the strip then drops pinned extensions
+  (`ExtensionsRowTest.APinnedExtensionIsAButtonInTheSidebar`, mutation-checked).
+- **A large outlined box surrounded the extensions.** Chromium outlines the
+  strip while the pointer is over it; the row makes the strip as wide as the
+  sidebar, so the outline was a mostly empty box with the buttons in its
+  corner. The outline's layer is removed when the strip is hosted, and each
+  button still lights up by itself
+  (`ExtensionsRowTest.TheStripDrawsNoOutlineAroundItself`).
+
 ## What this stage does not cover
 
 The command bar's non-navigation half — commands rather than destinations —
