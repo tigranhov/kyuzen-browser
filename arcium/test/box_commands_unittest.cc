@@ -75,6 +75,14 @@ TEST(BoxCommandsTest, ArciumsOwnCommandsAreOfferedToo) {
   EXPECT_EQ(std::vector<int>{kBoxCommandSiteSearch}, IdsFor(u"site"));
 }
 
+TEST(BoxCommandsTest, ImportingIsOfferedByEitherBrowsersName) {
+  EXPECT_EQ(std::vector<int>{kBoxCommandImport}, IdsFor(u"import"));
+  EXPECT_EQ(std::vector<int>{kBoxCommandImport}, IdsFor(u"zen"));
+  EXPECT_EQ(std::vector<int>{kBoxCommandImport}, IdsFor(u"from arc"));
+  // And by what a reader moving browsers might say instead.
+  EXPECT_EQ(std::vector<int>{kBoxCommandImport}, IdsFor(u"bring"));
+}
+
 TEST(BoxCommandsTest, ASiteSearchRowNamesTheSite) {
   EXPECT_EQ(u"Search YouTube for cats", SiteSearchTitle(u"YouTube", u"cats"));
 }

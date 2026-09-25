@@ -39,6 +39,8 @@ namespace arcium {
 
 class CommandBox;
 class PeekController;
+class WelcomeController;
+enum class WelcomeStep;
 class SplitController;
 class SplitBand;
 class SuggestionSource;
@@ -108,6 +110,13 @@ class BrowserSidebarController : public SidebarModel::Observer,
   // Where a dragged row is dropped to split the screen.
   SplitBand* split_band() { return split_band_.get(); }
 
+  // The welcome card while it is up, the whole welcome or the command
+  // box's import; null otherwise.
+  WelcomeController* welcome() { return welcome_.get(); }
+  // The command box's "Import from Zen or Arc": the welcome's first step
+  // alone, unless a welcome is already up.
+  void ShowImport();
+
   CommandBox* command_box_for_testing() { return command_box_.get(); }
   SuggestionSource* suggestion_source_for_testing() {
     return suggestion_source_.get();
@@ -159,6 +168,13 @@ class BrowserSidebarController : public SidebarModel::Observer,
   // honest rather than silent.
   bool ActivateTabWithUrl(const GURL& url);
 
+  // The welcome on a fresh install, or where a quit left it; decided once
+  // the model has loaded. In browser_sidebar_controller_welcome.cc.
+  void MaybeShowWelcome();
+  void OnModelLoadedForWelcome();
+  void ShowWelcome(bool import_only, WelcomeStep first);
+  void CloseWelcome();
+
   raw_ptr<BrowserView> browser_view_;
   // Which space this window shows. Declared before `model_` and
   // `archive_service_` so it is destroyed after both: each holds a bare
@@ -182,6 +198,9 @@ class BrowserSidebarController : public SidebarModel::Observer,
   // anything else, because it holds a view in the BrowserView and a page in
   // the strip and both must still be whole when it lets go of them.
   std::unique_ptr<PeekController> peek_;
+  // Only while the card is up. Reset first in the destructor with the peek,
+  // for the same reason: its view is a child of the BrowserView.
+  std::unique_ptr<WelcomeController> welcome_;
   // After `space_switcher_` and `model_` by declaration order, because it
   // holds a pointer to each.
   std::unique_ptr<SplitController> split_;

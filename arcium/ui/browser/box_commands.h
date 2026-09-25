@@ -19,6 +19,9 @@ inline constexpr int kBoxCommandSiteSearch = -3;
 // The box's one command that names something else before it can act: taking
 // it asks which tab to share the screen with rather than closing the box.
 inline constexpr int kBoxCommandSplit = -4;
+// Opens the welcome's first step alone, to bring spaces over from Zen or Arc
+// at any time.
+inline constexpr int kBoxCommandImport = -5;
 
 // At most this many command rows, so a short word cannot push every page the
 // reader was looking for out of the box.

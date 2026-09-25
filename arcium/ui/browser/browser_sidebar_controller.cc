@@ -16,6 +16,7 @@
 #include "arcium/ui/browser/split_band.h"
 #include "arcium/ui/browser/split_controller.h"
 #include "arcium/ui/browser/tab_search_service.h"
+#include "arcium/ui/browser/welcome_controller.h"
 #include "arcium/ui/sidebar/extensions_row_view.h"
 #include "arcium/ui/sidebar/nav_row_view.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
@@ -161,6 +162,7 @@ BrowserSidebarController::BrowserSidebarController(BrowserView* browser_view)
   UpdateNavButtons();
   MaybeScheduleSnapshot();
   MaybeShowCommandBoxForDebugging();
+  MaybeShowWelcome();
 }
 
 BrowserSidebarController::~BrowserSidebarController() {
@@ -168,6 +170,7 @@ BrowserSidebarController::~BrowserSidebarController() {
   // tab in the strip, and both are still whole here. ~BrowserView frees this
   // controller before it removes its own children.
   peek_.reset();
+  welcome_.reset();
   // Before the BrowserView removes its own children, as the peek is: the
   // band's drop target is one of them, and the drag session it watches
   // belongs to another.
@@ -225,6 +228,9 @@ void BrowserSidebarController::LayoutSidebar(const gfx::Rect& host_bounds) {
   }
   if (split_band_) {
     split_band_->Layout(WholePageArea());
+  }
+  if (welcome_) {
+    welcome_->Layout(WholePageArea());
   }
 }
 

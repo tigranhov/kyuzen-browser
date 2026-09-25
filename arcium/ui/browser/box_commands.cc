@@ -61,6 +61,8 @@ const std::vector<BoxCommand>& AllBoxCommands() {
       {kBoxCommandToggleSidebar, u"Hide or show sidebar", u"toggle"},
       {kBoxCommandSplit, u"Split the screen", u"side pane panes"},
       {kBoxCommandSiteSearch, u"Site search shortcuts", u"keywords engines"},
+      {kBoxCommandImport, u"Import from Zen or Arc",
+       u"bring move switch spaces"},
   });
   return *commands;
 }

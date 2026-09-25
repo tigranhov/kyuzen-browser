@@ -132,6 +132,9 @@ void BrowserSidebarController::RunBoxCommand(int command_id) {
     case kBoxCommandToggleSidebar:
       ToggleVisibility();
       return;
+    case kBoxCommandImport:
+      ShowImport();
+      return;
     case kBoxCommandSiteSearch:
       // Chromium's own page for keywords. Written out rather than built from
       // chrome/common's constants, which this target does not depend on.

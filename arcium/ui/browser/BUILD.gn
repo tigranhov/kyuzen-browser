@@ -11,6 +11,7 @@ source_set("browser") {
     "browser_sidebar_controller.cc",
     "browser_sidebar_controller.h",
     "browser_sidebar_controller_box.cc",
+    "browser_sidebar_controller_welcome.cc",
     "clear_data_warning.cc",
     "clear_data_warning.h",
     "cold_favicon_cache.cc",
@@ -74,6 +75,10 @@ source_set("browser") {
     "tab_selection.h",
     "update_settings.cc",
     "update_settings.h",
+    "welcome_controller.cc",
+    "welcome_controller.h",
+    "welcome_sources.cc",
+    "welcome_sources.h",
   ]
 
   # Public: this target's own headers include tab_binding.h, archive_store.h
@@ -95,12 +100,22 @@ source_set("browser") {
   # dep. Depending on //chrome/browser/favicon drags in the profile and
   # history graphs and is the dependency direction patch 0010 exists to avoid.
   deps = [
+    "//arcium/browser:profile_defaults",
+    "//arcium/browser/import",
+    "//arcium/browser/import:applier",
     "//arcium/browser/update",
     "//arcium/common",
     "//arcium/ui/sidebar",
+    "//arcium/ui/welcome",
+
+    # The welcome's default-browser check and its file picker.
     "//base",
     "//base:i18n",
     "//chrome/app:command_ids",
+    "//chrome/browser:shell_integration",
+    "//chrome/browser/ui/select_file_policy",
+    "//components/prefs",
+    "//ui/shell_dialogs",
 
     # SessionServiceFactory, for the rebuild nudge. This target is reachable
     # from //chrome/browser/ui:ui but does not reach back to it, so the dep

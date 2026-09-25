@@ -52,6 +52,18 @@ inline constexpr char kSnapshotDelaySwitch[] = "arcium-snapshot-delay";
 // available (macOS withholds them from automated sessions).
 inline constexpr char kQuickEntrySwitch[] = "arcium-quick-entry";
 
+// The welcome follows Chromium's own first-run switch, which every browser
+// test and scripts/run pass: under --no-first-run it never shows.
+// --arcium-welcome lets it follow its own rule anyway -- a fresh install, or
+// a step stored by a quit -- for its browser tests and for a hand check on a
+// fresh data directory.
+inline constexpr char kWelcomeSwitch[] = "arcium-welcome";
+
+// Where the welcome looks for Zen and Arc: --arcium-import-home=<dir> stands
+// in for the home directory, so tests and hand checks read made-up files and
+// never the machine's own browsers.
+inline constexpr char kImportHomeSwitch[] = "arcium-import-home";
+
 // Debugging: --arcium-fake-clock-offset=13h moves the clock the *archive
 // service* reads that far forward, so a Today tab looks idle without anyone
 // waiting half a day for it. The value is a base::TimeDeltaFromString
