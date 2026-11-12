@@ -5,6 +5,7 @@
 #include "arcium/ui/sidebar/tab_row_view.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "arcium/ui/sidebar/rename_field.h"
@@ -21,6 +22,7 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/color/color_id.h"
 #include "ui/color/color_provider.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
@@ -410,15 +412,24 @@ void TabRowView::ShowContextMenuForViewImpl(
 
 void TabRowView::OnThemeChanged() {
   views::Button::OnThemeChanged();
+  // One step of the state ladder per state, in sidebar_colors.h's order.
+  std::optional<ui::ColorId> fill;
   if (row_.is_active) {
-    SetBackground(views::CreateRoundedRectBackground(
-        kColorArciumRowActiveBackground, metrics::kRowCornerRadius));
+    fill = hovered_ ? kColorArciumRowActiveHoverBackground
+                    : kColorArciumRowActiveBackground;
+  } else if (GetState() == STATE_PRESSED) {
+    fill = kColorArciumRowPressedBackground;
   } else if (hovered_) {
-    SetBackground(views::CreateRoundedRectBackground(
-        kColorArciumRowHoverBackground, metrics::kRowCornerRadius));
-  } else {
-    SetBackground(nullptr);
+    fill = kColorArciumRowHoverBackground;
   }
+  SetBackground(fill ? views::CreateRoundedRectBackground(
+                           *fill, metrics::kRowCornerRadius)
+                     : nullptr);
+}
+
+void TabRowView::StateChanged(ButtonState old_state) {
+  views::Button::StateChanged(old_state);
+  OnThemeChanged();
 }
 
 void TabRowView::SetSplitTarget(bool target) {

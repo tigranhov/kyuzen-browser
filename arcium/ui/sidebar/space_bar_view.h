@@ -14,14 +14,20 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
+#include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/view.h"
 
+namespace gfx {
+class Canvas;
+}  // namespace gfx
+
 namespace views {
 class ImageButton;
+class Label;
 class MenuRunner;
 class Widget;
 }  // namespace views
@@ -78,13 +84,50 @@ class SpaceBarView : public views::View,
     SpaceChip& operator=(const SpaceChip&) = delete;
     ~SpaceChip() override;
 
-    void SetSpace(const SidebarSpace& space);
+    // `pip` is the colour of the space's profile, drawn as a dot in the
+    // chip's corner, or nothing when every space shares one profile and
+    // there is nothing to tell apart.
+    void SetSpace(const SidebarSpace& space, std::optional<SkColor> pip);
     SpaceId space_id() const { return space_id_; }
     bool is_active() const { return is_active_; }
+    std::optional<SkColor> pip_for_testing() const { return pip_; }
+
+    // views::LabelButton:
+    void StateChanged(ButtonState old_state) override;
+    void PaintButtonContents(gfx::Canvas* canvas) override;
 
    private:
+    // Active is the accent-soft fill; otherwise the state ladder's hover and
+    // pressed steps, the same a row takes.
+    void UpdateBackground();
+
     SpaceId space_id_;
     bool is_active_ = false;
+    std::optional<SkColor> pip_;
+  };
+
+  // The profile the space on screen uses: a dot in its colour and, once
+  // there is more than one profile to tell apart, its name, so which logins
+  // a page gets is readable rather than a tooltip on a dot. Pressing it
+  // opens the same list as the space menu's "Profile" submenu.
+  class ProfileButton : public views::Button {
+    METADATA_HEADER(ProfileButton, views::Button)
+
+   public:
+    explicit ProfileButton(PressedCallback callback);
+    ProfileButton(const ProfileButton&) = delete;
+    ProfileButton& operator=(const ProfileButton&) = delete;
+    ~ProfileButton() override;
+
+    void SetProfile(const SidebarProfile& profile, bool show_name);
+    const views::Label* name_for_testing() const { return name_; }
+
+    // views::Button:
+    void StateChanged(ButtonState old_state) override;
+
+   private:
+    raw_ptr<views::View> dot_ = nullptr;
+    raw_ptr<views::Label> name_ = nullptr;
   };
 
   // `model` must outlive this view; the sidebar owns both.
@@ -154,13 +197,15 @@ class SpaceBarView : public views::View,
   void ShowConfirmation(SpaceId id);
   void OnConfirmation(int serial, bool accept);
   void UpdateProfileBadge();
+  // Runs the profile list for the space on screen, under the profile button.
+  void ShowProfileMenu();
 
   raw_ptr<SidebarModel> model_;
   base::ScopedObservation<SidebarModel, SidebarModel::Observer> observation_{
       this};
   std::vector<raw_ptr<SpaceChip>> chips_;
   raw_ptr<views::ImageButton> add_button_ = nullptr;
-  raw_ptr<views::View> profile_badge_ = nullptr;
+  raw_ptr<ProfileButton> profile_badge_ = nullptr;
 
   // The space the context menu was opened on.
   SpaceId menu_space_;

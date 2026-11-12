@@ -13,6 +13,8 @@
 
 #include "arcium/test/test_app_activation.h"
 #include "arcium/ui/playground/fake_sidebar_model.h"
+#include "arcium/ui/sidebar/profile_colors.h"
+#include "arcium/ui/sidebar/profile_menu.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
@@ -37,6 +39,7 @@
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/test/button_test_api.h"
 #include "ui/views/test/views_test_base.h"
+#include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 #include "url/gurl.h"
 
@@ -235,6 +238,64 @@ TEST_F(SpaceBarTest, ASpaceWithNoIconDrawsItsFirstLetter) {
   model.AddSpaceForTesting(u"Work", u"", 0);
   SpaceBarView bar(&model);
   EXPECT_EQ(u"W", bar.chips_for_testing()[1]->GetText());
+}
+
+// A pip says which logins a space gets, so it is drawn only when there is
+// something to tell apart: two spaces on two profiles. A second profile no
+// space uses yet changes nothing on the chips.
+TEST_F(SpaceBarTest, ChipsShowProfilePipsOnlyWhenSpacesUseTwoProfiles) {
+  FakeSidebarModel model;
+  model.AddSpaceForTesting(u"Work", u"", 0);
+  SpaceBarView bar(&model);
+  EXPECT_FALSE(bar.chips_for_testing()[0]->pip_for_testing());
+  EXPECT_FALSE(bar.chips_for_testing()[1]->pip_for_testing());
+
+  const ProfileId work = model.AddProfileForTesting(u"Work", 2);
+  EXPECT_FALSE(bar.chips_for_testing()[0]->pip_for_testing());
+  EXPECT_FALSE(bar.chips_for_testing()[1]->pip_for_testing());
+
+  model.SetSpaceProfile(model.spaces()[1].id, work);
+  EXPECT_EQ(ProfileColorAt(0).color,
+            bar.chips_for_testing()[0]->pip_for_testing());
+  EXPECT_EQ(ProfileColorAt(2).color,
+            bar.chips_for_testing()[1]->pip_for_testing());
+}
+
+// The profile button names the profile once there is a second one it could
+// be confused with; with one, the dot alone is enough.
+TEST_F(SpaceBarTest, TheProfileButtonNamesTheProfileOnlyWhenThereAreTwo) {
+  FakeSidebarModel model;
+  SpaceBarView bar(&model);
+  auto* button = views::AsViewClass<SpaceBarView::ProfileButton>(
+      bar.profile_badge_for_testing());
+  ASSERT_TRUE(button);
+  EXPECT_FALSE(button->name_for_testing()->GetVisible());
+
+  model.AddProfileForTesting(u"Work", 2);
+  EXPECT_TRUE(button->name_for_testing()->GetVisible());
+  EXPECT_EQ(u"Default", button->name_for_testing()->GetText());
+}
+
+// Pressing the profile button opens the profile list for the space on
+// screen. With no widget the menu itself does not run, which keeps a native
+// menu loop out of the test; what is checked is that the press reached the
+// list and pointed it at the right space.
+TEST_F(SpaceBarTest, PressingTheProfileButtonOpensTheListForTheSpaceOnScreen) {
+  FakeSidebarModel model;
+  const ProfileId work = model.AddProfileForTesting(u"Work", 2);
+  const SpaceId second = model.AddSpaceForTesting(u"Work", u"", 0);
+  model.SetSpaceProfile(second, work);
+  model.SwitchToSpace(second);
+  SpaceBarView bar(&model);
+  ProfileMenu* menu = bar.profile_menu_for_testing();
+  ASSERT_FALSE(menu->IsCommandIdChecked(ProfileMenu::kProfileFirst + 1));
+
+  views::test::ButtonTestApi(
+      views::AsViewClass<views::Button>(bar.profile_badge_for_testing()))
+      .NotifyClick(ui::test::TestEvent());
+
+  EXPECT_TRUE(menu->IsCommandIdChecked(ProfileMenu::kProfileFirst + 1));
+  EXPECT_FALSE(menu->IsCommandIdChecked(ProfileMenu::kProfileFirst + 0));
 }
 
 TEST_F(SpaceBarTest, PressingAChipSwitchesToThatSpace) {

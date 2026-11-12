@@ -113,6 +113,7 @@ class TabRowView : public views::Button,
   void OnMouseExited(const ui::MouseEvent& event) override;
   bool OnKeyPressed(const ui::KeyEvent& event) override;
   void OnThemeChanged() override;
+  void StateChanged(ButtonState old_state) override;
   void PaintButtonContents(gfx::Canvas* canvas) override;
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;

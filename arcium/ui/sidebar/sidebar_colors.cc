@@ -18,38 +18,49 @@ void AddArciumColorMixer(ui::ColorProvider* provider,
   const bool dark = key.color_mode == ui::ColorProviderKey::ColorMode::kDark;
   ui::ColorMixer& mixer = provider->AddMixer();
 
-  // Default space accent. Stage 3 makes this per space.
+  // The sidebar's own accent, which also tints its top. Drop marks and focus
+  // rings take kColorArciumSpaceAccent instead, which deepens in light so
+  // they keep 3:1 on the light surface.
   constexpr SkColor kAccent = SkColorSetRGB(0x8A, 0x8A, 0xFF);
+  const SkColor marks = dark ? kAccent : SkColorSetRGB(0x6A, 0x5C, 0xF2);
   const SkColor surface =
       dark ? SkColorSetRGB(0x17, 0x17, 0x1D) : SkColorSetRGB(0xF2, 0xF2, 0xF6);
   const SkColor text =
       dark ? SkColorSetRGB(0xC3, 0xC3, 0xCC) : SkColorSetRGB(0x33, 0x33, 0x3D);
+  // Secondary text: counts, addresses, labels, and rows not yet loaded. A
+  // solid tone rather than row text at an alpha, so it reads the same on
+  // every space gradient (4.8:1 on the dark top tint).
+  const SkColor text_tertiary =
+      dark ? SkColorSetRGB(0x9A, 0x9A, 0xA6) : SkColorSetRGB(0x6E, 0x6E, 0x7A);
   const SkColor ink = dark ? SK_ColorWHITE : SK_ColorBLACK;
+  // The four fill steps of the state ladder, as ink over whatever gradient
+  // the space has, so no theme needs a token of its own.
+  const SkAlpha fill1 = dark ? 0x0D : 0x0A;  // 5% (4%)
+  const SkAlpha fill2 = dark ? 0x14 : 0x0F;  // 8% (6%)
+  const SkAlpha fill3 = dark ? 0x1F : 0x17;  // 12% (9%)
+  const SkAlpha fill4 = dark ? 0x29 : 0x1F;  // 16% (12%)
 
   mixer[kColorArciumSidebarBackgroundBottom] = {surface};
   mixer[kColorArciumSidebarBackgroundTop] = {
       ui::AlphaBlend(kAccent, surface, dark ? 0x2E : 0x1A)};
   mixer[kColorArciumRowText] = {text};
-  mixer[kColorArciumRowTextActive] = {dark ? SK_ColorWHITE
-                                           : SkColorSetRGB(0x11, 0x11, 0x16)};
-  mixer[kColorArciumRowTextSecondary] = {ui::SetAlpha(text, 0x99)};
-  // Blended toward the sidebar surface rather than just given a lower alpha,
-  // the way kColorArciumSidebarBackgroundTop mixes its accent: row text sits
-  // on a surface that already carries the gradient tint, and alpha alone
-  // would let that tint show through unevenly between the two tones. Half the
-  // row text's weight reads as closed beside a loaded row without fading to
-  // the point of being unreadable in either theme.
-  mixer[kColorArciumRowTextUnloaded] = {ui::AlphaBlend(text, surface, 0x80)};
-  mixer[kColorArciumRowActiveBackground] = {
-      ui::SetAlpha(ink, dark ? 0x1F : 0x14)};
-  mixer[kColorArciumRowHoverBackground] = {
-      ui::SetAlpha(ink, dark ? 0x10 : 0x0A)};
-  mixer[kColorArciumControlBackground] = {
-      ui::SetAlpha(ink, dark ? 0x14 : 0x0C)};
+  mixer[kColorArciumRowTextActive] = {dark ? SkColorSetRGB(0xF2, 0xF2, 0xF5)
+                                           : SkColorSetRGB(0x16, 0x16, 0x1C)};
+  mixer[kColorArciumRowTextSecondary] = {text_tertiary};
+  // The same tone as secondary text, so a closed row stays readable; what
+  // marks it as closed is the dimmed favicon beside it, not a fainter title.
+  mixer[kColorArciumRowTextUnloaded] = {text_tertiary};
+  mixer[kColorArciumRowHoverBackground] = {ui::SetAlpha(ink, fill1)};
+  mixer[kColorArciumRowPressedBackground] = {ui::SetAlpha(ink, fill2)};
+  mixer[kColorArciumRowActiveBackground] = {ui::SetAlpha(ink, fill3)};
+  mixer[kColorArciumRowActiveHoverBackground] = {ui::SetAlpha(ink, fill4)};
+  mixer[kColorArciumControlBackground] = {ui::SetAlpha(ink, fill1)};
+  mixer[kColorArciumControlHoverBackground] = {ui::SetAlpha(ink, fill2)};
   mixer[kColorArciumControlIcon] = {ui::SetAlpha(text, 0xB3)};
   mixer[kColorArciumDivider] = {ui::SetAlpha(ink, 0x14)};
-  mixer[kColorArciumSpaceAccent] = {kAccent};
-  mixer[kColorArciumSpaceChipActiveBackground] = {ui::SetAlpha(kAccent, 0x38)};
+  mixer[kColorArciumSpaceAccent] = {marks};
+  mixer[kColorArciumSpaceChipActiveBackground] = {ui::SetAlpha(marks, 0x33)};
+  mixer[kColorArciumFocusRing] = {marks};
 
   // The welcome card, from the approved mockups: a page a shade darker (or
   // lighter) than the card, so the card reads as the one thing on it, and a

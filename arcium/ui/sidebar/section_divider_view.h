@@ -5,21 +5,31 @@
 #ifndef ARCIUM_UI_SIDEBAR_SECTION_DIVIDER_VIEW_H_
 #define ARCIUM_UI_SIDEBAR_SECTION_DIVIDER_VIEW_H_
 
+#include <memory>
+#include <string_view>
+
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/views/view.h"
 
 namespace views {
+class Label;
 class LabelButton;
 class Separator;
 }  // namespace views
 
 namespace arcium {
 
-// Hairline between Pinned and Today. Hovering reveals "Clear", which archives
-// and closes every Today tab, and beside it "Archived", which opens the list
-// of what Clear and the automatic sweep have taken.
+// A section's name, "Pinned" or "Today": caption type in the secondary text
+// colour, starting in the column the favicons below it start in. Text only,
+// painted with the column it sits in, so it costs nothing at rest.
+std::unique_ptr<views::Label> MakeSectionLabel(std::u16string_view text);
+
+// Hairline between Pinned and Today, named "Today" at its leading end. Hovering
+// reveals "Clear", which archives and closes every Today tab, and beside it
+// "Archived", which opens the list of what Clear and the automatic sweep have
+// taken.
 class SectionDividerView : public views::View {
   METADATA_HEADER(SectionDividerView, views::View)
 
@@ -52,6 +62,7 @@ class SectionDividerView : public views::View {
   // divider flicker as it crossed between them.
   void SetButtonsVisible(bool visible);
 
+  raw_ptr<views::Label> name_ = nullptr;
   raw_ptr<views::Separator> line_ = nullptr;
   raw_ptr<views::LabelButton> clear_ = nullptr;
   raw_ptr<views::LabelButton> archive_ = nullptr;

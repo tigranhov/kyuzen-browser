@@ -37,7 +37,9 @@
 #include "ui/gfx/animation/tween.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/transform.h"
+#include "ui/views/border.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
@@ -57,8 +59,11 @@ constexpr base::TimeDelta kSwitchSlideDuration = base::Milliseconds(200);
 constexpr float kSwipeThreshold = metrics::kSidebarWidth / 4;
 
 // The margin every child of the sidebar carries above and below, so two
-// neighbours sit twice this apart.
-constexpr int kChildMargin = 3;
+// neighbours sit twice this apart: 8, a step of the 4pt grid.
+constexpr int kChildMargin = 4;
+// Above the "Pinned" name, so Pinned starts 12 under the favourites rather
+// than 8: the step from destinations you keep to the lists below them.
+constexpr int kPinnedLabelSpaceAbove = 4;
 
 }  // namespace
 
@@ -135,6 +140,13 @@ SidebarView::SidebarView(SidebarModel* model, Delegate delegate)
       .SetCrossAxisAlignment(views::LayoutAlignment::kStretch)
       .SetDefault(views::kMarginsKey, gfx::Insets::VH(3, 0));
 
+  // Named, like Today: a hairline alone does not say which side of it keeps
+  // its tabs. The label is text in the column the rows already paint into.
+  auto* pinned_label = column->AddChildView(MakeSectionLabel(u"Pinned"));
+  pinned_label->SetBorder(views::CreateEmptyBorder(
+      gfx::Insets::VH(0, metrics::kRowHorizontalPadding)));
+  pinned_label->SetProperty(views::kMarginsKey,
+                            gfx::Insets::TLBR(kPinnedLabelSpaceAbove, 0, 0, 0));
   pinned_ = column->AddChildView(
       std::make_unique<TabListView>(model_, SidebarSection::kPinned));
   // No archive, no archive button. Off the record there is no archive file

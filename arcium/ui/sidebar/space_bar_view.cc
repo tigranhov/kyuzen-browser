@@ -6,6 +6,7 @@
 
 #include <memory>
 #include <optional>
+#include <set>
 #include <string>
 #include <utility>
 #include <vector>
@@ -20,12 +21,17 @@
 #include "base/functional/bind.h"
 #include "base/strings/strcat.h"
 #include "base/third_party/icu/icu_utf.h"
-#include "ui/accessibility/ax_enums.mojom.h"
+#include "cc/paint/paint_flags.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/dialog_model.h"
 #include "ui/base/models/image_model.h"
+#include "ui/base/mojom/menu_source_type.mojom.h"
+#include "ui/color/color_id.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/size.h"
+#include "ui/gfx/text_constants.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/border.h"
@@ -33,7 +39,9 @@
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/bubble/bubble_dialog_model_host.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_runner.h"
+#include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
 #include "ui/views/layout/layout_types.h"
@@ -45,6 +53,17 @@ namespace arcium {
 namespace {
 
 constexpr float kChipRadius = 8;
+// The profile pip in a chip's top-right corner, and how far its centre sits
+// in from that corner.
+constexpr float kPipRadius = 3;
+constexpr float kPipInset = 5;
+// The profile button: a dot smaller than a chip's letter, so the brightest
+// thing in the bar is the space you are in rather than the profile, and a
+// name that gives up its width before the chips do.
+constexpr int kProfileDotSize = 12;
+constexpr int kProfileButtonPadding = 8;
+constexpr int kProfileDotNameGap = 6;
+constexpr int kProfileNameMaxWidth = 84;
 // Radio groups, so exactly one item of each is checked.
 constexpr int kTimeoutGroup = 1;
 constexpr int kGradientGroup = 2;
@@ -75,9 +94,11 @@ SpaceBarView::SpaceChip::SpaceChip()
 
 SpaceBarView::SpaceChip::~SpaceChip() = default;
 
-void SpaceBarView::SpaceChip::SetSpace(const SidebarSpace& space) {
+void SpaceBarView::SpaceChip::SetSpace(const SidebarSpace& space,
+                                       std::optional<SkColor> pip) {
   space_id_ = space.id;
   is_active_ = space.is_active;
+  pip_ = pip;
   SetText(ChipText(space));
   // The chip shows one glyph, so the name has to reach the user some other
   // way: on hover, and as what a screen reader says.
@@ -86,17 +107,90 @@ void SpaceBarView::SpaceChip::SetSpace(const SidebarSpace& space) {
   // space with no name draws no letter either, so the chip would be silent.
   GetViewAccessibility().SetName(
       space.name.empty() ? std::u16string(u"Unnamed space") : space.name);
+  SetEnabledTextColors(is_active_ ? kColorArciumRowTextActive
+                                  : kColorArciumRowTextSecondary);
+  UpdateBackground();
+  SchedulePaint();
+}
+
+void SpaceBarView::SpaceChip::StateChanged(ButtonState old_state) {
+  views::LabelButton::StateChanged(old_state);
+  UpdateBackground();
+}
+
+void SpaceBarView::SpaceChip::UpdateBackground() {
+  std::optional<ui::ColorId> fill;
   if (is_active_) {
-    SetBackground(views::CreateRoundedRectBackground(
-        kColorArciumSpaceChipActiveBackground, kChipRadius));
-    SetEnabledTextColors(kColorArciumRowTextActive);
-  } else {
-    SetBackground(nullptr);
-    SetEnabledTextColors(kColorArciumRowTextSecondary);
+    fill = kColorArciumSpaceChipActiveBackground;
+  } else if (GetState() == STATE_PRESSED) {
+    fill = kColorArciumRowPressedBackground;
+  } else if (GetState() == STATE_HOVERED) {
+    fill = kColorArciumRowHoverBackground;
   }
+  SetBackground(fill ? views::CreateRoundedRectBackground(*fill, kChipRadius)
+                     : nullptr);
+}
+
+void SpaceBarView::SpaceChip::PaintButtonContents(gfx::Canvas* canvas) {
+  views::LabelButton::PaintButtonContents(canvas);
+  if (!pip_) {
+    return;
+  }
+  cc::PaintFlags flags;
+  flags.setAntiAlias(true);
+  flags.setColor(*pip_);
+  canvas->DrawCircle(gfx::PointF(width() - kPipInset, kPipInset), kPipRadius,
+                     flags);
 }
 
 BEGIN_METADATA(SpaceBarView, SpaceChip)
+END_METADATA
+
+SpaceBarView::ProfileButton::ProfileButton(PressedCallback callback)
+    : views::Button(std::move(callback)) {
+  auto* layout = SetLayoutManager(std::make_unique<views::BoxLayout>(
+      views::BoxLayout::Orientation::kHorizontal,
+      gfx::Insets::VH(0, kProfileButtonPadding), kProfileDotNameGap));
+  layout->set_cross_axis_alignment(
+      views::BoxLayout::CrossAxisAlignment::kCenter);
+  layout->set_minimum_cross_axis_size(metrics::kSpaceChipHeight);
+  dot_ = AddChildView(std::make_unique<views::View>());
+  dot_->SetPreferredSize(gfx::Size(kProfileDotSize, kProfileDotSize));
+  dot_->SetCanProcessEventsWithinSubtree(false);
+  name_ = AddChildView(std::make_unique<views::Label>());
+  name_->SetEnabledColor(kColorArciumRowTextSecondary);
+  name_->SetElideBehavior(gfx::ELIDE_TAIL);
+  name_->SetMaximumWidthSingleLine(kProfileNameMaxWidth);
+  name_->SetCanProcessEventsWithinSubtree(false);
+}
+
+SpaceBarView::ProfileButton::~ProfileButton() = default;
+
+void SpaceBarView::ProfileButton::SetProfile(const SidebarProfile& profile,
+                                             bool show_name) {
+  dot_->SetBackground(views::CreateRoundedRectBackground(
+      ProfileColorAt(profile.color).color,
+      static_cast<float>(kProfileDotSize) / 2));
+  name_->SetText(profile.name);
+  name_->SetVisible(show_name);
+  const std::u16string label = base::StrCat({u"Profile: ", profile.name});
+  SetTooltipText(label);
+  GetViewAccessibility().SetName(label);
+}
+
+void SpaceBarView::ProfileButton::StateChanged(ButtonState old_state) {
+  views::Button::StateChanged(old_state);
+  std::optional<ui::ColorId> fill;
+  if (GetState() == STATE_PRESSED) {
+    fill = kColorArciumRowPressedBackground;
+  } else if (GetState() == STATE_HOVERED) {
+    fill = kColorArciumRowHoverBackground;
+  }
+  SetBackground(fill ? views::CreateRoundedRectBackground(*fill, kChipRadius)
+                     : nullptr);
+}
+
+BEGIN_METADATA(SpaceBarView, ProfileButton)
 END_METADATA
 
 SpaceBarView::SpaceBarView(SidebarModel* model) : model_(model) {
@@ -128,14 +222,9 @@ SpaceBarView::SpaceBarView(SidebarModel* model) : model_(model) {
                                views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
 
-  profile_badge_ = AddChildView(std::make_unique<views::View>());
-  profile_badge_->SetPreferredSize(
-      gfx::Size(metrics::kProfileBadgeSize, metrics::kProfileBadgeSize));
-  // A plain View has no role, and the accessibility tree refuses a name with
-  // none: it would have nothing to tell a screen reader the name is a name
-  // of. The badge is a small solid disc standing in for the profile, which
-  // is what an image role means here.
-  profile_badge_->GetViewAccessibility().SetRole(ax::mojom::Role::kImage);
+  profile_badge_ =
+      AddChildView(std::make_unique<ProfileButton>(base::BindRepeating(
+          &SpaceBarView::ShowProfileMenu, base::Unretained(this))));
 
   profile_menu_ = std::make_unique<ProfileMenu>(model_, profile_badge_);
 
@@ -210,8 +299,23 @@ void SpaceBarView::Rebuild() {
     chip->set_context_menu_controller(this);
     chips_.push_back(chip);
   }
+  // Pips only when the spaces use more than one profile: with one, every
+  // chip would carry the same dot and say nothing.
+  std::set<ProfileId> used;
+  for (const SidebarSpace& space : spaces) {
+    used.insert(space.profile_id);
+  }
+  const std::vector<SidebarProfile> profiles = model_->profiles();
   for (size_t i = 0; i < spaces.size(); ++i) {
-    chips_[i]->SetSpace(spaces[i]);
+    std::optional<SkColor> pip;
+    if (used.size() > 1) {
+      for (const SidebarProfile& profile : profiles) {
+        if (profile.id == spaces[i].profile_id) {
+          pip = ProfileColorAt(profile.color).color;
+        }
+      }
+    }
+    chips_[i]->SetSpace(spaces[i], pip);
   }
   UpdateProfileBadge();
   PlaceEditField();
@@ -392,12 +496,25 @@ void SpaceBarView::UpdateProfileBadge() {
       profile = candidate;
     }
   }
-  profile_badge_->SetBackground(views::CreateRoundedRectBackground(
-      ProfileColorAt(profile.color).color,
-      static_cast<float>(metrics::kProfileBadgeSize) / 2));
-  const std::u16string label = base::StrCat({u"Profile: ", profile.name});
-  profile_badge_->SetTooltipText(label);
-  profile_badge_->GetViewAccessibility().SetName(label);
+  // The name only once there is another profile it could be confused with;
+  // a browser with one profile has nothing to tell apart.
+  profile_badge_->SetProfile(profile, model_->profiles().size() > 1);
+}
+
+void SpaceBarView::ShowProfileMenu() {
+  for (const SidebarSpace& space : model_->spaces()) {
+    if (space.is_active) {
+      SetMenuSpace(space.id);
+    }
+  }
+  if (!GetWidget()) {
+    return;
+  }
+  menu_runner_ = std::make_unique<views::MenuRunner>(
+      profile_menu_->model(), views::MenuRunner::HAS_MNEMONICS);
+  menu_runner_->RunMenuAt(
+      GetWidget(), nullptr, profile_badge_->GetAnchorBoundsInScreen(),
+      views::MenuAnchorPosition::kTopRight, ui::mojom::MenuSourceType::kNone);
 }
 
 BEGIN_METADATA(SpaceBarView)

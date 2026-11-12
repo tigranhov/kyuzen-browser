@@ -52,6 +52,16 @@ enum ArciumColorIds : ui::ColorId {
   kColorArciumWelcomeAccentSoft,
   kColorArciumWelcomeOnAccent,
   kColorArciumWelcomeDotIdle,
+  // The rest of the state ladder every clickable thing shares: a row pressed,
+  // an active row under the pointer, and a control (the pill, a tile, a
+  // chip) under the pointer. Hover is one fill step up from rest, pressed
+  // two, active three, active and hovered four; a control rests one step
+  // above a row, so it reads as a control without a border.
+  kColorArciumRowPressedBackground,
+  kColorArciumRowActiveHoverBackground,
+  kColorArciumControlHoverBackground,
+  // Keyboard focus, drawn as a 2pt ring by the focused view itself.
+  kColorArciumFocusRing,
   kArciumColorsEnd,
 };
 

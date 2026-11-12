@@ -10,7 +10,10 @@
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/gfx/font.h"
+#include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/text_constants.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/separator.h"
@@ -43,7 +46,24 @@ END_METADATA
 
 namespace {
 constexpr int kDividerHeight = 20;
+// Caption type: two points under the body text the rows use, and medium,
+// so a name reads as a heading at the size of a count.
+constexpr int kSectionLabelSizeDelta = -2;
+// Between the name and the hairline that carries on from it.
+constexpr int kNameLineGap = 8;
 }  // namespace
+
+std::unique_ptr<views::Label> MakeSectionLabel(std::u16string_view text) {
+  auto label = std::make_unique<views::Label>(std::u16string(text));
+  label->SetFontList(views::Label::GetDefaultFontList().Derive(
+      kSectionLabelSizeDelta, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
+  label->SetEnabledColor(kColorArciumRowTextSecondary);
+  label->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+  // Inside the scrolling column, whose layer is not opaque; see
+  // FlatLabelButton above.
+  label->SetSubpixelRenderingEnabled(false);
+  return label;
+}
 
 SectionDividerView::SectionDividerView(base::RepeatingClosure on_clear,
                                        base::RepeatingClosure on_archive) {
@@ -51,6 +71,9 @@ SectionDividerView::SectionDividerView(base::RepeatingClosure on_clear,
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
       .SetInteriorMargin(gfx::Insets::VH(0, metrics::kRowHorizontalPadding));
+  name_ = AddChildView(MakeSectionLabel(u"Today"));
+  name_->SetProperty(views::kMarginsKey,
+                     gfx::Insets::TLBR(0, 0, 0, kNameLineGap));
   line_ = AddChildView(std::make_unique<views::Separator>());
   line_->SetOrientation(views::Separator::Orientation::kHorizontal);
   line_->SetColorId(kColorArciumDivider);

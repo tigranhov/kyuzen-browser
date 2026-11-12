@@ -55,7 +55,6 @@ inline constexpr int kExtensionRowSpaceBelow = 6;
 // curve; the two against the sidebar are where this shows as a choice.
 inline constexpr int kContentCornerRadius = 12;
 inline constexpr int kSpaceChipHeight = 28;
-inline constexpr int kProfileBadgeSize = 20;
 // Width reserved at the top-left for the macOS traffic lights, plus padding.
 // The browser overrides this from the frame's real exclusion area at runtime.
 inline constexpr int kDefaultCaptionButtonWidth = 70;

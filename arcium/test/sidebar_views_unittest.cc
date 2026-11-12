@@ -7,6 +7,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "arcium/browser/model/folder.h"
@@ -1989,6 +1990,61 @@ TEST_F(SidebarViewsTest, NoArchiveMeansNoArchiveButton) {
   model_.SetHasArchive(false);
   SidebarView* sidebar = MakeSidebar();
   EXPECT_EQ(nullptr, sidebar->divider()->archive_button());
+}
+
+// The label drawn under `root` that reads `text`, or null. A section name is
+// a plain label in the column, so finding it by what it says is finding what
+// the user reads.
+const views::Label* FindDrawnLabel(const views::View* root,
+                                   std::u16string_view text) {
+  if (const auto* label = views::AsViewClass<views::Label>(root);
+      label && label->GetText() == text && label->IsDrawn()) {
+    return label;
+  }
+  for (const views::View* child : root->children()) {
+    if (const views::Label* found = FindDrawnLabel(child, text)) {
+      return found;
+    }
+  }
+  return nullptr;
+}
+
+// A hairline alone does not say which side of it keeps its tabs, so both
+// lists are named: "Pinned" above the pinned list, "Today" at the leading end
+// of the divider, in front of its line.
+TEST_F(SidebarViewsTest, PinnedAndTodayAreNamed) {
+  model_.AddTab(u"Pin", "https://p.example/", SidebarSection::kPinned, false);
+  model_.AddTab(u"Tab", "https://t.example/", SidebarSection::kToday, true);
+  SidebarView* sidebar = MakeSidebar();
+
+  const views::Label* pinned = FindDrawnLabel(sidebar, u"Pinned");
+  ASSERT_TRUE(pinned);
+  const views::Label* today = FindDrawnLabel(sidebar->divider(), u"Today");
+  ASSERT_TRUE(today);
+  EXPECT_LT(pinned->GetBoundsInScreen().y(),
+            sidebar->divider()->GetBoundsInScreen().y());
+  EXPECT_LT(today->GetBoundsInScreen().right(),
+            sidebar->divider()->GetBoundsInScreen().CenterPoint().x());
+}
+
+// Pressed is its own step of the ladder, one above hover, so a click shows
+// before the page answers it.
+TEST_F(SidebarViewsTest, APressedRowFillsDifferentlyFromAHoveredOne) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, false);
+  MakeList(SidebarSection::kToday);
+  Refresh();
+  TabRowView* row = views::AsViewClass<TabRowView>(list_->children()[0]);
+  ASSERT_TRUE(row);
+
+  Hover(row);
+  ASSERT_TRUE(row->background());
+  EXPECT_TRUE(row->background()->color() ==
+              static_cast<ui::ColorId>(kColorArciumRowHoverBackground));
+
+  row->SetState(views::Button::STATE_PRESSED);
+  ASSERT_TRUE(row->background());
+  EXPECT_TRUE(row->background()->color() ==
+              static_cast<ui::ColorId>(kColorArciumRowPressedBackground));
 }
 
 TEST_F(SidebarViewsTest, TheArchiveButtonAppearsBesideClearOnHover) {
