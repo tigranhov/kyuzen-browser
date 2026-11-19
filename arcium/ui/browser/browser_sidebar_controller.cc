@@ -281,18 +281,19 @@ gfx::Rect BrowserSidebarController::PageArea() const {
 }
 
 void BrowserSidebarController::UpdateContentCorners() {
-  ContentsContainerView* container =
-      browser_view_->GetActiveContentsContainerView();
-  if (!container) {
+  // The radius goes to the page area as a whole rather than to the page's
+  // container, because Chromium owns the container's corners: whenever a tab
+  // is attached, a split starts or ends or the active pane changes, it sets
+  // the active container's corners back to this value. Set on the container
+  // directly, the corners lasted one frame. In a split Chromium uses its own
+  // split radii and ignores this one. Cheap to call on every layout: it
+  // returns early when the value has not changed.
+  MultiContentsView* contents = browser_view_->multi_contents_view();
+  if (!contents) {
     return;
   }
   const float r = visible_ ? metrics::kContentCornerRadius : 0.f;
-  if (r == applied_corner_radius_ && container == last_container_) {
-    return;  // Called on every layout; do not re-apply unchanged radii.
-  }
-  applied_corner_radius_ = r;
-  last_container_ = container;
-  container->SetRoundedCorners(gfx::RoundedCornersF(r, r, r, r));
+  contents->SetBackgroundRadii(gfx::RoundedCornersF(r));
 }
 
 bool BrowserSidebarController::IsPositionInWindowCaption(

@@ -213,8 +213,6 @@ class BrowserSidebarController : public SidebarModel::Observer,
   std::unique_ptr<SplitBand> split_band_;
   bool visible_ = true;
   int caption_button_width_ = -1;
-  float applied_corner_radius_ = -1.f;
-  raw_ptr<ContentsContainerView> last_container_ = nullptr;
 
   // Searches this window's tabs, the profile's entries and the archive. It
   // observes nothing and holds no per-tab state, so one that is never asked a
