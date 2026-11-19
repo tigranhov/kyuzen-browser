@@ -7,6 +7,7 @@
 #include <memory>
 #include <utility>
 
+#include "arcium/ui/sidebar/focus_rings.h"
 #include "arcium/ui/sidebar/pill_label.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
@@ -53,6 +54,7 @@ constexpr int kPillTextGap = 8;
 
 UrlPillView::UrlPillView(Actions actions) : actions_(std::move(actions)) {
   SetFocusBehavior(FocusBehavior::ALWAYS);
+  StyleFocusRing(this, metrics::kRowCornerRadius, FocusRingPlacement::kOutside);
   // Clicking anywhere on it opens the box, so it reads as a button and needs
   // that role set before it can carry a name.
   GetViewAccessibility().SetRole(ax::mojom::Role::kButton);

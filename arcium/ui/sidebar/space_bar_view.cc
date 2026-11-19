@@ -11,6 +11,7 @@
 #include <utility>
 #include <vector>
 
+#include "arcium/ui/sidebar/focus_rings.h"
 #include "arcium/ui/sidebar/profile_colors.h"
 #include "arcium/ui/sidebar/profile_menu.h"
 #include "arcium/ui/sidebar/rename_field.h"
@@ -90,6 +91,7 @@ SpaceBarView::SpaceChip::SpaceChip()
   SetMinSize(gfx::Size(metrics::kSpaceChipHeight, metrics::kSpaceChipHeight));
   SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(0, 6)));
   SetHorizontalAlignment(gfx::ALIGN_CENTER);
+  StyleFocusRing(this, kChipRadius, FocusRingPlacement::kInside);
 }
 
 SpaceBarView::SpaceChip::~SpaceChip() = default;

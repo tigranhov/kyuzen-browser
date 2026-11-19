@@ -17,6 +17,9 @@ inline constexpr int kSplitHalfGap = 2;
 // The same gap while the row is under the pointer: the halves part to make
 // room for the grip that moves the pair.
 inline constexpr int kSplitHalfGapOpen = 12;
+// How far a split's front half sits inside the pair's shared fill. Its own
+// corners are the row's less this, so the two curves run parallel.
+inline constexpr int kSplitHalfInset = 2;
 inline constexpr int kRowHorizontalPadding = 8;
 inline constexpr int kRowIconTextGap = 9;
 inline constexpr int kFaviconSize = 16;
@@ -24,6 +27,12 @@ inline constexpr int kFaviconSize = 16;
 inline constexpr int kFolderIndent = 16;
 inline constexpr int kFavoritesPerRow = 4;
 inline constexpr int kFavoriteTileGap = 6;
+// Shorter than a tile is wide: a favourite shows a 16pt icon and nothing
+// else, and a square tile spent a third of its height on nothing.
+inline constexpr int kFavoriteTileHeight = 44;
+// Every insertion mark, in a list or between tiles: an accent line this
+// thick, with round ends.
+inline constexpr int kDropMarkThickness = 2;
 inline constexpr int kNavButtonSize = 26;
 // The pill is as tall as a row, so it reads as the first row of the column.
 inline constexpr int kUrlPillHeight = 32;
@@ -55,6 +64,9 @@ inline constexpr int kExtensionRowSpaceBelow = 6;
 // window side land on the corners macOS already rounds and read as one
 // curve; the two against the sidebar are where this shows as a choice.
 inline constexpr int kContentCornerRadius = 12;
+// Everything that floats over the page: the command box, the peek's card,
+// the welcome card, the strip a row is dropped on to split.
+inline constexpr int kFloatingCornerRadius = 12;
 inline constexpr int kSpaceChipHeight = 28;
 // Width reserved at the top-left for the macOS traffic lights, plus padding.
 // The browser overrides this from the frame's real exclusion area at runtime.

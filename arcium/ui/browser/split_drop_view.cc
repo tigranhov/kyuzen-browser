@@ -6,12 +6,14 @@
 
 #include <utility>
 
+#include "arcium/ui/sidebar/drop_marks.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/vector_icons.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "cc/paint/paint_flags.h"
+#include "cc/paint/path_effect.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
@@ -20,22 +22,30 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/font.h"
+#include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/insets_f.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/view_class_properties.h"
 
 namespace arcium {
 namespace {
 
 // The band is drawn for the whole drag, so a row has somewhere visible to
-// go, and drawn stronger while one is held over it.
-constexpr SkAlpha kRestingAlpha = 0x18;
-constexpr SkAlpha kLitAlpha = 0x40;
+// go: an outline at rest, and the drop-target look every other place a row
+// can go into takes while one is held over it.
+constexpr SkAlpha kOutlineAlpha = 0x59;
+constexpr float kDash = 4.f;
 // Clear of the page on one side and the window's edge on the other.
 constexpr int kInset = 6;
 constexpr int kIconSize = 20;
+// Between the icon and the word under it.
+constexpr int kIconTextGap = 6;
 
 }  // namespace
 
@@ -107,20 +117,39 @@ views::View::DropCallback SplitDropView::GetDropCallback(
 
 void SplitDropView::OnPaint(gfx::Canvas* canvas) {
   views::View::OnPaint(canvas);
-  const SkColor color = GetColorProvider()->GetColor(kColorArciumRowTextActive);
-  gfx::Rect band = GetLocalBounds();
-  band.Inset(gfx::Insets::VH(0, kInset));
-  cc::PaintFlags flags;
-  flags.setStyle(cc::PaintFlags::kFill_Style);
-  flags.setAntiAlias(true);
-  flags.setColor(SkColorSetA(color, lit_ ? kLitAlpha : kRestingAlpha));
-  canvas->DrawRoundRect(band, metrics::kContentCornerRadius, flags);
-  // The same two panes the sidebar marks a split row with, so the band says
-  // what dropping on it does.
-  const gfx::ImageSkia icon =
-      gfx::CreateVectorIcon(kSplitIcon, kIconSize, color);
-  canvas->DrawImageInt(icon, band.CenterPoint().x() - kIconSize / 2,
-                       band.CenterPoint().y() - kIconSize / 2);
+  const ui::ColorProvider* colors = GetColorProvider();
+  gfx::RectF band(GetLocalBounds());
+  band.Inset(gfx::InsetsF::VH(0, kInset));
+  SkColor ink;
+  if (lit_) {
+    PaintDropTarget(canvas, band, metrics::kFloatingCornerRadius, colors);
+    ink = colors->GetColor(kColorArciumSpaceAccent);
+  } else {
+    ink = colors->GetColor(kColorArciumRowTextSecondary);
+    cc::PaintFlags outline;
+    outline.setAntiAlias(true);
+    outline.setStyle(cc::PaintFlags::kStroke_Style);
+    outline.setStrokeWidth(1);
+    outline.setColor(SkColorSetA(ink, kOutlineAlpha));
+    const float intervals[] = {kDash, kDash};
+    outline.setPathEffect(cc::PathEffect::MakeDash(intervals, 2, 0));
+    gfx::RectF path = band;
+    path.Inset(0.5f);
+    canvas->DrawRoundRect(path, metrics::kFloatingCornerRadius - 0.5f, outline);
+  }
+  // The same two panes the sidebar marks a split row with, and the word, so
+  // the band says what dropping on it does.
+  const gfx::FontList font = views::Label::GetDefaultFontList().Derive(
+      -2, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM);
+  const int block = kIconSize + kIconTextGap + font.GetHeight();
+  const int top = band.CenterPoint().y() - block / 2;
+  const gfx::ImageSkia icon = gfx::CreateVectorIcon(kSplitIcon, kIconSize, ink);
+  canvas->DrawImageInt(icon, band.CenterPoint().x() - kIconSize / 2, top);
+  canvas->DrawStringRectWithFlags(
+      u"Split", font, ink,
+      gfx::Rect(band.x(), top + kIconSize + kIconTextGap, band.width(),
+                font.GetHeight()),
+      gfx::Canvas::TEXT_ALIGN_CENTER);
 }
 
 void SplitDropView::PerformDrop(

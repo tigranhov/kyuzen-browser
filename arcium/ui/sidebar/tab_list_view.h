@@ -241,6 +241,9 @@ class TabListView : public views::View, public RowDragSession::Observer {
   // Lays out the split named by `grip` across `slot`: its halves either side
   // of a gap as wide as the grip is open, and the grip in the gap.
   void PlaceSplit(size_t grip, gfx::Rect slot);
+  // Behind each split, the one fill that makes its halves read as one entry,
+  // and a hairline between them when neither is in front.
+  void PaintSplits(gfx::Canvas* canvas);
   // One step of a grip opening or closing.
   void OnGripOpenChanged();
   std::unique_ptr<FolderHeaderView> MakeHeader();

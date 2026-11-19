@@ -37,6 +37,10 @@ class FlatLabelButton : public views::LabelButton {
       : views::LabelButton(std::move(callback), text) {
     label()->SetSubpixelRenderingEnabled(false);
   }
+
+  void SetLabelFontList(const gfx::FontList& font_list) {
+    label()->SetFontList(font_list);
+  }
 };
 
 BEGIN_METADATA(FlatLabelButton)
@@ -65,6 +69,22 @@ std::unique_ptr<views::Label> MakeSectionLabel(std::u16string_view text) {
   return label;
 }
 
+namespace {
+
+// The buttons share the label's caption size, so "Today", "Archived" and
+// "Clear" read as one line, and brighten under the pointer like every other
+// control in the sidebar.
+void StyleSectionButton(views::LabelButton* label_button) {
+  auto* button = static_cast<FlatLabelButton*>(label_button);
+  button->SetLabelFontList(views::Label::GetDefaultFontList().Derive(
+      kSectionLabelSizeDelta, gfx::Font::NORMAL, gfx::Font::Weight::MEDIUM));
+  button->SetEnabledTextColors(kColorArciumRowTextSecondary);
+  button->SetTextColor(views::Button::STATE_HOVERED, kColorArciumRowTextActive);
+  button->SetTextColor(views::Button::STATE_PRESSED, kColorArciumRowTextActive);
+}
+
+}  // namespace
+
 SectionDividerView::SectionDividerView(base::RepeatingClosure on_clear,
                                        base::RepeatingClosure on_archive) {
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
@@ -89,13 +109,13 @@ SectionDividerView::SectionDividerView(base::RepeatingClosure on_clear,
   if (on_archive) {
     archive_ = AddChildView(
         std::make_unique<FlatLabelButton>(std::move(on_archive), u"Archived"));
-    archive_->SetEnabledTextColors(kColorArciumRowTextSecondary);
+    StyleSectionButton(archive_);
     archive_->SetVisible(false);
     archive_->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 8, 0, 0));
   }
   clear_ = AddChildView(
       std::make_unique<FlatLabelButton>(std::move(on_clear), u"Clear"));
-  clear_->SetEnabledTextColors(kColorArciumRowTextSecondary);
+  StyleSectionButton(clear_);
   clear_->SetVisible(false);
   clear_->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 8, 0, 0));
 }

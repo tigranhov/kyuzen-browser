@@ -15,6 +15,7 @@
 #include "arcium/ui/playground/fake_sidebar_model.h"
 #include "arcium/ui/sidebar/archive_list_view.h"
 #include "arcium/ui/sidebar/favorites_grid_view.h"
+#include "arcium/ui/sidebar/focus_rings.h"
 #include "arcium/ui/sidebar/folder_header_view.h"
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
@@ -25,6 +26,7 @@
 #include "arcium/ui/sidebar/sidebar_view.h"
 #include "arcium/ui/sidebar/tab_list_view.h"
 #include "arcium/ui/sidebar/tab_row_view.h"
+#include "arcium/ui/sidebar/url_pill_view.h"
 #include "arcium/ui/sidebar/view_snapshot.h"
 #include "base/auto_reset.h"
 #include "base/files/file_path.h"
@@ -36,6 +38,7 @@
 #include "base/test/task_environment.h"
 #include "base/time/time.h"
 #include "cc/paint/display_item_list.h"
+#include "components/vector_icons/vector_icons.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -54,6 +57,7 @@
 #include "ui/menus/simple_menu_model.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/scroll_view.h"
@@ -2402,6 +2406,104 @@ TEST_F(SidebarViewsTest, TheTodayListScrollsWithLayers) {
   ASSERT_TRUE(scroll->contents());
   EXPECT_TRUE(scroll->contents()->layer())
       << "contents must be layer-backed, or scrolling the sidebar aborts";
+}
+
+// Five identical globes say nothing, so a favourite the profile has no icon
+// for draws the site's letter, and one with an icon draws the icon.
+TEST_F(SidebarViewsTest, AFavouriteWithNoIconShowsALetterNotAGlobe) {
+  model_.AddTab(u"Figma", "https://www.figma.com/", SidebarSection::kFavorites,
+                false);
+  model_.AddTab(u"GitHub", "https://github.com/", SidebarSection::kFavorites,
+                false);
+  model_.ForgetFavicon(u"Figma");
+  auto* grid =
+      contents_->AddChildView(std::make_unique<FavoritesGridView>(&model_));
+  grid->SetRows(model_.rows());
+
+  const ui::ImageModel lettered = FavoritesGridView::IconFor(model_.rows()[0]);
+  EXPECT_TRUE(lettered.IsImageGenerator())
+      << "a favourite with no icon draws nothing of its own";
+  const ui::ImageModel iconed = FavoritesGridView::IconFor(model_.rows()[1]);
+  EXPECT_FALSE(iconed.IsImageGenerator())
+      << "a favourite with an icon draws a letter over it";
+
+  views::test::RunScheduledLayout(widget_.get());
+  EXPECT_EQ(metrics::kFavoriteTileHeight,
+            grid->tile_at_for_testing(0)->height());
+}
+
+TEST_F(SidebarViewsTest, AFolderDrawsAFolderOpenOrClosed) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kPinned, false);
+  MakeList(SidebarSection::kPinned);
+  const FolderId work = model_.AddFolderWith(u"Work", {u"One"});
+  Refresh();
+  auto* header = views::AsViewClass<FolderHeaderView>(list_->children()[0]);
+  ASSERT_TRUE(header);
+  auto glyph = [&] {
+    const ui::ImageModel& image = header->icon_for_testing()->GetImageModel();
+    return image.IsVectorIcon() ? image.GetVectorIcon().vector_icon() : nullptr;
+  };
+  EXPECT_EQ(&vector_icons::kFolderOpenIcon, glyph());
+
+  model_.SetFolderCollapsed(work, true);
+  Refresh();
+  EXPECT_EQ(&vector_icons::kFolderFlippableIcon, glyph());
+}
+
+// The two halves of a split are one entry: side by side in one slot, with
+// only the half the keyboard is in drawn as the active one.
+TEST_F(SidebarViewsTest, ASplitIsOneEntryWithItsFrontHalfLit) {
+  model_.AddTab(u"Left", "https://left.example/", SidebarSection::kToday, true);
+  model_.AddTab(u"Right", "https://right.example/", SidebarSection::kToday,
+                false);
+  model_.SplitRowsTitled(u"Left", u"Right");
+  MakeList(SidebarSection::kToday);
+  Refresh();
+  views::test::RunScheduledLayout(widget_.get());
+
+  auto* left = views::AsViewClass<TabRowView>(list_->children()[0]);
+  auto* right = views::AsViewClass<TabRowView>(list_->children()[1]);
+  ASSERT_TRUE(left && right);
+  EXPECT_EQ(left->y(), right->y()) << "the halves sit on two lines";
+  EXPECT_LT(left->bounds().right(), right->x());
+  EXPECT_EQ(1u, list_->grips_for_testing().size());
+
+  ASSERT_TRUE(left->background());
+  EXPECT_EQ(static_cast<ui::ColorId>(kColorArciumRowActiveBackground),
+            left->background()->color());
+  EXPECT_FALSE(right->background())
+      << "both halves are drawn as the one in front";
+}
+
+// Keyboard focus has one look: the accent ring, inside a row or a tile so
+// it never touches its neighbour, and just outside the pill.
+TEST_F(SidebarViewsTest, FocusRingsSitInsideRowsAndTilesAndOutsideThePill) {
+  model_.AddTab(u"One", "https://one.example/", SidebarSection::kToday, false);
+  model_.AddTab(u"Fav", "https://fav.example/", SidebarSection::kFavorites,
+                false);
+  MakeList(SidebarSection::kToday);
+  Refresh();
+  auto* grid =
+      contents_->AddChildView(std::make_unique<FavoritesGridView>(&model_));
+  grid->SetRows(model_.rows());
+  auto* pill = contents_->AddChildView(
+      std::make_unique<UrlPillView>(UrlPillView::Actions()));
+  views::test::RunScheduledLayout(widget_.get());
+
+  for (views::View* host :
+       {static_cast<views::View*>(list_->children()[0]),
+        static_cast<views::View*>(grid->tile_at_for_testing(0))}) {
+    const views::FocusRing* ring = views::FocusRing::Get(host);
+    ASSERT_TRUE(ring) << host->GetClassName();
+    EXPECT_EQ(std::optional<ui::ColorId>(kColorArciumFocusRing),
+              ring->GetColorId());
+    EXPECT_GT(ring->GetHaloInset(), 0) << host->GetClassName();
+  }
+  const views::FocusRing* pill_ring = views::FocusRing::Get(pill);
+  ASSERT_TRUE(pill_ring);
+  EXPECT_EQ(std::optional<ui::ColorId>(kColorArciumFocusRing),
+            pill_ring->GetColorId());
+  EXPECT_LT(pill_ring->GetHaloInset(), 0);
 }
 
 }  // namespace

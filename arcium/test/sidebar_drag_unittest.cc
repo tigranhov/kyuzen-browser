@@ -10,11 +10,13 @@
 
 #include "arcium/test/test_app_activation.h"
 #include "arcium/ui/playground/fake_sidebar_model.h"
+#include "arcium/ui/sidebar/drop_marks.h"
 #include "arcium/ui/sidebar/favorites_grid_view.h"
 #include "arcium/ui/sidebar/folder_header_view.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/row_drag_image.h"
 #include "arcium/ui/sidebar/row_drag_session.h"
+#include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_model.h"
 #include "arcium/ui/sidebar/tab_list_view.h"
@@ -23,17 +25,22 @@
 #include "base/pickle.h"
 #include "base/uuid.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
+#include "ui/color/color_provider.h"
+#include "ui/color/color_provider_key.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/events/event.h"
 #include "ui/events/event_constants.h"
 #include "ui/events/test/event_generator.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/point_f.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/gfx/geometry/vector2d.h"
 #include "ui/gfx/image/image_skia.h"
 #include "ui/views/controls/button/button.h"
@@ -1572,6 +1579,47 @@ TEST_F(SidebarDragTest, ADragDoesNotStartInsideTheThreshold) {
       row->CanStartDragForView(row, gfx::Point(10, 10), gfx::Point(10, 11)));
   EXPECT_TRUE(
       row->CanStartDragForView(row, gfx::Point(10, 10), gfx::Point(10, 40)));
+}
+
+// The marks are painted, not views, so they are checked by their pixels on a
+// colour provider that carries the Arcium mixer.
+class DropMarksTest : public testing::Test {
+ protected:
+  void SetUp() override {
+    ui::ColorProviderKey key;
+    key.color_mode = ui::ColorProviderKey::ColorMode::kDark;
+    AddArciumColorMixer(&colors_, key);
+    colors_.GenerateColorMapForTesting();
+  }
+
+  SkColor Accent() const { return colors_.GetColor(kColorArciumSpaceAccent); }
+
+  ui::ColorProvider colors_;
+};
+
+TEST_F(DropMarksTest, AnInsertionMarkIsAnAccentLineWithRoundEnds) {
+  gfx::Canvas canvas(gfx::Size(40, 8), 1.f, /*is_opaque=*/false);
+  PaintDropMark(&canvas, gfx::Rect(0, 3, 40, 2), &colors_);
+  const SkBitmap& bitmap = canvas.GetBitmap();
+  EXPECT_EQ(Accent(), bitmap.getColor(20, 3)) << "the middle is not accent";
+  EXPECT_EQ(SK_ColorTRANSPARENT, bitmap.getColor(20, 0))
+      << "the mark is thicker than its two points";
+  EXPECT_LT(SkColorGetA(bitmap.getColor(0, 3)), SkColorGetA(Accent()))
+      << "the ends are square";
+}
+
+TEST_F(DropMarksTest, ADropTargetIsASoftTintInsideAnAccentRing) {
+  gfx::Canvas canvas(gfx::Size(60, 32), 1.f, /*is_opaque=*/false);
+  PaintDropTarget(&canvas, gfx::RectF(0, 0, 60, 32), 8, &colors_);
+  const SkBitmap& bitmap = canvas.GetBitmap();
+  const SkColor middle = bitmap.getColor(30, 16);
+  const SkColor edge = bitmap.getColor(30, 0);
+  // The tint is translucent and the ring is not, so the edge is the more
+  // opaque of the two, and both are the accent's hue.
+  EXPECT_GT(SkColorGetA(middle), 0) << "the target has no tint";
+  EXPECT_GT(SkColorGetA(edge), SkColorGetA(middle)) << "the target has no ring";
+  EXPECT_EQ(SK_ColorTRANSPARENT, bitmap.getColor(0, 0))
+      << "the corners are square";
 }
 
 }  // namespace

@@ -22,11 +22,15 @@
 #include "arcium/ui/sidebar/tab_row_view.h"
 #include "arcium/ui/sidebar/vector_icons.h"
 #include "base/functional/bind.h"
+#include "cc/paint/paint_flags.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/base/models/image_model.h"
+#include "ui/color/color_provider.h"
 #include "ui/gfx/animation/tween.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/layout/box_layout.h"
@@ -80,6 +84,32 @@ void TabListView::PlaceSplit(size_t grip, const gfx::Rect slot) {
   grips_[grip]->SetBounds(slot.x() + left_width, slot.y(), gap, slot.height());
   rows_[grip_rows_[grip] + 1]->SetBounds(right_x, slot.y(),
                                          slot.right() - right_x, slot.height());
+}
+
+void TabListView::PaintSplits(gfx::Canvas* canvas) {
+  const ui::ColorProvider* colors = GetColorProvider();
+  for (size_t g = 0; g < grips_.size() && g < grip_rows_.size(); ++g) {
+    const TabRowView* left = rows_[grip_rows_[g]];
+    const TabRowView* right = rows_[grip_rows_[g] + 1];
+    if (!left->GetVisible() || !right->GetVisible()) {
+      continue;
+    }
+    const gfx::Rect pair(left->x(), left->y(),
+                         right->bounds().right() - left->x(), left->height());
+    cc::PaintFlags fill;
+    fill.setAntiAlias(true);
+    fill.setColor(colors->GetColor(kColorArciumControlBackground));
+    canvas->DrawRoundRect(gfx::RectF(pair), metrics::kRowCornerRadius, fill);
+    if (left->row().is_front_pane || right->row().is_front_pane ||
+        grips_[g]->openness() > 0) {
+      continue;
+    }
+    // Centred in the gap, and short of the pair's rounded ends.
+    const int x = (left->bounds().right() + right->x()) / 2;
+    canvas->FillRect(gfx::Rect(x, pair.y() + metrics::kRowCornerRadius, 1,
+                               pair.height() - 2 * metrics::kRowCornerRadius),
+                     colors->GetColor(kColorArciumDivider));
+  }
 }
 
 void TabListView::OnGripOpenChanged() {

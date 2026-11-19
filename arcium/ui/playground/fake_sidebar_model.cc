@@ -343,9 +343,35 @@ void FakeSidebarModel::SplitRows(size_t first, size_t second) {
   const split_tabs::SplitTabId id = split_tabs::SplitTabId::GenerateNew();
   rows_[first].split = id;
   rows_[second].split = id;
+  // The half that was on screen stays in front.
+  rows_[first].is_front_pane = !rows_[second].is_active;
+  rows_[second].is_front_pane = rows_[second].is_active;
   // Both halves of a split are on screen, so both rows are current.
   rows_[first].is_active = true;
   rows_[second].is_active = true;
+  Notify();
+}
+
+void FakeSidebarModel::SplitRowsTitled(const std::u16string& first,
+                                       const std::u16string& second) {
+  size_t a = rows_.size();
+  size_t b = rows_.size();
+  for (size_t i = 0; i < rows_.size(); ++i) {
+    if (rows_[i].title == first) {
+      a = i;
+    } else if (rows_[i].title == second) {
+      b = i;
+    }
+  }
+  SplitRows(a, b);
+}
+
+void FakeSidebarModel::ForgetFavicon(const std::u16string& title) {
+  for (SidebarRow& row : rows_) {
+    if (row.title == title) {
+      row.favicon = ui::ImageModel();
+    }
+  }
   Notify();
 }
 

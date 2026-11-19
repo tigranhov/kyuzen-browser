@@ -104,6 +104,34 @@ std::unique_ptr<views::View> MakeBadge(const std::u16string& icon,
   return badge;
 }
 
+namespace {
+
+// A link takes a colour, not a colour id, so it reads its colour again
+// whenever the theme changes.
+class WelcomeLink : public views::Link {
+  METADATA_HEADER(WelcomeLink, views::Link)
+
+ public:
+  explicit WelcomeLink(const std::u16string& text) : views::Link(text) {
+    SetForceUnderline(true);
+  }
+
+  void OnThemeChanged() override {
+    views::Link::OnThemeChanged();
+    SetEnabledColor(
+        GetColorProvider()->GetColor(kColorArciumWelcomeTextSecondary));
+  }
+};
+
+BEGIN_METADATA(WelcomeLink)
+END_METADATA
+
+}  // namespace
+
+std::unique_ptr<views::Link> MakeLink(const std::u16string& text) {
+  return std::make_unique<WelcomeLink>(text);
+}
+
 std::unique_ptr<views::ImageView> MakeIcon(const gfx::VectorIcon& icon,
                                            int size,
                                            ui::ColorId color) {

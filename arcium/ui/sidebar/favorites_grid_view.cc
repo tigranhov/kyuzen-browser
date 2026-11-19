@@ -10,6 +10,8 @@
 #include <utility>
 
 #include "arcium/browser/model/reorder_index.h"
+#include "arcium/ui/sidebar/drop_marks.h"
+#include "arcium/ui/sidebar/focus_rings.h"
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_context_menu.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
@@ -19,15 +21,25 @@
 #include "arcium/ui/sidebar/unloaded_row_dimming.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
+#include "base/i18n/case_conversion.h"
+#include "base/strings/utf_string_conversions.h"
+#include "base/third_party/icu/icu_utf.h"
+#include "cc/paint/paint_flags.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
 #include "ui/base/dragdrop/mojom/drag_drop_types.mojom.h"
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
+#include "ui/color/color_provider.h"
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/gfx/canvas.h"
+#include "ui/gfx/font.h"
+#include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_f.h"
+#include "ui/gfx/image/canvas_image_source.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
@@ -41,22 +53,80 @@ int TileSize(int width) {
   return (width - gaps) / metrics::kFavoritesPerRow;
 }
 
+// From the top of one row of tiles to the top of the next.
+constexpr int kRowPitch =
+    metrics::kFavoriteTileHeight + metrics::kFavoriteTileGap;
+
 // The full-width strip a tile's row occupies — where the rename field goes,
 // rather than the one tile, which is a quarter of the sidebar wide and has
 // nowhere to put one.
 gfx::Rect TileRowBounds(int width, size_t index) {
-  const int size = TileSize(width);
   const int row = static_cast<int>(index) / metrics::kFavoritesPerRow;
-  return gfx::Rect(0, row * (size + metrics::kFavoriteTileGap), width, size);
+  return gfx::Rect(0, row * kRowPitch, width, metrics::kFavoriteTileHeight);
 }
 
-// The gap indicator's width. It fills the gap between two tiles rather than
-// drawing a hairline in it, so it reads as "the tile goes here".
-constexpr int kDropIndicatorWidth = 3;
+// The site's letter, drawn where its icon would be, for a favourite the
+// profile never stored an icon for. Five identical globes say nothing; five
+// letters say which site each tile is.
+class LetterSource : public gfx::CanvasImageSource {
+ public:
+  LetterSource(std::u16string letter, SkColor color)
+      : gfx::CanvasImageSource(
+            gfx::Size(metrics::kFaviconSize, metrics::kFaviconSize)),
+        letter_(std::move(letter)),
+        color_(color) {}
+
+  void Draw(gfx::Canvas* canvas) override {
+    const gfx::FontList font =
+        gfx::FontList().DeriveWithWeight(gfx::Font::Weight::SEMIBOLD);
+    canvas->DrawStringRectWithFlags(letter_, font, color_, gfx::Rect(size()),
+                                    gfx::Canvas::TEXT_ALIGN_CENTER);
+  }
+
+ private:
+  const std::u16string letter_;
+  const SkColor color_;
+};
+
+// The host's first letter, less any "www.", else the title's.
+std::u16string SiteLetter(const SidebarRow& row) {
+  std::u16string name = base::UTF8ToUTF16(row.url.host());
+  if (name.starts_with(u"www.")) {
+    name = name.substr(4);
+  }
+  if (name.empty()) {
+    name = row.title;
+  }
+  if (name.empty()) {
+    return std::u16string();
+  }
+  const size_t length = CBU16_IS_LEAD(name[0]) && name.size() > 1 ? 2 : 1;
+  return base::i18n::ToUpper(name.substr(0, length));
+}
+
+ui::ImageModel TileIcon(const SidebarRow& row) {
+  if (!row.favicon.IsEmpty() && !row.favicon_is_placeholder) {
+    return row.needs_load() ? DimUnloadedFavicon(row.favicon) : row.favicon;
+  }
+  return ui::ImageModel::FromImageGenerator(
+      base::BindRepeating(
+          [](std::u16string letter, bool dim, const ui::ColorProvider* colors) {
+            return gfx::CanvasImageSource::MakeImageSkia<LetterSource>(
+                letter, colors->GetColor(dim ? kColorArciumRowTextSecondary
+                                             : kColorArciumRowText));
+          },
+          SiteLetter(row), row.needs_load()),
+      gfx::Size(metrics::kFaviconSize, metrics::kFaviconSize));
+}
 
 }  // namespace
 
 FavoritesGridView::FavoritesGridView(SidebarModel* model) : model_(model) {}
+
+// static
+ui::ImageModel FavoritesGridView::IconFor(const SidebarRow& row) {
+  return TileIcon(row);
+}
 
 FavoritesGridView::~FavoritesGridView() = default;
 
@@ -82,6 +152,8 @@ void FavoritesGridView::SetRows(const std::vector<SidebarRow>& rows) {
     // Right-click reaches the same menu a pinned row's does.
     tile->set_context_menu_controller(this);
     tile->set_drag_controller(this);
+    StyleFocusRing(tile.get(), metrics::kRowCornerRadius,
+                   FocusRingPlacement::kInside);
     tiles_.push_back(AddChildView(std::move(tile)));
   }
   while (tiles_.size() > mine.size()) {
@@ -94,9 +166,7 @@ void FavoritesGridView::SetRows(const std::vector<SidebarRow>& rows) {
     rows_.push_back(row);
     // Favourites carry no title of their own, so the icon is the only place a
     // cold one can be told apart from a loaded one at a glance.
-    tiles_[i]->SetImageModel(
-        views::Button::STATE_NORMAL,
-        row.needs_load() ? DimUnloadedFavicon(row.favicon) : row.favicon);
+    tiles_[i]->SetImageModel(views::Button::STATE_NORMAL, IconFor(row));
     tiles_[i]->SetTooltipText(row.title);
     tiles_[i]->GetViewAccessibility().SetName(row.title);
     tiles_[i]->SetCallback(base::BindRepeating(
@@ -216,7 +286,7 @@ size_t FavoritesGridView::DropTileIndex(const gfx::Point& p) const {
   if (pitch <= 0 || tiles_.empty()) {
     return tiles_.size();
   }
-  const int grid_row = std::max(0, p.y() / pitch);
+  const int grid_row = std::max(0, p.y() / kRowPitch);
   // Half a pitch across: the nearest gap, not the tile the pointer is over.
   const int column =
       std::clamp((p.x() + pitch / 2) / pitch, 0, metrics::kFavoritesPerRow);
@@ -271,11 +341,13 @@ gfx::Rect FavoritesGridView::DropIndicatorBounds(size_t index) const {
   const int column = static_cast<int>(slot % per_row) + (trailing ? 1 : 0);
   // Centred on the gap before `column`; column 0 has no gap to its left, so
   // it sits flush against the grid's edge.
-  const int x =
-      std::max(0, column * pitch -
-                      (metrics::kFavoriteTileGap + kDropIndicatorWidth) / 2);
-  return gfx::Rect(std::min(x, std::max(0, width() - kDropIndicatorWidth)),
-                   grid_row * pitch, kDropIndicatorWidth, size);
+  const int x = std::max(
+      0, column * pitch -
+             (metrics::kFavoriteTileGap + metrics::kDropMarkThickness) / 2);
+  return gfx::Rect(
+      std::min(x, std::max(0, width() - metrics::kDropMarkThickness)),
+      grid_row * kRowPitch, metrics::kDropMarkThickness,
+      metrics::kFavoriteTileHeight);
 }
 
 void FavoritesGridView::SetDropIndex(std::optional<size_t> index) {
@@ -388,8 +460,8 @@ void FavoritesGridView::OnPaint(gfx::Canvas* canvas) {
   if (!drop_index_) {
     return;
   }
-  canvas->FillRect(DropIndicatorBounds(*drop_index_),
-                   GetColorProvider()->GetColor(kColorArciumSpaceAccent));
+  // The same mark a list draws between rows, stood upright.
+  PaintDropMark(canvas, DropIndicatorBounds(*drop_index_), GetColorProvider());
 }
 
 void FavoritesGridView::BeginRenameForTile(size_t index) {
@@ -457,7 +529,7 @@ void FavoritesGridView::Layout(PassKey) {
     const int col = i % metrics::kFavoritesPerRow;
     const int row = i / metrics::kFavoritesPerRow;
     tiles_[i]->SetBounds(col * (size + metrics::kFavoriteTileGap),
-                         row * (size + metrics::kFavoriteTileGap), size, size);
+                         row * kRowPitch, size, metrics::kFavoriteTileHeight);
   }
   if (rename_field_) {
     rename_field_->SetBoundsRect(TileRowBounds(width(), renaming_tile_index_));
@@ -471,14 +543,15 @@ gfx::Size FavoritesGridView::CalculatePreferredSize(
   const int rows =
       (static_cast<int>(tiles_.size()) + metrics::kFavoritesPerRow - 1) /
       metrics::kFavoritesPerRow;
-  const int size = TileSize(width);
   if (rows == 0) {
     // One tile row while a drag is running, nothing at all otherwise: an
     // empty grid must be droppable without changing what the sidebar looks
     // like at rest.
-    return gfx::Size(width, ReservesDropBand() ? size : 0);
+    return gfx::Size(width,
+                     ReservesDropBand() ? metrics::kFavoriteTileHeight : 0);
   }
-  return gfx::Size(width, rows * size + (rows - 1) * metrics::kFavoriteTileGap);
+  return gfx::Size(width, rows * metrics::kFavoriteTileHeight +
+                              (rows - 1) * metrics::kFavoriteTileGap);
 }
 
 BEGIN_METADATA(FavoritesGridView)

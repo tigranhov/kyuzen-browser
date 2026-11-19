@@ -32,6 +32,7 @@
 #include "chrome/browser/ui/tabs/tab_data.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/tabs/tab_strip_model_delegate.h"
+#include "components/favicon/content/content_favicon_driver.h"
 #include "components/tabs/public/tab_alert.h"
 #include "components/tabs/public/tab_interface.h"
 #include "components/tabs/public/tab_network_state.h"
@@ -165,6 +166,7 @@ SidebarRow SidebarTabModel::RowForEntry(const TabEntry& entry) const {
     row.favicon = cold_favicons_->IconFor(entry.url);
     if (row.favicon.IsEmpty()) {
       row.favicon = ColdFavicon();
+      row.favicon_is_placeholder = true;
     }
     row.url = entry.url;
     return row;
@@ -176,8 +178,13 @@ SidebarRow SidebarTabModel::RowForEntry(const TabEntry& entry) const {
   // the truth, exactly as Stage 1 had it.
   row.title = entry.custom_title.empty() ? data.title : entry.custom_title;
   row.favicon = data.favicon;
+  if (const auto* driver =
+          favicon::ContentFaviconDriver::FromWebContents(tab->GetContents())) {
+    row.favicon_is_placeholder = !driver->FaviconIsValid();
+  }
   row.split = tab->GetSplit();
   row.is_active = IsForeground(row.tab_index);
+  row.is_front_pane = row.tab_index == tab_strip_model_->active_index();
   row.is_unloaded = !row.is_active && IsTabUnloaded(tab->GetContents());
   row.is_loading = data.network_state != tabs::TabNetworkState::kNone &&
                    !data.should_hide_throbber;

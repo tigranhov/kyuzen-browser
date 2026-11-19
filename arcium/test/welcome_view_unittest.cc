@@ -10,8 +10,12 @@
 
 #include "arcium/test/test_app_activation.h"
 #include "arcium/ui/playground/fake_welcome_model.h"
+#include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/welcome/welcome_model.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/color/color_id.h"
+#include "ui/color/color_provider.h"
+#include "ui/color/color_provider_key.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/events/test/test_event.h"
@@ -275,6 +279,36 @@ TEST_F(WelcomeViewTest, ImportWaitsForSomethingToImport) {
   Click(view->skip_button_for_testing());
   EXPECT_EQ(0, model_.apply_count());
   EXPECT_EQ(1, model_.finish_count());
+}
+
+// The card's links are quiet underlined text, as the sidebar's own actions
+// are, not Chromium's link blue.
+TEST_F(WelcomeViewTest, ItsLinksAreUnderlinedSecondaryTextNotLinkBlue) {
+  Open(WelcomeStep::kSetup);
+  views::Link* link = view_->skip_setup_for_testing();
+  ASSERT_TRUE(link);
+  const ui::ColorProvider* colors = link->GetColorProvider();
+  // The colour the link asks for, before a label adjusts it for contrast.
+  EXPECT_EQ(colors->GetColor(kColorArciumWelcomeTextSecondary),
+            link->GetColor());
+  EXPECT_NE(colors->GetColor(ui::kColorLinkForeground), link->GetColor());
+}
+
+// The card's accent is the product's, not a violet of its own: the fill
+// white text sits on, and the soft tint the sidebar's drop targets use.
+TEST(WelcomeColorsTest, TheCardTakesTheProductAccent) {
+  for (auto mode : {ui::ColorProviderKey::ColorMode::kDark,
+                    ui::ColorProviderKey::ColorMode::kLight}) {
+    ui::ColorProvider colors;
+    ui::ColorProviderKey key;
+    key.color_mode = mode;
+    AddArciumColorMixer(&colors, key);
+    colors.GenerateColorMapForTesting();
+    EXPECT_EQ(SkColorSetRGB(0x6A, 0x5C, 0xF2),
+              colors.GetColor(kColorArciumWelcomeAccent));
+    EXPECT_EQ(colors.GetColor(kColorArciumSpaceChipActiveBackground),
+              colors.GetColor(kColorArciumWelcomeAccentSoft));
+  }
 }
 
 }  // namespace

@@ -95,6 +95,8 @@ class FolderHeaderView : public views::Button,
 
   void BeginRename();
   bool is_renaming() const { return rename_field_ != nullptr; }
+  // The folder glyph where a row has its favicon.
+  views::ImageView* icon_for_testing() { return disclosure_; }
   // The folder the open edit belongs to; invalid when nothing is being renamed.
   FolderId renaming_folder_id() const { return renaming_folder_id_; }
 
@@ -103,6 +105,7 @@ class FolderHeaderView : public views::Button,
   void OnMouseEntered(const ui::MouseEvent& event) override;
   void OnMouseExited(const ui::MouseEvent& event) override;
   void OnThemeChanged() override;
+  void PaintButtonContents(gfx::Canvas* canvas) override;
   gfx::Size CalculatePreferredSize(
       const views::SizeBounds& available_size) const override;
 

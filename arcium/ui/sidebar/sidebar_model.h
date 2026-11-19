@@ -29,6 +29,10 @@ struct SidebarRow {
   SidebarSection section = SidebarSection::kToday;
   std::u16string title;
   ui::ImageModel favicon;
+  // `favicon` is the stand-in for a site with no stored icon, not the site's
+  // own. A row draws it as it is; a favourite tile, which has no title to
+  // tell five globes apart, draws the site's letter instead.
+  bool favicon_is_placeholder = false;
   bool is_active = false;
   bool is_loading = false;
   bool is_audible = false;
@@ -50,6 +54,9 @@ struct SidebarRow {
   // split, and both are active: being current means being in the foreground,
   // which is one tab normally and two in a split.
   std::optional<split_tabs::SplitTabId> split;
+  // In a split on screen, the half the keyboard is in: the strip's active
+  // tab. Both halves are active; only this one is in front.
+  bool is_front_pane = false;
   // Whether this row is one half of a pair drawn as one row, and which half:
   // the row immediately before or after it in rows() is the other. Set by
   // GroupSplitRows, which puts the two next to each other in pane order. A

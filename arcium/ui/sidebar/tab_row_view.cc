@@ -8,6 +8,8 @@
 #include <optional>
 #include <utility>
 
+#include "arcium/ui/sidebar/drop_marks.h"
+#include "arcium/ui/sidebar/focus_rings.h"
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/row_drag_image.h"
@@ -62,6 +64,7 @@ TabRowView::TabRowView(Delegate delegate)
           base::Unretained(this))),
       delegate_(std::move(delegate)) {
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+  StyleFocusRing(this, metrics::kRowCornerRadius, FocusRingPlacement::kInside);
   set_context_menu_controller(this);
   // A row is its own drag source. What it writes is an id, never itself: see
   // RowDragData.
@@ -412,6 +415,26 @@ void TabRowView::ShowContextMenuForViewImpl(
 
 void TabRowView::OnThemeChanged() {
   views::Button::OnThemeChanged();
+  // A half of a split sits inside the fill the list draws behind the pair:
+  // the half in front is the active one, the other is part of the pair.
+  if (row_.split_joins_previous || row_.split_joins_next) {
+    std::optional<ui::ColorId> fill;
+    if (row_.is_front_pane) {
+      fill = hovered_ ? kColorArciumRowActiveHoverBackground
+                      : kColorArciumRowActiveBackground;
+    } else if (GetState() == STATE_PRESSED) {
+      fill = kColorArciumRowPressedBackground;
+    } else if (hovered_) {
+      fill = kColorArciumRowHoverBackground;
+    }
+    SetBackground(fill ? views::CreateRoundedRectBackground(
+                             *fill,
+                             gfx::RoundedCornersF(metrics::kRowCornerRadius -
+                                                  metrics::kSplitHalfInset),
+                             gfx::Insets(metrics::kSplitHalfInset))
+                       : nullptr);
+    return;
+  }
   // One step of the state ladder per state, in sidebar_colors.h's order.
   std::optional<ui::ColorId> fill;
   if (row_.is_active) {
@@ -445,15 +468,12 @@ void TabRowView::PaintButtonContents(gfx::Canvas* canvas) {
     return;
   }
   // Under the favicon and title, which paint after this as children, so the
-  // row stays readable through the tint.
-  cc::PaintFlags flags;
-  flags.setAntiAlias(true);
-  flags.setColor(
-      SkColorSetA(GetColorProvider()->GetColor(kColorArciumSpaceAccent), 0x66));
+  // row stays readable through the tint. The same look as a folder that
+  // would take the row: joining is going into something too.
   gfx::RectF half(GetLocalBounds());
   half.set_x(half.width() / 2);
   half.set_width(half.width() / 2);
-  canvas->DrawRoundRect(half, metrics::kRowCornerRadius, flags);
+  PaintDropTarget(canvas, half, metrics::kRowCornerRadius, GetColorProvider());
 }
 
 gfx::Size TabRowView::CalculatePreferredSize(

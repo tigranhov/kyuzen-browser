@@ -189,6 +189,7 @@ SidebarRow SidebarTabModel::RowForTab(int index,
   // and a row build is not the place to learn an index went stale.
   row.split = tab->GetSplit();
   row.is_active = IsForeground(index);
+  row.is_front_pane = index == tab_strip_model_->active_index();
   row.is_unloaded = !row.is_active && IsTabUnloaded(tab->GetContents());
   row.is_loading = data.network_state != tabs::TabNetworkState::kNone &&
                    !data.should_hide_throbber;

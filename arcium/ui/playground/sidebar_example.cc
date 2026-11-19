@@ -84,6 +84,13 @@ SidebarExample::SidebarExample()
   model_->SetFolderParent(reading, work);
   model_->SetFolderCollapsed(reading, true);
   model_->SetCanReturnToPinnedUrl(5, true);
+  // A favourite the profile has no icon for, which the real build shows for
+  // every cold favourite at launch.
+  model_->ForgetFavicon(u"Figma");
+  // --split puts the tab on screen and the one below it in one split.
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch("split")) {
+    model_->SplitRowsTitled(u"tigranhov/arcium", u"Chromium Views tutorial");
+  }
   // Enough archived rows to see what the list has to draw: several ages, a
   // title long enough to elide against the timestamp column, and — once they
   // are all clicked away — the empty message.

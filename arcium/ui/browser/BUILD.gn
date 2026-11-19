@@ -138,6 +138,10 @@ source_set("browser") {
 
     # ShowWebModal, for the clear-data warning over the settings page.
     "//components/constrained_window",
+
+    # ContentFaviconDriver, to tell a favourite's own icon from the globe a
+    # tab shows while it has none, so its tile can draw a letter instead.
+    "//components/favicon/content",
     "//components/favicon/core",
     "//components/favicon_base",
     "//components/keyed_service/core",

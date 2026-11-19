@@ -258,11 +258,10 @@ StepContent BuildSetupStep(WelcomeModel& model, bool import_only) {
   // A file brought from another Mac.
   std::unique_ptr<views::Link> file;
   if (!model.searching()) {
-    file = std::make_unique<views::Link>(u"Import from a file…");
+    file = MakeLink(u"Import from a file…");
     file->SetCallback(base::BindRepeating(
         [](WelcomeModel* model) { model->PickFile(); }, &model));
     file->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-    file->SetEnabledColor(kColorArciumWelcomeAccent);
   }
   if (!import_only) {
     if (!model.sources().empty()) {

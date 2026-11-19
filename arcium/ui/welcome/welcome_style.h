@@ -16,6 +16,7 @@
 #include "ui/views/controls/button/radio_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/controls/link.h"
 #include "ui/views/view.h"
 
 namespace gfx {
@@ -28,14 +29,17 @@ namespace arcium::welcome {
 // (docs/superpowers/specs/2026-09-24-welcome-mockups/).
 inline constexpr int kCardWidth = 840;
 inline constexpr int kCardHeight = 532;
-inline constexpr int kCardRadius = 14;
-inline constexpr int kCardPadding = 28;
+// The product's own radii and spacing, so the card reads as part of the
+// browser rather than a page of its own: floating surfaces 12, everything
+// inside them 8.
+inline constexpr int kCardRadius = 12;
+inline constexpr int kCardPadding = 24;
 inline constexpr int kPanelWidth = 318;
 // The panel narrows with the card down to this, and then goes.
 inline constexpr int kPanelMinWidth = 288;
-inline constexpr int kPanelRadius = 12;
-inline constexpr int kTileRadius = 10;
-inline constexpr int kFooterHeight = 70;
+inline constexpr int kPanelRadius = 8;
+inline constexpr int kTileRadius = 8;
+inline constexpr int kFooterHeight = 64;
 // Narrower than this, the card drops its right-hand panel rather than
 // squeezing the choices.
 inline constexpr int kPanelMinCardWidth = 760;
@@ -63,6 +67,10 @@ std::unique_ptr<views::View> MakeTile(bool highlighted = false);
 std::unique_ptr<views::View> MakeBadge(const std::u16string& icon,
                                        const std::u16string& name,
                                        int size);
+
+// An underlined link in secondary text, as the sidebar draws its own
+// quiet actions, rather than Chromium's link blue.
+std::unique_ptr<views::Link> MakeLink(const std::u16string& text);
 
 std::unique_ptr<views::ImageView> MakeIcon(const gfx::VectorIcon& icon,
                                            int size,

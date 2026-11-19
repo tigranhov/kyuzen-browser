@@ -308,11 +308,9 @@ void WelcomeView::BuildCard() {
       true));
   footer->SetParts(back_, middle, skip_, continue_);
 
-  auto link = std::make_unique<views::Link>(u"Skip setup");
+  auto link = welcome::MakeLink(u"Skip setup");
   link->SetCallback(
       base::BindRepeating(&WelcomeView::OnSkipSetup, base::Unretained(this)));
-  link->SetForceUnderline(true);
-  link->SetEnabledColor(kColorArciumWelcomeTextSecondary);
   skip_setup_ = AddChildView(std::move(link));
 }
 

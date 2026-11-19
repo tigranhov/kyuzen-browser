@@ -17,6 +17,7 @@
 #include "base/memory/weak_ptr.h"
 #include "base/scoped_observation.h"
 #include "ui/base/metadata/metadata_header_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/context_menu_controller.h"
@@ -65,6 +66,9 @@ class FavoritesGridView : public views::View,
   std::optional<size_t> drop_index_for_testing() const { return drop_index_; }
   // The tile drawn for `rows()[index]`, so a test can ask what it painted --
   // the same reason TabRowView exposes its own children this way.
+  // What a tile draws for `row`: the site's icon, or its letter when the
+  // profile stored none.
+  static ui::ImageModel IconFor(const SidebarRow& row);
   views::ImageButton* tile_at_for_testing(size_t index) {
     return tiles_[index];
   }

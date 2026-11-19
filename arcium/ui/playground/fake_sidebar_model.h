@@ -108,6 +108,12 @@ class FakeSidebarModel : public SidebarModel {
   // show what a split looks like without a tab strip to make one. Ignores an
   // index it does not have.
   void SplitRows(size_t first, size_t second);
+  // Drops the stored icon of the row titled `title`, the state of a site the
+  // profile never fetched an icon for.
+  void ForgetFavicon(const std::u16string& title);
+  // SplitRows, for the two rows with these titles.
+  void SplitRowsTitled(const std::u16string& first,
+                       const std::u16string& second);
   // The row a drag names, by entry id or by tab index, or nothing.
   std::optional<size_t> IndexOfDragged(EntryId entry, int tab_index) const;
 

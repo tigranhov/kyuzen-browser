@@ -64,11 +64,11 @@ void AddArciumColorMixer(ui::ColorProvider* provider,
   mixer[kColorArciumSurfaceRaised] = {dark ? SkColorSetRGB(0x1E, 0x1E, 0x25)
                                            : SK_ColorWHITE};
 
-  // The welcome card, from the approved mockups: a page a shade darker (or
-  // lighter) than the card, so the card reads as the one thing on it, and a
-  // violet accent that sits beside the sidebar's own without matching it.
-  const SkColor welcome_accent =
-      dark ? SkColorSetRGB(0x7C, 0x6D, 0xF6) : SkColorSetRGB(0x5B, 0x4C, 0xEB);
+  // The welcome card: a page a shade darker (or lighter) than the card, so
+  // the card reads as the one thing on it, and the product's own accent as
+  // a fill -- one step deeper than the marks in dark, so white text on it
+  // keeps 4.5:1.
+  const SkColor welcome_accent = SkColorSetRGB(0x6A, 0x5C, 0xF2);
   mixer[kColorArciumWelcomeBackground] = {
       dark ? SkColorSetRGB(0x15, 0x15, 0x1B) : SkColorSetRGB(0xF4, 0xF4, 0xF8)};
   mixer[kColorArciumWelcomeCard] = {dark ? SkColorSetRGB(0x1E, 0x1E, 0x25)
@@ -86,8 +86,7 @@ void AddArciumColorMixer(ui::ColorProvider* provider,
   mixer[kColorArciumWelcomeTextSecondary] = {
       dark ? SkColorSetRGB(0xA0, 0xA0, 0xAC) : SkColorSetRGB(0x6B, 0x6B, 0x78)};
   mixer[kColorArciumWelcomeAccent] = {welcome_accent};
-  mixer[kColorArciumWelcomeAccentSoft] = {
-      ui::SetAlpha(welcome_accent, dark ? 0x33 : 0x1F)};
+  mixer[kColorArciumWelcomeAccentSoft] = {ui::SetAlpha(marks, 0x33)};
   mixer[kColorArciumWelcomeOnAccent] = {SK_ColorWHITE};
   mixer[kColorArciumWelcomeDotIdle] = {dark ? SkColorSetRGB(0x4A, 0x4A, 0x55)
                                             : SkColorSetRGB(0xCF, 0xCF, 0xD9)};

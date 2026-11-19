@@ -8,6 +8,8 @@
 #include <optional>
 #include <utility>
 
+#include "arcium/ui/sidebar/drop_marks.h"
+#include "arcium/ui/sidebar/focus_rings.h"
 #include "arcium/ui/sidebar/rename_field.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/row_drag_image.h"
@@ -17,6 +19,7 @@
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
 #include "base/strings/string_number_conversions.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/clipboard/clipboard_format_type.h"
 #include "ui/base/dragdrop/drag_drop_types.h"
 #include "ui/base/dragdrop/drop_target_event.h"
@@ -27,7 +30,9 @@
 #include "ui/compositor/layer_tree_owner.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
+#include "ui/gfx/canvas.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rect_f.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/image_view.h"
@@ -44,6 +49,7 @@ FolderHeaderView::FolderHeaderView(Delegate delegate)
                                         base::Unretained(this))),
       delegate_(std::move(delegate)) {
   SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
+  StyleFocusRing(this, metrics::kRowCornerRadius, FocusRingPlacement::kInside);
   set_context_menu_controller(this);
   set_drag_controller(this);
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
@@ -88,8 +94,12 @@ void FolderHeaderView::SetFolder(const SidebarFolder& folder) {
 }
 
 void FolderHeaderView::UpdateVisuals() {
+  // A folder, open or closed, where a row has its favicon: the same glyph
+  // the welcome card counts folders with, and it says what the row is as
+  // well as which way it is turned.
   disclosure_->SetImage(ui::ImageModel::FromVectorIcon(
-      folder_.collapsed ? kDisclosureCollapsedIcon : kDisclosureExpandedIcon,
+      folder_.collapsed ? vector_icons::kFolderFlippableIcon
+                        : vector_icons::kFolderOpenIcon,
       kColorArciumRowTextSecondary, metrics::kFaviconSize));
   const bool renaming = is_renaming();
   name_->SetVisible(!renaming);
@@ -210,15 +220,21 @@ void FolderHeaderView::ShowContextMenuForViewImpl(
 void FolderHeaderView::OnThemeChanged() {
   views::Button::OnThemeChanged();
   if (drop_target_) {
-    // The accent tint, not the hover grey: a drop is a commitment and has to
-    // read as more than the pointer passing over.
-    SetBackground(views::CreateRoundedRectBackground(
-        kColorArciumSpaceChipActiveBackground, metrics::kRowCornerRadius));
+    // Painted in PaintButtonContents: a drop is a commitment and has to read
+    // as more than the pointer passing over.
+    SetBackground(nullptr);
   } else if (hovered_) {
     SetBackground(views::CreateRoundedRectBackground(
         kColorArciumRowHoverBackground, metrics::kRowCornerRadius));
   } else {
     SetBackground(nullptr);
+  }
+}
+
+void FolderHeaderView::PaintButtonContents(gfx::Canvas* canvas) {
+  if (drop_target_) {
+    PaintDropTarget(canvas, gfx::RectF(GetLocalBounds()),
+                    metrics::kRowCornerRadius, GetColorProvider());
   }
 }
 

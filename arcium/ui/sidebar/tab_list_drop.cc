@@ -22,9 +22,11 @@
 #include <utility>
 
 #include "arcium/browser/model/reorder_index.h"
+#include "arcium/ui/sidebar/drop_marks.h"
 #include "arcium/ui/sidebar/folder_header_view.h"
 #include "arcium/ui/sidebar/row_drag_data.h"
 #include "arcium/ui/sidebar/sidebar_colors.h"
+#include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/tab_row_view.h"
 #include "base/functional/bind.h"
 #include "base/functional/callback_helpers.h"
@@ -43,7 +45,7 @@ namespace {
 // The insertion line. Two device-independent pixels, which is exactly the
 // gap BoxLayout leaves between rows, so it sits between them rather than
 // over one.
-constexpr int kDropLineThickness = 2;
+constexpr int kDropLineThickness = metrics::kDropMarkThickness;
 }  // namespace
 
 void TabListView::SetDragSession(RowDragSession* session) {
@@ -474,12 +476,14 @@ int TabListView::ReorderPosition(EntryId id, int to) const {
 
 void TabListView::OnPaint(gfx::Canvas* canvas) {
   views::View::OnPaint(canvas);
+  PaintSplits(canvas);
   if (!drop_index_) {
     return;
   }
-  canvas->FillRect(
-      gfx::Rect(0, DropLineY(*drop_index_), width(), kDropLineThickness),
-      GetColorProvider()->GetColor(kColorArciumSpaceAccent));
+  PaintDropMark(canvas,
+                gfx::Rect(0, DropLineY(*drop_index_), width(),
+                          metrics::kDropMarkThickness),
+                GetColorProvider());
 }
 
 }  // namespace arcium
