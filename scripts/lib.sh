@@ -17,6 +17,15 @@ need_src() {
   [ -d "$SRC/.git" ] || die "no Chromium checkout at $SRC; run scripts/bootstrap first"
 }
 
+# Fail unless the checkout's arcium link points at this working tree. The checkout and out/ are
+# shared by every worktree, so a build run from a tree the link does not point at compiles another
+# tree's sources and reports success without any of this tree's changes in it.
+need_own_tree() {
+  local linked
+  linked="$(readlink "$SRC/arcium" 2>/dev/null || true)"
+  [ "$linked" = "$ARCIUM_ROOT/arcium" ] || die "$SRC/arcium points at ${linked:-nothing}, not at this tree ($ARCIUM_ROOT/arcium), so a build here would not contain this tree's changes. Run scripts/sync from this tree first; the other tree must sync again before it builds."
+}
+
 # Every symlink we place inside the Chromium tree: "<path inside src> <target>"
 # The first is absolute (points at this repo); the rest are relative and point back into src/arcium.
 ARCIUM_SYMLINKS=(

@@ -4,6 +4,7 @@
 # Honors ARCIUM_JOBS. Logs to out/<config>/build.log. Runs under caffeinate and nice.
 source "$(dirname "$0")/lib.sh"
 need_src
+need_own_tree
 
 config="${1:-}"
 target="${2:-chrome}"

@@ -102,6 +102,9 @@ Put such changes in one patch, or far enough apart to clear the three lines of c
   Seen on 2026-09-13, where a build reported success and the new test simply was not in the
   binary. Before trusting a build in a second worktree, check where the symlink points, and
   after any `scripts/sync` assume the other worktree must sync again before it builds.
+  `scripts/build` now refuses to run from a tree the symlink does not point at, and
+  `scripts/sync` gives every file in a tree it newly links the current time, because the build
+  compares times, not contents, and would otherwise keep the previous tree's objects.
 - Machine: Apple M1 Pro, 10 cores, 32 GB. Clean dev build is hours; incremental UI builds are minutes.
   Prefer the Views playground for UI iteration.
 - Build configs in `build/`: `dev` (component build, minimal symbols), `perf` (release-like, for

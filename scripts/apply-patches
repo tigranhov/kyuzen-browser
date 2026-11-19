@@ -18,6 +18,7 @@ ensure_symlinks() {
       fi
       ln -s "$target" "$SRC/$link"
       log "linked $link -> $target"
+      if [ "$link" = arcium ]; then refresh_source_times "$target"; fi
     fi
     grep -qxF "/$link" "$exclude" 2>/dev/null || printf '/%s\n' "$link" >> "$exclude"
   done
@@ -25,6 +26,15 @@ ensure_symlinks() {
     link="${entry% *}"
     [ -e "$SRC/$link" ] || die "symlink $link is dangling (target missing)"
   done
+}
+
+# Give every file in a newly linked tree the current time. The build decides what to recompile by
+# comparing times, not contents, and out/ still holds objects built from whichever tree was linked
+# before. A file this tree last changed before those objects were built looks up to date even when
+# its contents differ, so the build would skip it and leave the other tree's code in the library.
+refresh_source_times() {
+  find "$1" -type f -exec touch {} +
+  log "refreshed file times under $1 so the next build recompiles them"
 }
 
 # Apply patches/*.patch in lexical order. Already-applied patches are skipped.
