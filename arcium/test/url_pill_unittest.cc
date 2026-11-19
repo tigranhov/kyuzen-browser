@@ -2,21 +2,23 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// What the pill shows and when. At rest it is a domain and nothing else; the
-// buttons arrive on hover or on keyboard focus, the warning arrives unasked,
-// and everything goes away while the bar behind the pill has a question of
-// its own.
+// What the pill shows and when. At rest it is the site icon and the address;
+// the other two buttons arrive on hover or on keyboard focus, the icon turns
+// into a warning unasked, and everything goes away while the bar behind the
+// pill has a question of its own.
 
 #include <memory>
 #include <utility>
 
 #include "arcium/test/test_app_activation.h"
+#include "arcium/ui/sidebar/sidebar_colors.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/url_pill_view.h"
 #include "base/auto_reset.h"
 #include "base/functional/bind.h"
 #include "base/memory/raw_ptr.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/color/color_variant.h"
 #include "ui/events/test/event_generator.h"
 #include "ui/events/test/test_event.h"
 #include "ui/gfx/geometry/rect.h"
@@ -73,13 +75,43 @@ class UrlPillTest : public views::ViewsTestBase {
       UrlPillView::DisableRevealAnimationForTesting();
 };
 
-TEST_F(UrlPillTest, AtRestItIsTextAndNothingElse) {
+TEST_F(UrlPillTest, AtRestItIsTheSiteIconAndTheAddress) {
   pill_->SetUrl(GURL("https://www.google.com/"));
   pill_->SetConnectionSecure(true);
   EXPECT_EQ(u"google.com", pill_->label_for_testing());
-  EXPECT_FALSE(pill_->site_button_for_testing()->GetVisible());
+  // The site icon is always there, so the pill reads as a control rather
+  // than as a line of text that happens to be clickable.
+  EXPECT_TRUE(pill_->site_button_for_testing()->GetVisible());
   EXPECT_FALSE(pill_->extensions_button_for_testing()->GetVisible());
   EXPECT_FALSE(pill_->copy_button_for_testing()->GetVisible());
+}
+
+TEST_F(UrlPillTest, TheMainDomainIsBrightAndTheRestIsDimmed) {
+  pill_->SetUrl(GURL("https://docs.example.co.uk:8443/a"));
+  // A suffix of two parts is still one suffix: the domain a person should
+  // trust is example.co.uk, not co.uk.
+  EXPECT_EQ(u"docs.", pill_->prefix_for_testing()->GetText());
+  EXPECT_EQ(u"example.co.uk", pill_->text_for_testing()->GetText());
+  EXPECT_EQ(u":8443", pill_->suffix_for_testing()->GetText());
+  EXPECT_TRUE(pill_->prefix_for_testing()->GetVisible());
+  EXPECT_TRUE(pill_->suffix_for_testing()->GetVisible());
+  // The test widget resolves every Arcium colour to the same placeholder, so
+  // what is compared is the colour each run asked for.
+  EXPECT_EQ(ui::ColorVariant(kColorArciumRowText),
+            pill_->text_for_testing()->GetRequestedEnabledColor())
+      << "the domain is not drawn at full strength";
+  EXPECT_EQ(ui::ColorVariant(kColorArciumRowTextSecondary),
+            pill_->prefix_for_testing()->GetRequestedEnabledColor())
+      << "the subdomain is not dimmed";
+  EXPECT_EQ(ui::ColorVariant(kColorArciumRowTextSecondary),
+            pill_->suffix_for_testing()->GetRequestedEnabledColor())
+      << "the port is not dimmed";
+
+  // A plain domain has nothing to dim, and no empty runs take up room.
+  pill_->SetUrl(GURL("https://example.com/"));
+  EXPECT_FALSE(pill_->prefix_for_testing()->GetVisible());
+  EXPECT_FALSE(pill_->suffix_for_testing()->GetVisible());
+  EXPECT_EQ(u"example.com", pill_->text_for_testing()->GetText());
 }
 
 TEST_F(UrlPillTest, HoveringRevealsAllThree) {
@@ -111,6 +143,19 @@ TEST_F(UrlPillTest, AnInsecureConnectionSaysSoWithoutBeingAskedTo) {
   EXPECT_TRUE(pill_->site_button_for_testing()->GetVisible());
   // Only that one: the other two still wait to be hovered.
   EXPECT_FALSE(pill_->extensions_button_for_testing()->GetVisible());
+}
+
+TEST_F(UrlPillTest, OnANewTabTheIconIsNotAButton) {
+  pill_->SetUrl(GURL("chrome://newtab/"));
+  // Shown, but a click on it is a click on the pill, which opens the box:
+  // there is no site to show information about.
+  EXPECT_TRUE(pill_->site_button_for_testing()->GetVisible());
+  EXPECT_FALSE(
+      pill_->site_button_for_testing()->GetCanProcessEventsWithinSubtree());
+
+  pill_->SetUrl(GURL("https://example.com/"));
+  EXPECT_TRUE(
+      pill_->site_button_for_testing()->GetCanProcessEventsWithinSubtree());
 }
 
 TEST_F(UrlPillTest, WhenTheBarHasSomethingToSayThePillGetsOutOfTheWay) {

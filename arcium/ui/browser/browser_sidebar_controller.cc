@@ -5,6 +5,8 @@
 #include "arcium/ui/browser/browser_sidebar_controller.h"
 
 #include <memory>
+#include <optional>
+#include <string>
 #include <utility>
 
 #include "arcium/browser/arcium_profile_state.h"
@@ -54,15 +56,21 @@
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/security_state/content/security_state_tab_helper.h"
+#include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
+#include "content/public/common/referrer.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/scoped_clipboard_writer.h"
 #include "ui/base/page_transition_types.h"
+#include "ui/base/window_open_disposition.h"
 #include "ui/compositor/layer.h"
+#include "ui/events/event.h"
+#include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+#include "url/gurl.h"
 
 namespace arcium {
 
@@ -473,20 +481,80 @@ void BrowserSidebarController::MaybeScheduleSnapshot() {
 }
 
 void BrowserSidebarController::MaybeShowCommandBoxForDebugging() {
-  if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
-          features::kQuickEntrySwitch)) {
-    return;
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(features::kQuickEntrySwitch)) {
+    // Only for a snapshot: everywhere else the box closes when the window
+    // loses focus, as it always has.
+    keep_box_open_for_debugging_ =
+        command_line->HasSwitch(features::kSnapshotSwitch);
+    const std::u16string text = base::UTF8ToUTF16(
+        command_line->GetSwitchValueASCII(features::kQuickEntrySwitch));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](base::WeakPtr<BrowserSidebarController> self,
+               const std::u16string& text) {
+              if (self) {
+                self->ShowCommandBox(text.empty()
+                                         ? std::nullopt
+                                         : std::optional<std::u16string>(text));
+              }
+            },
+            weak_factory_.GetWeakPtr(), text),
+        base::Seconds(2));
+    if (command_line->HasSwitch(features::kQuickEntryEnterSwitch)) {
+      base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+          FROM_HERE,
+          base::BindOnce(
+              [](base::WeakPtr<BrowserSidebarController> self) {
+                if (self && self->command_box_) {
+                  const ui::KeyEvent enter(ui::EventType::kKeyPressed,
+                                           ui::VKEY_RETURN, ui::EF_NONE);
+                  self->command_box_->HandleKeyEvent(nullptr, enter);
+                }
+              },
+              weak_factory_.GetWeakPtr()),
+          base::Seconds(7));
+    }
   }
-  base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&BrowserSidebarController::ShowCommandBoxWithNoText,
-                     weak_factory_.GetWeakPtr()),
-      base::Seconds(2));
+  if (command_line->HasSwitch(features::kPeekSwitch)) {
+    const GURL url(command_line->GetSwitchValueASCII(features::kPeekSwitch));
+    base::SingleThreadTaskRunner::GetCurrentDefault()->PostDelayedTask(
+        FROM_HERE,
+        base::BindOnce(
+            [](base::WeakPtr<BrowserSidebarController> self, const GURL& url) {
+              if (!self || !self->peek_) {
+                return;
+              }
+              content::WebContents* source = self->browser_view_->browser()
+                                                 ->tab_strip_model()
+                                                 ->GetActiveWebContents();
+              if (source) {
+                self->peek_->Show(source,
+                                  content::OpenURLParams(
+                                      url, content::Referrer(),
+                                      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+                                      ui::PAGE_TRANSITION_LINK,
+                                      /*is_renderer_initiated=*/false));
+              }
+            },
+            weak_factory_.GetWeakPtr(), url),
+        base::Seconds(2));
+  }
 }
 
 void BrowserSidebarController::WriteSnapshot(const base::FilePath& path) {
   LogViewHierarchy(browser_view_);
-  WriteViewSnapshot(browser_view_, path, /*scale=*/2.f, base::DoNothing());
+  // From the compositor's frame, so the lists and the peek, which draw on
+  // layers of their own, are in it.
+  WriteCompositedViewSnapshot(browser_view_, path, base::DoNothing());
+  // The box is a window of its own, so the window's picture does not hold it.
+  if (command_box_widget_) {
+    WriteViewSnapshot(command_box_widget_->GetRootView(),
+                      path.InsertBeforeExtensionASCII("-box"), /*scale=*/2.f,
+                      base::DoNothing());
+  }
 }
 
 void BrowserSidebarController::ExecuteCommand(int command_id) {

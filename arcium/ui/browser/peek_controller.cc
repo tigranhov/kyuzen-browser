@@ -20,11 +20,14 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_window/public/browser_window_interface.h"
+#include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "components/tabs/public/tab_interface.h"
+#include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
+#include "ui/base/models/image_model.h"
 #include "ui/compositor/layer.h"
 
 namespace arcium {
@@ -81,12 +84,36 @@ bool PeekController::Show(content::WebContents* source,
   }
   view_->SetBoundsRect(page_area_);
   view_->SetPage(page);
+  UpdateCaption();
   // The page was created hidden and its tab is never the active one, so
   // nothing else will ever tell it that it is on screen: without this the
   // renderer has no reason to paint the frame the peek is about to show.
   page->WasShown();
   view_->FocusPage();
   return true;
+}
+
+void PeekController::DidFinishNavigation(content::NavigationHandle* handle) {
+  if (handle->IsInPrimaryMainFrame() && handle->HasCommitted()) {
+    UpdateCaption();
+  }
+}
+
+void PeekController::DidStopLoading() {
+  UpdateCaption();
+}
+
+void PeekController::UpdateCaption() {
+  content::WebContents* page = web_contents();
+  if (!view_ || !page) {
+    return;
+  }
+  ui::ImageModel favicon;
+  if (tabs::TabInterface* tab =
+          tabs::TabInterface::MaybeGetFromContents(page)) {
+    favicon = TabUIHelper::From(tab)->GetFavicon();
+  }
+  view_->SetCaption(page->GetVisibleURL(), favicon);
 }
 
 void PeekController::Close() {

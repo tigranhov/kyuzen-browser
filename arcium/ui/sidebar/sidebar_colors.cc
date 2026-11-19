@@ -61,6 +61,8 @@ void AddArciumColorMixer(ui::ColorProvider* provider,
   mixer[kColorArciumSpaceAccent] = {marks};
   mixer[kColorArciumSpaceChipActiveBackground] = {ui::SetAlpha(marks, 0x33)};
   mixer[kColorArciumFocusRing] = {marks};
+  mixer[kColorArciumSurfaceRaised] = {dark ? SkColorSetRGB(0x1E, 0x1E, 0x25)
+                                           : SK_ColorWHITE};
 
   // The welcome card, from the approved mockups: a page a shade darker (or
   // lighter) than the card, so the card reads as the one thing on it, and a

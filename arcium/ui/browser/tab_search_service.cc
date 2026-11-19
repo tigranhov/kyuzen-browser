@@ -26,6 +26,7 @@
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/ui/tab_ui_helper.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
+#include "content/public/browser/web_contents.h"
 
 namespace arcium {
 namespace {
@@ -271,6 +272,46 @@ std::vector<SearchResult> TabSearchService::SearchLocal(
   std::vector<SearchResult> results = CollectLocal(
       tab_strip_model_, *model_, *binding_, matcher, /*reachable=*/nullptr);
   RankAndTruncate(results, limit, active_space());
+  return results;
+}
+
+std::vector<SearchResult> TabSearchService::RecentTabs(int limit) const {
+  std::vector<std::pair<base::TimeTicks, SearchResult>> found;
+  if (!tab_strip_model_ || limit <= 0) {
+    return {};
+  }
+  const int active = tab_strip_model_->active_index();
+  for (int i = 0; i < tab_strip_model_->count(); ++i) {
+    tabs::TabInterface* tab = tab_strip_model_->GetTabAtIndex(i);
+    if (i == active || IsLoosePage(tab->GetContents())) {
+      continue;
+    }
+    TabUIHelper* const ui_helper = TabUIHelper::From(tab);
+    const GURL url = ui_helper->GetVisibleURL();
+    // A tab that has gone nowhere is not somewhere to go back to.
+    if (url.IsAboutBlank() ||
+        (url.SchemeIs("chrome") && url.host() == "newtab")) {
+      continue;
+    }
+    SearchResult result;
+    result.source = SearchResult::Source::kLiveTab;
+    result.title = ui_helper->GetTitle();
+    result.url = url;
+    result.tab_handle = tab->GetHandle();
+    result.space_id = SpaceOfTab(*model_, *binding_, tab->GetHandle());
+    found.emplace_back(tab->GetContents()->GetLastActiveTimeTicks(),
+                       std::move(result));
+  }
+  std::stable_sort(
+      found.begin(), found.end(),
+      [](const auto& a, const auto& b) { return a.first > b.first; });
+  std::vector<SearchResult> results;
+  for (auto& [when, result] : found) {
+    if (results.size() == static_cast<size_t>(limit)) {
+      break;
+    }
+    results.push_back(std::move(result));
+  }
   return results;
 }
 

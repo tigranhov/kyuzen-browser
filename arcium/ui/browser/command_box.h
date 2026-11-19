@@ -12,12 +12,18 @@
 #include "base/functional/callback.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "base/task/cancelable_task_tracker.h"
 #include "ui/views/bubble/bubble_dialog_delegate_view.h"
 #include "ui/views/controls/textfield/textfield_controller.h"
 
 class BrowserView;
 
+namespace gfx {
+class Image;
+}
+
 namespace views {
+class Label;
 class Textfield;
 class View;
 }  // namespace views
@@ -65,6 +71,7 @@ class CommandBox : public views::BubbleDialogDelegate,
     return rows_[index];
   }
   size_t selected_row_for_testing() const { return selected_; }
+  views::Label* split_chip_for_testing() { return split_chip_; }
   CommandBoxRow* row_view_for_testing(size_t index) const {
     return row_views_[index];
   }
@@ -96,6 +103,11 @@ class CommandBox : public views::BubbleDialogDelegate,
   // The partner rows the typed text names, by title.
   void ShowMatchingPartners();
   void RebuildRowViews();
+  // The site's icon for row `index` of the set `generation` was built for;
+  // an answer for a set since replaced is dropped.
+  void OnRowIcon(size_t generation, size_t index, const gfx::Image& image);
+  // The command's key combination as the platform writes it, or empty.
+  std::u16string ShortcutFor(const SuggestionRow& row) const;
   void Move(int delta);
   void TakeRowAt(size_t index);
   void TakeSelectedRow();
@@ -111,6 +123,12 @@ class CommandBox : public views::BubbleDialogDelegate,
   // re-asking on every keystroke would renumber the rows under a click.
   std::vector<SuggestionRow> partners_;
   raw_ptr<views::Textfield> field_ = nullptr;
+  // "Split with", shown in the field's row while the box asks which tab.
+  raw_ptr<views::Label> split_chip_ = nullptr;
+  // Icons are asked of the profile's favicon store, never the network, and
+  // the questions for a set of rows are dropped when the set is replaced.
+  base::CancelableTaskTracker icon_tracker_;
+  size_t row_generation_ = 0;
   raw_ptr<views::View> row_container_ = nullptr;
   std::vector<SuggestionRow> rows_;
   std::vector<raw_ptr<CommandBoxRow>> row_views_;

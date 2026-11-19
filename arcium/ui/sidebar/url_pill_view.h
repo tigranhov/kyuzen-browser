@@ -54,6 +54,10 @@ class UrlPillView : public views::View, public views::FocusChangeListener {
   // request. The pill then shows nothing at all, so what the bar is asking is
   // both visible and clickable.
   void SetHostedBarSpeaking(bool speaking);
+  // True while the command box the pill opened is up. The pill stays lit for
+  // as long, so the box reads as the pill opened out rather than as a window
+  // from nowhere.
+  void SetBoxOpen(bool open);
 
   // Replaces the placeholder with `view`, which fills the pill behind the
   // pill's own text.
@@ -62,6 +66,8 @@ class UrlPillView : public views::View, public views::FocusChangeListener {
 
   const std::u16string& label_for_testing() const { return label_; }
   views::Label* text_for_testing() { return text_; }
+  views::Label* prefix_for_testing() { return prefix_; }
+  views::Label* suffix_for_testing() { return suffix_; }
   views::ImageButton* site_button_for_testing() { return site_; }
   views::ImageButton* extensions_button_for_testing() { return extensions_; }
   views::ImageButton* copy_button_for_testing() { return copy_; }
@@ -94,9 +100,16 @@ class UrlPillView : public views::View, public views::FocusChangeListener {
   void SetButtonShown(views::ImageButton* button, bool shown);
   void SetRevealed(bool revealed);
   void RefreshIcons();
+  // Rest, hover and open are three steps of the fill ladder; the domain
+  // brightens with the last two.
+  void UpdateLook();
 
   Actions actions_;
+  // The address in three runs: a dimmed subdomain, the registrable domain at
+  // full strength, a dimmed port. See SplitPillLabel.
+  raw_ptr<views::Label> prefix_ = nullptr;
   raw_ptr<views::Label> text_ = nullptr;
+  raw_ptr<views::Label> suffix_ = nullptr;
   // Keeps the site button's room whether it shows or not.
   raw_ptr<views::View> site_slot_ = nullptr;
   raw_ptr<views::ImageButton> site_ = nullptr;
@@ -107,6 +120,11 @@ class UrlPillView : public views::View, public views::FocusChangeListener {
   bool secure_ = true;
   bool revealed_ = false;
   bool speaking_ = false;
+  bool hovered_ = false;
+  bool box_open_ = false;
+  // A tab that has gone nowhere: the site button shows a search glyph and
+  // takes no click, which falls through to the pill and opens the box.
+  bool new_tab_ = false;
 };
 
 }  // namespace arcium

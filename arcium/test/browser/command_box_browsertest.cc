@@ -31,6 +31,7 @@
 #include "ui/events/event.h"
 #include "ui/gfx/geometry/point.h"
 #include "ui/views/background.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/test/views_test_utils.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
@@ -172,6 +173,10 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, TakingSplitAsksWhichTab) {
   ASSERT_TRUE(Box()) << "the box closed instead of asking which tab; "
                      << before;
   EXPECT_EQ(CommandBox::Mode::kSplitPartner, Box()->mode_for_testing());
+  // The field says what it is asking for, since the text in it is gone.
+  EXPECT_TRUE(Box()->split_chip_for_testing()->GetVisible())
+      << "the box asks which tab without saying what for";
+  EXPECT_EQ(u"Split with", Box()->split_chip_for_testing()->GetText());
   EXPECT_EQ(u"", Box()->text_for_testing());
   ASSERT_GT(Box()->row_count_for_testing(), 0u);
   EXPECT_TRUE(Box()->row_for_testing(0).split_with_tab_index.has_value());
@@ -215,6 +220,8 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, EscapeLeavesTheQuestionBeforeTheBox) {
       ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
 
   OpenBox();
+  EXPECT_FALSE(Box()->split_chip_for_testing()->GetVisible())
+      << "an ordinary box says it is splitting";
   Type(u"split");
   WaitForRows();
   const std::string before = SplitQuestionState(browser(), Box());
@@ -224,9 +231,37 @@ IN_PROC_BROWSER_TEST_F(CommandBoxTest, EscapeLeavesTheQuestionBeforeTheBox) {
   PressEscape();
   ASSERT_TRUE(Box()) << "the first Escape closed the box";
   EXPECT_EQ(CommandBox::Mode::kAnything, Box()->mode_for_testing());
+  EXPECT_FALSE(Box()->split_chip_for_testing()->GetVisible())
+      << "the box left the question and kept saying it is splitting";
 
   PressEscape();
   EXPECT_FALSE(Box());
+}
+
+// An empty box is not an empty list: it offers the tabs used last, which is
+// what a reader opening it with nothing typed most often wants.
+IN_PROC_BROWSER_TEST_F(CommandBoxTest, AnEmptyBoxOffersTheTabsUsedLast) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL a = embedded_test_server()->GetURL("a.test", "/title1.html");
+  const GURL b = embedded_test_server()->GetURL("b.test", "/title2.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), a));
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), GURL("chrome://newtab/"),
+      WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+  ui_test_utils::NavigateToURLWithDisposition(
+      browser(), b, WindowOpenDisposition::NEW_FOREGROUND_TAB,
+      ui_test_utils::BROWSER_TEST_WAIT_FOR_LOAD_STOP);
+
+  // The tabs are already in memory, so the rows are there as the box opens;
+  // there is nothing to wait for.
+  OpenBox();
+  ASSERT_EQ(u"", Box()->text_for_testing());
+  // The tab on screen is where the reader already is, and a new tab has
+  // gone nowhere, so a.test is the one tab worth offering.
+  ASSERT_EQ(1u, Box()->row_count_for_testing()) << TabUrls(browser());
+  EXPECT_EQ(a, Box()->row_for_testing(0).destination);
+  EXPECT_TRUE(Box()->row_for_testing(0).is_open_tab);
 }
 
 IN_PROC_BROWSER_TEST_F(CommandBoxTest, EscapeLeavesThePageAlone) {

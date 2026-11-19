@@ -5,21 +5,27 @@
 #include "arcium/ui/playground/sidebar_example.h"
 
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "arcium/ui/playground/snapshot.h"
 #include "arcium/ui/sidebar/sidebar_metrics.h"
 #include "arcium/ui/sidebar/sidebar_view.h"
+#include "arcium/ui/sidebar/url_pill_view.h"
+#include "base/command_line.h"
 #include "base/functional/bind.h"
 #include "base/logging.h"
 #include "base/time/time.h"
 #include "third_party/skia/include/core/SkColor.h"
+#include "ui/events/event.h"
+#include "ui/gfx/geometry/point.h"
 #include "ui/views/background.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
 #include "ui/views/layout/layout_types.h"
 #include "ui/views/view.h"
 #include "ui/views/view_class_properties.h"
+#include "url/gurl.h"
 
 namespace arcium {
 
@@ -106,6 +112,29 @@ SidebarExample::SidebarExample()
 
 SidebarExample::~SidebarExample() = default;
 
+namespace {
+
+// Puts the pill where a snapshot cannot otherwise reach it: --pill-url shows
+// an address of the caller's choosing, and --pill-state=hover or =open draws
+// the pill under the pointer or with the command box up.
+void ApplyPillSwitches(UrlPillView* pill) {
+  const base::CommandLine* command_line =
+      base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch("pill-url")) {
+    pill->SetUrl(GURL(command_line->GetSwitchValueASCII("pill-url")));
+  }
+  const std::string state = command_line->GetSwitchValueASCII("pill-state");
+  if (state == "hover") {
+    pill->OnMouseEntered(ui::MouseEvent(ui::EventType::kMouseEntered,
+                                        gfx::Point(), gfx::Point(),
+                                        base::TimeTicks(), 0, 0));
+  } else if (state == "open") {
+    pill->SetBoxOpen(true);
+  }
+}
+
+}  // namespace
+
 void SidebarExample::CreateExampleView(views::View* container) {
   auto* layout =
       container->SetLayoutManager(std::make_unique<views::FlexLayout>());
@@ -129,6 +158,7 @@ void SidebarExample::CreateExampleView(views::View* container) {
   auto* sidebar = container->AddChildView(
       std::make_unique<SidebarView>(model_.get(), std::move(delegate)));
   sidebar->SetCaptionButtonWidth(metrics::kDefaultCaptionButtonWidth);
+  ApplyPillSwitches(sidebar->url_pill());
 
   auto* page = container->AddChildView(std::make_unique<views::View>());
   page->SetBackground(views::CreateRoundedRectBackground(

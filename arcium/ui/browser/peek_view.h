@@ -11,20 +11,31 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/view.h"
 
+class GURL;
+
 namespace content {
 class WebContents;
 }
 
+namespace ui {
+class ImageModel;
+}
+
 namespace views {
 class ImageButton;
+class ImageView;
+class Label;
 class WebView;
 }  // namespace views
 
 namespace arcium {
 
-// What a peek draws: a scrim over the page area, a card holding the page, and
-// beside the card the two buttons Zen's Glance puts there -- close, and open
-// as a tab. Owns no page; the controller hands it one and takes it back.
+// What a peek draws: a scrim over the page area, a card holding the page --
+// rounded, edged and shadowed, so it reads as a card rather than a page that
+// failed to fill its box -- a caption over its corner naming where the link
+// went, and beside it one capsule with the two buttons Zen's Glance puts
+// there: close, and open as a tab. Owns no page; the controller hands it one
+// and takes it back.
 class PeekView : public views::View {
   METADATA_HEADER(PeekView, views::View)
 
@@ -42,6 +53,9 @@ class PeekView : public views::View {
   // Shows `page` in the card, or detaches whatever it showed for null.
   void SetPage(content::WebContents* page);
   void FocusPage();
+  // Names the page in the caption: its site, as the pill would name it, and
+  // its icon once it has one.
+  void SetCaption(const GURL& url, const ui::ImageModel& favicon);
 
   // The card, in this view's coordinates: the page area inset by a twentieth
   // on each side, less the column the buttons sit in.
@@ -49,6 +63,7 @@ class PeekView : public views::View {
 
   views::ImageButton* close_button_for_testing() { return close_button_; }
   views::ImageButton* open_button_for_testing() { return open_button_; }
+  views::Label* caption_text_for_testing() { return caption_text_; }
 
   // views::View:
   void Layout(PassKey) override;
@@ -63,8 +78,12 @@ class PeekView : public views::View {
 
   Actions actions_;
   raw_ptr<views::WebView> web_view_ = nullptr;
+  raw_ptr<views::View> capsule_ = nullptr;
   raw_ptr<views::ImageButton> close_button_ = nullptr;
   raw_ptr<views::ImageButton> open_button_ = nullptr;
+  raw_ptr<views::View> caption_ = nullptr;
+  raw_ptr<views::ImageView> caption_icon_ = nullptr;
+  raw_ptr<views::Label> caption_text_ = nullptr;
 };
 
 }  // namespace arcium

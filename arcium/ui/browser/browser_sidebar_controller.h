@@ -144,6 +144,11 @@ class BrowserSidebarController : public SidebarModel::Observer,
   void UpdateNavButtons();
   void MaybeScheduleSnapshot();
   void MaybeShowCommandBoxForDebugging();
+  // Set only by --arcium-quick-entry together with --arcium-snapshot: a box
+  // opened for a snapshot stays open when the window is not the active one,
+  // which it never is under a script. In normal use the box closes on losing
+  // focus.
+  bool keep_box_open_for_debugging_ = false;
   void WriteSnapshot(const base::FilePath& path);
   // The pill's own buttons.
   void OpenExtensionsMenu();

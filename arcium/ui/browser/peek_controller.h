@@ -14,6 +14,7 @@
 class BrowserView;
 
 namespace content {
+class NavigationHandle;
 class WebContents;
 struct OpenURLParams;
 }  // namespace content
@@ -53,6 +54,10 @@ class PeekController : public content::WebContentsObserver,
 
   // content::WebContentsObserver:
   void WebContentsDestroyed() override;
+  // The caption follows the page: a new address on each navigation, and its
+  // icon once loading stops, which is when a page's icon has usually arrived.
+  void DidFinishNavigation(content::NavigationHandle* handle) override;
+  void DidStopLoading() override;
 
   // TabStripModelObserver:
   void OnTabStripModelChanged(
@@ -64,6 +69,7 @@ class PeekController : public content::WebContentsObserver,
   // Removes the view and stops watching the page; what happens to the page's
   // tab is the caller's decision.
   void TearDown();
+  void UpdateCaption();
 
   raw_ptr<BrowserView> browser_view_;
   raw_ptr<PeekView> view_ = nullptr;

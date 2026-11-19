@@ -113,6 +113,11 @@ class TabSearchService {
   std::vector<SearchResult> SearchLocal(const std::u16string& query,
                                         int limit) const;
 
+  // What the command box offers before anything is typed: this window's live
+  // tabs, most recently used first, leaving out the one on screen. Reads the
+  // strip only, so it is synchronous and costs one pass over the tabs.
+  std::vector<SearchResult> RecentTabs(int limit) const;
+
   // All three sources. The only path that reaches the archive, and the one a
   // UI caller wants.
   //

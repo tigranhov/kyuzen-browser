@@ -101,6 +101,14 @@ source_set("sidebar") {
     ":sidebar_icons",
     "//cc/paint",
     "//components/vector_icons",
+
+    # The snapshot debugging switches read the compositor's frame back.
+    "//components/viz/common",
+
+    # The pill dims a subdomain against the registrable domain, which only
+    # the public suffix list can find. Already linked into the browser and
+    # the playground through //ui/views.
+    "//net",
     "//skia",
     "//ui/base/cursor",
     "//ui/base/cursor/mojom:cursor_type_shared",

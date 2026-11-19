@@ -22,6 +22,7 @@
 #include "arcium/ui/browser/peek_controller.h"
 #include "arcium/ui/browser/peek_view.h"
 #include "arcium/ui/browser/space_switcher.h"
+#include "arcium/ui/sidebar/pill_label.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
@@ -35,7 +36,10 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/compositor/layer.h"
+#include "ui/gfx/geometry/rect.h"
+#include "ui/views/background.h"
 #include "ui/views/controls/button/image_button.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/view.h"
 #include "url/gurl.h"
 
@@ -195,15 +199,58 @@ IN_PROC_BROWSER_TEST_F(PeekTest, ThePeekDrawsOverThePageBesideIt) {
       << "something else in the window draws over the peek";
 
   // And the buttons are where a reader can reach them: on screen, beside the
-  // card rather than under it.
-  EXPECT_TRUE(view->close_button_for_testing()->GetVisible());
-  EXPECT_TRUE(view->open_button_for_testing()->GetVisible());
-  EXPECT_TRUE(view->GetLocalBounds().Contains(
-      view->close_button_for_testing()->bounds()));
-  EXPECT_TRUE(view->GetLocalBounds().Contains(
-      view->open_button_for_testing()->bounds()));
-  EXPECT_FALSE(view->CardBounds().Intersects(
-      view->close_button_for_testing()->bounds()));
+  // card rather than under it. They sit in a capsule, so their own bounds are
+  // the capsule's; these are the peek's.
+  views::ImageButton* close = view->close_button_for_testing();
+  views::ImageButton* open = view->open_button_for_testing();
+  EXPECT_TRUE(close->GetVisible());
+  EXPECT_TRUE(open->GetVisible());
+  const gfx::Rect close_bounds =
+      views::View::ConvertRectToTarget(close->parent(), view, close->bounds());
+  const gfx::Rect open_bounds =
+      views::View::ConvertRectToTarget(open->parent(), view, open->bounds());
+  EXPECT_TRUE(view->GetLocalBounds().Contains(close_bounds));
+  EXPECT_TRUE(view->GetLocalBounds().Contains(open_bounds));
+  EXPECT_FALSE(view->CardBounds().Intersects(close_bounds));
+}
+
+// The two ways out are one control, so they read as the peek's own rather
+// than as two stray buttons floating over a page.
+IN_PROC_BROWSER_TEST_F(PeekTest, CloseAndOpenAsTabAreOneControl) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL home = embedded_test_server()->GetURL("a.test", "/title1.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), home));
+  PinTheTabOnScreen(home);
+  ClickLinkTo(embedded_test_server()->GetURL("b.test", "/title2.html"));
+  ASSERT_TRUE(Peek()->is_showing());
+
+  PeekView* view = Peek()->view_for_testing();
+  views::View* capsule = view->close_button_for_testing()->parent();
+  EXPECT_NE(view, capsule) << "the buttons are loose on the peek";
+  EXPECT_EQ(capsule, view->open_button_for_testing()->parent());
+  EXPECT_TRUE(capsule->background()) << "the capsule draws nothing behind them";
+}
+
+// The caption names where the link went, as the pill would, so the reader
+// can tell a peek at b.test from the a.test page under it.
+IN_PROC_BROWSER_TEST_F(PeekTest, TheCaptionNamesTheSite) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL home = embedded_test_server()->GetURL("a.test", "/title1.html");
+  const GURL elsewhere =
+      embedded_test_server()->GetURL("b.test", "/title2.html");
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), home));
+  PinTheTabOnScreen(home);
+  ClickLinkTo(elsewhere);
+  ASSERT_TRUE(Peek()->is_showing());
+  ASSERT_TRUE(content::WaitForLoadStop(Peek()->page_for_testing()));
+  RunLoopUntilIdle();
+
+  views::Label* caption =
+      Peek()->view_for_testing()->caption_text_for_testing();
+  ASSERT_TRUE(caption);
+  EXPECT_TRUE(caption->parent()->GetVisible());
+  EXPECT_EQ(PillLabel(elsewhere), caption->GetText());
+  EXPECT_NE(u"", caption->GetText());
 }
 
 }  // namespace

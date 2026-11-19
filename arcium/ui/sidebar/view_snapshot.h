@@ -29,6 +29,15 @@ void WriteViewSnapshot(views::View* view,
                        float scale,
                        base::OnceCallback<void(bool)> done);
 
+// As WriteViewSnapshot, but from the compositor's own frame, which holds what
+// is drawn on a layer of its own and which painting the views leaves out: a
+// scrolling list, a bubble's contents, a peek's caption. Falls back to
+// painting the views when no frame arrives within a few seconds. Web contents
+// still come out blank.
+void WriteCompositedViewSnapshot(views::View* view,
+                                 const base::FilePath& path,
+                                 base::OnceCallback<void(bool)> done);
+
 // Logs class, bounds and visibility of `view` and its descendants.
 void LogViewHierarchy(const views::View* view);
 

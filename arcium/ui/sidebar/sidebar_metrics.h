@@ -25,7 +25,8 @@ inline constexpr int kFolderIndent = 16;
 inline constexpr int kFavoritesPerRow = 4;
 inline constexpr int kFavoriteTileGap = 6;
 inline constexpr int kNavButtonSize = 26;
-inline constexpr int kUrlPillHeight = 28;
+// The pill is as tall as a row, so it reads as the first row of the column.
+inline constexpr int kUrlPillHeight = 32;
 // The buttons inside the URL pill: small enough that three of them plus the
 // domain fit a 250px sidebar without the text eliding on a normal host.
 inline constexpr int kPillButtonSize = 20;

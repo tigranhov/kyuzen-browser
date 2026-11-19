@@ -10,32 +10,83 @@
 
 #include "arcium/ui/browser/box_commands.h"
 #include "arcium/ui/browser/command_box_row.h"
+#include "arcium/ui/sidebar/sidebar_colors.h"
 #include "base/functional/bind.h"
 #include "base/i18n/case_conversion.h"
 #include "base/location.h"
 #include "base/task/sequenced_task_runner.h"
 #include "chrome/browser/autocomplete/autocomplete_classifier_factory.h"
+#include "chrome/browser/favicon/favicon_service_factory.h"
+#include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/contents_container_view.h"
+#include "components/favicon/core/favicon_service.h"
+#include "components/favicon_base/favicon_types.h"
+#include "components/keyed_service/core/service_access_type.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
+#include "components/vector_icons/vector_icons.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
+#include "ui/base/accelerators/accelerator.h"
+#include "ui/base/models/image_model.h"
 #include "ui/base/mojom/dialog_button.mojom.h"
 #include "ui/events/event.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 #include "ui/gfx/geometry/insets.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/image/image.h"
+#include "ui/views/background.h"
+#include "ui/views/border.h"
 #include "ui/views/bubble/bubble_border.h"
+#include "ui/views/controls/image_view.h"
+#include "ui/views/controls/label.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/layout/box_layout.h"
+#include "ui/views/layout/flex_layout.h"
+#include "ui/views/layout/flex_layout_types.h"
+#include "ui/views/layout/layout_types.h"
 #include "ui/views/view.h"
+#include "ui/views/view_class_properties.h"
 #include "ui/views/widget/widget.h"
 
 namespace arcium {
 
 namespace {
 constexpr int kWidth = 560;
-constexpr int kFieldHeight = 40;
+constexpr int kFieldHeight = 48;
+// The floating radius, and the sidebar's 8 of padding, so the rows sit in
+// the box as they sit in the sidebar.
+constexpr int kCornerRadius = 12;
+constexpr int kPadding = 8;
+constexpr int kGlyphSize = 16;
+constexpr int kGlyphGap = 12;
+constexpr int kChipRadius = 4;
+
+// What the profile already has for `url`, never fetched: a box that went to
+// the network for every row on every keystroke would be a box that leaks
+// what you type.
+void AskForIcon(Profile* profile,
+                const GURL& url,
+                base::CancelableTaskTracker* tracker,
+                base::OnceCallback<void(const gfx::Image&)> reply) {
+  favicon::FaviconService* service =
+      profile ? FaviconServiceFactory::GetForProfile(
+                    profile, ServiceAccessType::EXPLICIT_ACCESS)
+              : nullptr;
+  if (!service) {
+    return;
+  }
+  service->GetFaviconImageForPageURL(
+      url,
+      base::BindOnce(
+          [](base::OnceCallback<void(const gfx::Image&)> reply,
+             const favicon_base::FaviconImageResult& result) {
+            std::move(reply).Run(result.image);
+          },
+          std::move(reply)),
+      tracker);
+}
+
 }  // namespace
 
 CommandBox::CommandBox(BrowserView* browser_view,
@@ -50,7 +101,9 @@ CommandBox::CommandBox(BrowserView* browser_view,
       partner_rows_(std::move(partner_rows)) {
   SetButtons(static_cast<int>(ui::mojom::DialogButton::kNone));
   SetShowCloseButton(false);
-  set_margins(gfx::Insets(12));
+  set_margins(gfx::Insets(kPadding));
+  set_corner_radius(kCornerRadius);
+  SetBackgroundColor(kColorArciumSurfaceRaised);
   set_close_on_deactivate(true);
   set_parent_window(browser_view_->GetWidget()->GetNativeView());
 
@@ -58,11 +111,49 @@ CommandBox::CommandBox(BrowserView* browser_view,
   contents->SetLayoutManager(std::make_unique<views::BoxLayout>(
       views::BoxLayout::Orientation::kVertical));
 
+  // The field's row: a search glyph in the rows' icon column, the "Split
+  // with" chip while it applies, and a borderless field at title size.
+  auto field_row = std::make_unique<views::View>();
+  field_row->SetLayoutManager(std::make_unique<views::FlexLayout>())
+      ->SetOrientation(views::LayoutOrientation::kHorizontal)
+      .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
+      .SetInteriorMargin(gfx::Insets::VH(0, kPadding));
+  field_row->SetPreferredSize(gfx::Size(kWidth, kFieldHeight));
+  auto glyph =
+      std::make_unique<views::ImageView>(ui::ImageModel::FromVectorIcon(
+          vector_icons::kSearchIcon, kColorArciumRowTextSecondary, kGlyphSize));
+  glyph->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 0, 0, kGlyphGap));
+  field_row->AddChildView(std::move(glyph));
+
+  auto chip = std::make_unique<views::Label>(u"Split with");
+  chip->SetEnabledColor(kColorArciumRowTextActive);
+  chip->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(2, 8)));
+  chip->SetBackground(views::CreateRoundedRectBackground(
+      kColorArciumSpaceChipActiveBackground, kChipRadius));
+  chip->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 0, 0, 8));
+  chip->SetVisible(false);
+  split_chip_ = field_row->AddChildView(std::move(chip));
+
   auto field = std::make_unique<views::Textfield>();
   field->set_controller(this);
   field->SetPlaceholderText(u"Search or enter address");
-  field->SetPreferredSize(gfx::Size(kWidth, kFieldHeight));
-  field_ = contents->AddChildView(std::move(field));
+  field->SetBorder(views::NullBorder());
+  field->SetBackgroundEnabled(false);
+  field->SetFontList(
+      views::Textfield::GetDefaultFontList().DeriveWithSizeDelta(2));
+  field->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+                               views::MaximumFlexSizeRule::kUnbounded));
+  field_ = field_row->AddChildView(std::move(field));
+  contents->AddChildView(std::move(field_row));
+
+  // A hairline under the field, so the rows read as answers to it.
+  auto rule = std::make_unique<views::View>();
+  rule->SetPreferredSize(gfx::Size(kWidth, 1));
+  rule->SetBackground(views::CreateSolidBackground(kColorArciumDivider));
+  rule->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 0, 4, 0));
+  contents->AddChildView(std::move(rule));
 
   auto rows = std::make_unique<views::View>();
   rows->SetLayoutManager(std::make_unique<views::BoxLayout>(
@@ -135,13 +226,43 @@ void CommandBox::OnRows(std::vector<SuggestionRow> rows) {
 void CommandBox::RebuildRowViews() {
   row_views_.clear();
   row_container_->RemoveAllChildViews();
+  icon_tracker_.TryCancelAll();
+  ++row_generation_;
+  Profile* profile = browser_view_->GetProfile();
   for (size_t i = 0; i < rows_.size(); ++i) {
     auto* view = row_container_->AddChildView(std::make_unique<CommandBoxRow>(
-        rows_[i], base::BindRepeating(&CommandBox::TakeRowAt,
-                                      weak_factory_.GetWeakPtr(), i)));
+        rows_[i], ShortcutFor(rows_[i]),
+        base::BindRepeating(&CommandBox::TakeRowAt, weak_factory_.GetWeakPtr(),
+                            i)));
     view->SetSelected(i == selected_);
     row_views_.push_back(view);
+    if (rows_[i].destination.is_valid() && !rows_[i].is_search) {
+      AskForIcon(
+          profile, rows_[i].destination, &icon_tracker_,
+          base::BindOnce(&CommandBox::OnRowIcon, weak_factory_.GetWeakPtr(),
+                         row_generation_, i));
+    }
   }
+}
+
+void CommandBox::OnRowIcon(size_t generation,
+                           size_t index,
+                           const gfx::Image& image) {
+  if (generation != row_generation_ || index >= row_views_.size() ||
+      image.IsEmpty()) {
+    return;
+  }
+  row_views_[index]->SetIcon(ui::ImageModel::FromImage(image));
+}
+
+std::u16string CommandBox::ShortcutFor(const SuggestionRow& row) const {
+  ui::Accelerator accelerator;
+  // Arcium's own commands are negative and have no accelerator here.
+  if (!row.command_id || *row.command_id < 0 ||
+      !browser_view_->GetAccelerator(*row.command_id, &accelerator)) {
+    return std::u16string();
+  }
+  return accelerator.GetShortcutText();
 }
 
 void CommandBox::Move(int delta) {
@@ -223,6 +344,7 @@ void CommandBox::EnterSplitPartnerMode() {
     return;
   }
   mode_ = Mode::kSplitPartner;
+  split_chip_->SetVisible(true);
   // Nothing the source is still working out can be a partner.
   source_->Stop();
   // Clears the field without asking the source anything: ContentsChanged sees
@@ -233,6 +355,7 @@ void CommandBox::EnterSplitPartnerMode() {
 
 void CommandBox::LeaveSplitPartnerMode() {
   mode_ = Mode::kAnything;
+  split_chip_->SetVisible(false);
   partners_.clear();
   field_->SetText(std::u16string());
   source_->Start(std::u16string(),

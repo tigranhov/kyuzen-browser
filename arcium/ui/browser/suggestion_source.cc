@@ -31,6 +31,9 @@ namespace {
 // their own when they match, without asking the archive for a page of rows
 // nobody will scroll to.
 constexpr int kOwnResultLimit = 8;
+// The tabs an empty box offers: enough to cover the last few switches, few
+// enough that the box stays a box rather than a tab list.
+constexpr int kRecentTabLimit = 6;
 
 }  // namespace
 
@@ -46,6 +49,7 @@ std::vector<SuggestionRow> RowsForResult(
     SuggestionRow row;
     row.destination = match.destination_url;
     row.is_open_tab = match.has_tab_match.value_or(false);
+    row.is_search = AutocompleteMatch::IsSearchType(match.type);
     row.title = match.description.empty() ? match.contents : match.description;
     row.subtitle =
         match.description.empty() ? std::u16string() : match.contents;
@@ -124,7 +128,13 @@ void SuggestionSource::Start(const std::u16string& text, RowsCallback on_rows) {
   web_.clear();
   if (text.empty()) {
     controller_->Stop(AutocompleteStopReason::kClobbered);
-    on_rows_.Run({});
+    // An empty box is not an empty answer: the tabs most recently used are
+    // the likeliest place to go next, and they are already in memory.
+    if (tabs_) {
+      OnOwnResults(tabs_->RecentTabs(kRecentTabLimit));
+    } else {
+      on_rows_.Run({});
+    }
     return;
   }
   if (tabs_) {

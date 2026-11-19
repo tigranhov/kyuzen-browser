@@ -404,5 +404,38 @@ TEST_F(TabSearchServiceTest, AReadOutstandingWhenTheServiceDiesIsDropped) {
   EXPECT_FALSE(ran);
 }
 
+// What an empty box offers: the tabs used last, newest first, and never the
+// one on screen or a tab that has gone nowhere.
+TEST_F(TabSearchServiceTest, RecentTabsAreTheLastUsedNewestFirst) {
+  AddTabWithTitle(GURL("https://old.example/"), u"Old");
+  AddTabWithTitle(GURL("https://new.example/"), u"New");
+  AddTabWithTitle(GURL("chrome://newtab/"), u"New Tab");
+  AddTabWithTitle(GURL("about:blank"), u"");
+  AddTabWithTitle(GURL("https://on-screen.example/"), u"On screen");
+  // Activated first, because activating a tab stamps its own times.
+  strip()->ActivateTabAt(4);
+  const base::TimeTicks now = base::TimeTicks::Now();
+  for (int i = 0; i < strip()->count(); ++i) {
+    content::WebContentsTester::For(strip()->GetWebContentsAt(i))
+        ->SetLastActiveTimeTicks(now + base::Seconds(i));
+  }
+
+  const std::vector<SearchResult> recent = service_->RecentTabs(6);
+  ASSERT_EQ(2u, recent.size());
+  EXPECT_EQ(GURL("https://new.example/"), recent[0].url);
+  EXPECT_EQ(GURL("https://old.example/"), recent[1].url);
+  EXPECT_EQ(SearchResult::Source::kLiveTab, recent[0].source);
+}
+
+TEST_F(TabSearchServiceTest, RecentTabsHonourTheLimit) {
+  for (int i = 0; i < 4; ++i) {
+    AddTabWithTitle(GURL("https://t" + base::NumberToString(i) + ".example/"),
+                    u"T");
+  }
+  strip()->ActivateTabAt(0);
+  EXPECT_EQ(2u, service_->RecentTabs(2).size());
+  EXPECT_TRUE(service_->RecentTabs(0).empty());
+}
+
 }  // namespace
 }  // namespace arcium

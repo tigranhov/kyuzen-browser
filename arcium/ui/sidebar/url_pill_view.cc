@@ -42,6 +42,12 @@ namespace {
 bool g_animate_reveal = true;
 
 constexpr float kPillButtonRadius = 5;
+// The site icon sits in the column the rows' favicons sit in, and the address
+// starts in the column their titles start in: the pill is 8 in from the
+// sidebar's edge, so 4 here puts the 20pt button's 14pt icon at 16 to 32 and
+// the text at 44, where the rows' titles start.
+constexpr int kPillLeadingInset = 4;
+constexpr int kPillTextGap = 8;
 
 }  // namespace
 
@@ -60,14 +66,14 @@ UrlPillView::UrlPillView(Actions actions) : actions_(std::move(actions)) {
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
-      .SetInteriorMargin(gfx::Insets::VH(0, metrics::kPillButtonGap + 4))
+      .SetInteriorMargin(gfx::Insets::TLBR(0, kPillLeadingInset, 0,
+                                           metrics::kPillButtonGap + 4))
       .SetDefault(views::kMarginsKey,
                   gfx::Insets::VH(0, metrics::kPillButtonGap));
 
-  // The site button comes and goes at the start of the pill, so it sits in a
-  // slot that keeps its room either way: the address beside it never moves
-  // when the buttons arrive, and a warning puts it nowhere new. A click on
-  // the empty slot falls through to the pill and opens the box.
+  // The site button sits in a slot that keeps its room whatever it shows, so
+  // the address beside it never moves. A click on a slot whose button takes
+  // none falls through to the pill and opens the box.
   auto slot = std::make_unique<views::View>();
   slot->SetLayoutManager(std::make_unique<views::FillLayout>());
   slot->SetPreferredSize(
@@ -76,28 +82,72 @@ UrlPillView::UrlPillView(Actions actions) : actions_(std::move(actions)) {
   site_ = site_slot_->AddChildView(
       MakeButton(actions_.open_site_info, u"Site information"));
 
-  auto text = std::make_unique<views::Label>();
-  text->SetHorizontalAlignment(gfx::ALIGN_LEFT);
-  text->SetElideBehavior(gfx::ELIDE_TAIL);
-  text->SetEnabledColor(kColorArciumRowTextSecondary);
-  text->SetProperty(
+  // The three runs of the address sit side by side with nothing between
+  // them, in a box that takes whatever width the buttons leave. Only the
+  // domain gives up width, and only once the box has no more to give.
+  auto text_box = std::make_unique<views::View>();
+  text_box->SetLayoutManager(std::make_unique<views::FlexLayout>())
+      ->SetOrientation(views::LayoutOrientation::kHorizontal)
+      .SetCrossAxisAlignment(views::LayoutAlignment::kCenter);
+  text_box->SetCanProcessEventsWithinSubtree(false);
+  text_box->SetProperty(
+      views::kMarginsKey,
+      gfx::Insets::TLBR(0, kPillTextGap, 0, metrics::kPillButtonGap));
+  text_box->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
                                views::MaximumFlexSizeRule::kUnbounded));
-  text_ = AddChildView(std::move(text));
+  auto make_run = [](bool flexes) {
+    auto run = std::make_unique<views::Label>();
+    run->SetHorizontalAlignment(gfx::ALIGN_LEFT);
+    run->SetEnabledColor(kColorArciumRowTextSecondary);
+    if (flexes) {
+      run->SetElideBehavior(gfx::ELIDE_TAIL);
+      run->SetProperty(
+          views::kFlexBehaviorKey,
+          views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+                                   views::MaximumFlexSizeRule::kPreferred));
+    }
+    return run;
+  };
+  prefix_ = text_box->AddChildView(make_run(/*flexes=*/false));
+  text_ = text_box->AddChildView(make_run(/*flexes=*/true));
+  suffix_ = text_box->AddChildView(make_run(/*flexes=*/false));
+  AddChildView(std::move(text_box));
 
   extensions_ =
       AddChildView(MakeButton(actions_.open_extensions, u"Extensions"));
   copy_ = AddChildView(MakeButton(actions_.copy_link, u"Copy link"));
   RefreshIcons();
   UpdateButtons();
+  UpdateLook();
 }
 
 UrlPillView::~UrlPillView() = default;
 
 void UrlPillView::SetUrl(const GURL& url) {
   label_ = PillLabel(url);
-  text_->SetText(label_);
+  const PillLabelParts parts = SplitPillLabel(url);
+  prefix_->SetText(parts.prefix);
+  prefix_->SetVisible(!parts.prefix.empty());
+  text_->SetText(parts.domain);
+  suffix_->SetText(parts.suffix);
+  suffix_->SetVisible(!parts.suffix.empty());
+  const bool new_tab = !url.SchemeIsHTTPOrHTTPS() && label_ == u"New tab";
+  if (new_tab != new_tab_) {
+    new_tab_ = new_tab;
+    site_->SetCanProcessEventsWithinSubtree(!new_tab_);
+    RefreshIcons();
+  }
+  UpdateLook();
+}
+
+void UrlPillView::SetBoxOpen(bool open) {
+  if (open == box_open_) {
+    return;
+  }
+  box_open_ = open;
+  UpdateLook();
 }
 
 void UrlPillView::SetConnectionSecure(bool secure) {
@@ -117,7 +167,7 @@ void UrlPillView::SetHostedBarSpeaking(bool speaking) {
   // The pill's own text goes too, not only its buttons: the bar draws its
   // question where this text sits, and two lines of writing in one pill is
   // nobody's idea of a question.
-  text_->SetVisible(!speaking_);
+  text_->parent()->SetVisible(!speaking_);
   // And the site button's room with it, which is where the bar's question
   // starts, and which would otherwise take the click meant for it.
   site_slot_->SetVisible(!speaking_);
@@ -182,10 +232,16 @@ std::unique_ptr<views::ImageButton> UrlPillView::MakeButton(
 }
 
 void UrlPillView::RefreshIcons() {
+  // Always drawn, so the slot is never an empty indent: page information on
+  // a page, a search glyph on a tab that has gone nowhere, and the warning,
+  // in the danger colour, on a page whose connection is not secure.
+  const gfx::VectorIcon& site_icon = !secure_   ? vector_icons::kWarningIcon
+                                     : new_tab_ ? vector_icons::kSearchIcon
+                                                : vector_icons::kTuneIcon;
   site_->SetImageModel(
       views::Button::STATE_NORMAL,
       ui::ImageModel::FromVectorIcon(
-          secure_ ? vector_icons::kLockIcon : vector_icons::kWarningIcon,
+          site_icon,
           secure_ ? kColorArciumRowTextSecondary : ui::kColorAlertHighSeverity,
           metrics::kPillIconSize));
   extensions_->SetImageModel(
@@ -208,9 +264,9 @@ void UrlPillView::UpdateButtons() {
     SetButtonShown(copy_, false);
     return;
   }
-  // The warning is the one thing here whose whole value is being seen
-  // unasked, so it does not wait for a pointer.
-  SetButtonShown(site_, revealed_ || !secure_);
+  // The site icon is always there; the other two wait for a pointer or the
+  // keyboard.
+  SetButtonShown(site_, true);
   SetButtonShown(extensions_, revealed_);
   SetButtonShown(copy_, revealed_);
 }
@@ -260,10 +316,14 @@ bool UrlPillView::OnMousePressed(const ui::MouseEvent& event) {
 }
 
 void UrlPillView::OnMouseEntered(const ui::MouseEvent& event) {
+  hovered_ = true;
+  UpdateLook();
   SetRevealed(true);
 }
 
 void UrlPillView::OnMouseExited(const ui::MouseEvent& event) {
+  hovered_ = false;
+  UpdateLook();
   const views::FocusManager* focus = GetFocusManager();
   SetRevealed(focus && focus->GetFocusedView() &&
               Contains(focus->GetFocusedView()));
@@ -291,9 +351,21 @@ void UrlPillView::OnDidChangeFocus(views::View* before, views::View* now) {
 
 void UrlPillView::OnThemeChanged() {
   views::View::OnThemeChanged();
-  SetBackground(views::CreateRoundedRectBackground(
-      kColorArciumControlBackground,
-      static_cast<float>(metrics::kUrlPillHeight) / 3));
+  UpdateLook();
+}
+
+void UrlPillView::UpdateLook() {
+  const ui::ColorId fill = box_open_  ? kColorArciumRowActiveBackground
+                           : hovered_ ? kColorArciumControlHoverBackground
+                                      : kColorArciumControlBackground;
+  SetBackground(
+      views::CreateRoundedRectBackground(fill, metrics::kRowCornerRadius));
+  // The domain is the one trust cue on screen, so it is in row text at rest
+  // rather than dimmed, and brightest while the pill is in use. A tab that
+  // has gone nowhere has no domain to trust, so "New tab" stays dimmed.
+  text_->SetEnabledColor(new_tab_ ? kColorArciumRowTextSecondary
+                         : (hovered_ || box_open_) ? kColorArciumRowTextActive
+                                                   : kColorArciumRowText);
 }
 
 void UrlPillView::Layout(PassKey) {

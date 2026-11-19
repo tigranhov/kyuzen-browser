@@ -62,6 +62,10 @@ enum ArciumColorIds : ui::ColorId {
   kColorArciumControlHoverBackground,
   // Keyboard focus, drawn as a 2pt ring by the focused view itself.
   kColorArciumFocusRing,
+  // A raised surface over the page: the command box and the peek's controls.
+  // Solid rather than a fill over what is beneath, because what is beneath is
+  // a web page of any colour.
+  kColorArciumSurfaceRaised,
   kArciumColorsEnd,
 };
 

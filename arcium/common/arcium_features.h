@@ -49,8 +49,19 @@ inline constexpr char kSnapshotDelaySwitch[] = "arcium-snapshot-delay";
 
 // Debugging: --arcium-quick-entry opens the Cmd+T quick entry once the window
 // is up, so the bubble can be exercised where synthetic key presses are not
-// available (macOS withholds them from automated sessions).
+// available (macOS withholds them from automated sessions). A value is typed
+// into it: --arcium-quick-entry=split. With --arcium-snapshot the box is
+// painted too, beside the window's PNG as <name>-box.png.
 inline constexpr char kQuickEntrySwitch[] = "arcium-quick-entry";
+// Debugging, with the switch above: presses Enter in the box once its first
+// answers are in, so what a row leads to can be snapshotted too.
+// --arcium-quick-entry=split --arcium-quick-entry-enter shows the box asking
+// which tab to split with.
+inline constexpr char kQuickEntryEnterSwitch[] = "arcium-quick-entry-enter";
+
+// Debugging: --arcium-peek=<url> opens <url> in a peek over the tab on screen
+// once the window is up, so the peek can be snapshotted without a click.
+inline constexpr char kPeekSwitch[] = "arcium-peek";
 
 // The welcome follows Chromium's own first-run switch, which every browser
 // test and scripts/run pass: under --no-first-run it never shows.

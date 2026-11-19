@@ -35,6 +35,9 @@ struct SuggestionRow {
   // True when this is a tab the window already has open, possibly in another
   // space. The box switches to it rather than loading a second copy.
   bool is_open_tab = false;
+  // True for a search rather than a page: the row draws a search glyph, since
+  // there is no site whose icon it could show.
+  bool is_search = false;
   // Set when the row is a browser command rather than a page: an IDC_ id, or
   // one of box_commands.h's own. Such a row has no destination.
   std::optional<int> command_id;

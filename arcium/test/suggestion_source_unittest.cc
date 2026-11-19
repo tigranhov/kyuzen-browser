@@ -11,10 +11,18 @@
 #include <string>
 #include <vector>
 
+#include "arcium/ui/browser/command_box_row.h"
+#include "base/functional/callback_helpers.h"
 #include "base/strings/utf_string_conversions.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/autocomplete_result.h"
+#include "components/vector_icons/vector_icons.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/models/image_model.h"
+#include "ui/gfx/vector_icon_types.h"
+#include "ui/views/controls/image_view.h"
+#include "ui/views/controls/label.h"
+#include "ui/views/test/views_test_base.h"
 #include "url/gurl.h"
 
 namespace arcium {
@@ -110,6 +118,71 @@ TEST(MergeSuggestionsTest, EitherHalfMayBeEmpty) {
   EXPECT_EQ(1u, MergeSuggestions({Row("https://a.test/", true)}, {}).size());
   EXPECT_EQ(1u, MergeSuggestions({}, {Row("https://a.test/", false)}).size());
   EXPECT_TRUE(MergeSuggestions({}, {}).empty());
+}
+
+// A row is a view, and a view's labels need fonts and a UI thread.
+using CommandBoxRowTest = views::ViewsTestBase;
+
+// The glyph a row was drawn with, or null when it shows something else.
+const gfx::VectorIcon* KindIconOf(CommandBoxRow& row) {
+  const ui::ImageModel& image = row.icon_for_testing()->GetImageModel();
+  return image.IsVectorIcon() ? image.GetVectorIcon().vector_icon() : nullptr;
+}
+
+TEST_F(CommandBoxRowTest, EachKindOfRowHasItsOwnGlyph) {
+  SuggestionRow page;
+  page.title = u"Example";
+  page.destination = GURL("https://example.com/");
+  CommandBoxRow page_row(page, u"", base::DoNothing());
+  EXPECT_EQ(&vector_icons::kGlobeIcon, KindIconOf(page_row));
+
+  SuggestionRow search = page;
+  search.is_search = true;
+  CommandBoxRow search_row(search, u"", base::DoNothing());
+  EXPECT_EQ(&vector_icons::kSearchIcon, KindIconOf(search_row));
+
+  SuggestionRow command;
+  command.title = u"New tab";
+  command.command_id = 1;
+  CommandBoxRow command_row(command, u"", base::DoNothing());
+  EXPECT_EQ(&vector_icons::kKeyboardIcon, KindIconOf(command_row));
+}
+
+TEST_F(CommandBoxRowTest, ATabYouHaveSaysEnterSwitchesToIt) {
+  SuggestionRow row;
+  row.title = u"Example";
+  row.destination = GURL("https://example.com/");
+  row.is_open_tab = true;
+  // A tab wins over a shortcut: what Enter does is the thing to say.
+  CommandBoxRow open_tab(row, u"\u2318T", base::DoNothing());
+  ASSERT_TRUE(open_tab.aside_for_testing());
+  EXPECT_EQ(u"Switch to tab", open_tab.aside_for_testing()->GetText());
+
+  row.is_open_tab = false;
+  CommandBoxRow page(row, u"", base::DoNothing());
+  EXPECT_FALSE(page.aside_for_testing())
+      << "a page you do not have says something at its edge";
+}
+
+TEST_F(CommandBoxRowTest, ACommandShowsItsShortcut) {
+  SuggestionRow row;
+  row.title = u"New tab";
+  row.command_id = 1;
+  CommandBoxRow command(row, u"\u2318T", base::DoNothing());
+  ASSERT_TRUE(command.aside_for_testing());
+  EXPECT_EQ(u"\u2318T", command.aside_for_testing()->GetText());
+}
+
+TEST_F(CommandBoxRowTest, OnlyTheSelectedRowShowsTheEnterMark) {
+  SuggestionRow row;
+  row.title = u"Example";
+  row.destination = GURL("https://example.com/");
+  CommandBoxRow view(row, u"", base::DoNothing());
+  EXPECT_FALSE(view.enter_mark_for_testing()->GetVisible());
+  view.SetSelected(true);
+  EXPECT_TRUE(view.enter_mark_for_testing()->GetVisible());
+  view.SetSelected(false);
+  EXPECT_FALSE(view.enter_mark_for_testing()->GetVisible());
 }
 
 }  // namespace

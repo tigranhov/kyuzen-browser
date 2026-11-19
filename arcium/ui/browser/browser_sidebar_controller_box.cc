@@ -17,6 +17,8 @@
 #include "arcium/ui/browser/space_switcher.h"
 #include "arcium/ui/browser/split_controller.h"
 #include "arcium/ui/browser/tab_search_service.h"
+#include "arcium/ui/sidebar/sidebar_view.h"
+#include "arcium/ui/sidebar/url_pill_view.h"
 #include "base/functional/bind.h"
 #include "base/location.h"
 #include "base/strings/utf_string_conversions.h"
@@ -57,14 +59,22 @@ void BrowserSidebarController::ShowCommandBox(
       // and outlives it.
       base::BindRepeating(&BrowserSidebarController::SplitPartnerRows,
                           base::Unretained(this)));
+  if (keep_box_open_for_debugging_) {
+    command_box_->set_close_on_deactivate(false);
+  }
   command_box_widget_ = views::BubbleDialogDelegate::CreateBubble(
       command_box_.get(),
       base::BindOnce(&BrowserSidebarController::OnCommandBoxClosed,
                      weak_factory_.GetWeakPtr()));
   command_box_widget_->Show();
-  if (initial_text) {
-    command_box_->SetText(*initial_text, /*select_all=*/true);
+  // The pill stays lit while the box is up, whichever key or click opened it.
+  if (view_) {
+    view_->url_pill()->SetBoxOpen(true);
   }
+  // With no text the box still asks, and an empty question is answered with
+  // the tabs used most recently, so it opens on somewhere to go.
+  command_box_->SetText(initial_text.value_or(std::u16string()),
+                        /*select_all=*/initial_text.has_value());
   command_box_->FocusField();
 }
 
@@ -167,6 +177,9 @@ bool BrowserSidebarController::ActivateTabWithUrl(const GURL& url) {
 
 void BrowserSidebarController::OnCommandBoxClosed(
     views::Widget::ClosedReason reason) {
+  if (view_) {
+    view_->url_pill()->SetBoxOpen(false);
+  }
   // Runs synchronously from the close; free them once the stack unwinds.
   base::SequencedTaskRunner::GetCurrentDefault()->PostTask(
       FROM_HERE, base::BindOnce(&BrowserSidebarController::DestroyCommandBox,

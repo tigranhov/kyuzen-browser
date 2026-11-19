@@ -9,6 +9,7 @@
 #include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/utf_string_conversions.h"
+#include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "url/gurl.h"
 
 namespace arcium {
@@ -56,8 +57,7 @@ std::u16string PillLabel(const GURL& url) {
     // extensions list, the downloads page. Its scheme is half of what names
     // it, so both halves are shown.
     if (url.has_host()) {
-      return base::UTF8ToUTF16(
-          base::StrCat({url.scheme(), "://", url.host()}));
+      return base::UTF8ToUTF16(base::StrCat({url.scheme(), "://", url.host()}));
     }
     return base::UTF8ToUTF16(base::StrCat({url.scheme(), ":"}));
   }
@@ -74,6 +74,37 @@ std::u16string PillLabel(const GURL& url) {
     return base::UTF8ToUTF16(base::StrCat({host, ":", url.port()}));
   }
   return base::UTF8ToUTF16(host);
+}
+
+PillLabelParts SplitPillLabel(const GURL& url) {
+  PillLabelParts parts;
+  const std::u16string label = PillLabel(url);
+  if (!url.is_valid() || !url.SchemeIsHTTPOrHTTPS() || !url.has_host()) {
+    parts.domain = label;
+    return parts;
+  }
+  const std::u16string domain =
+      base::UTF8ToUTF16(net::registry_controlled_domains::GetDomainAndRegistry(
+          url.host(),
+          net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES));
+  // The label is the host, less any "www.", plus any port, so the domain is
+  // found by position at the end of the host rather than recomputed: whatever
+  // PillLabel decided to show is exactly what is drawn.
+  const std::u16string port =
+      url.has_port() ? base::UTF8ToUTF16(base::StrCat({":", url.port()}))
+                     : std::u16string();
+  if (domain.empty() || !label.ends_with(port) ||
+      !std::u16string_view(label)
+           .substr(0, label.size() - port.size())
+           .ends_with(domain)) {
+    parts.domain = label;
+    return parts;
+  }
+  const size_t host_end = label.size() - port.size();
+  parts.prefix = label.substr(0, host_end - domain.size());
+  parts.domain = domain;
+  parts.suffix = port;
+  return parts;
 }
 
 }  // namespace arcium

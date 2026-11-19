@@ -23,6 +23,19 @@ namespace arcium {
 // its file, and a page belonging to the browser says its scheme and host.
 std::u16string PillLabel(const GURL& url);
 
+// PillLabel cut into the three runs the pill draws: the part a person should
+// trust, the site's registrable domain, at full strength, and what sits in
+// front of it (a subdomain) and behind it (a port) dimmed. The whole line is
+// still shown; only its emphasis changes. Anything that is not a website, or
+// a host with no registrable domain (an IP address, localhost), is all
+// `domain`.
+struct PillLabelParts {
+  std::u16string prefix;
+  std::u16string domain;
+  std::u16string suffix;
+};
+PillLabelParts SplitPillLabel(const GURL& url);
+
 }  // namespace arcium
 
 #endif  // ARCIUM_UI_SIDEBAR_PILL_LABEL_H_

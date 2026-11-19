@@ -61,5 +61,54 @@ TEST(PillLabelTest, NamesTheBrowserPageForAPageOfItsOwn) {
   EXPECT_EQ(u"data:", PillLabel(GURL("data:text/html,hello")));
 }
 
+TEST(PillLabelTest, SplitsOutTheDomainAPersonShouldTrust) {
+  const PillLabelParts parts =
+      SplitPillLabel(GURL("https://en.wikipedia.org/wiki/X"));
+  EXPECT_EQ(u"en.", parts.prefix);
+  EXPECT_EQ(u"wikipedia.org", parts.domain);
+  EXPECT_EQ(u"", parts.suffix);
+}
+
+TEST(PillLabelTest, ASuffixOfSeveralPartsStaysWithItsDomain) {
+  // Cut at the last dot, this would brighten "co.uk", which is a registry
+  // and says nothing about who the reader is talking to.
+  const PillLabelParts parts =
+      SplitPillLabel(GURL("https://docs.example.co.uk/"));
+  EXPECT_EQ(u"docs.", parts.prefix);
+  EXPECT_EQ(u"example.co.uk", parts.domain);
+  EXPECT_EQ(u"", parts.suffix);
+}
+
+TEST(PillLabelTest, APortIsDimmedBehindTheDomain) {
+  const PillLabelParts parts =
+      SplitPillLabel(GURL("https://docs.example.co.uk:8443/"));
+  EXPECT_EQ(u"docs.", parts.prefix);
+  EXPECT_EQ(u"example.co.uk", parts.domain);
+  EXPECT_EQ(u":8443", parts.suffix);
+}
+
+TEST(PillLabelTest, TheRunsSpellTheWholeLabel) {
+  // Only the emphasis changes; nothing the label says is dropped.
+  for (const char* spec :
+       {"https://www.google.com/", "https://mail.google.com:444/",
+        "https://docs.example.co.uk/", "http://localhost:8899/",
+        "https://127.0.0.1/", "chrome://settings", "file:///tmp/x.html"}) {
+    const GURL url(spec);
+    const PillLabelParts parts = SplitPillLabel(url);
+    EXPECT_EQ(PillLabel(url), parts.prefix + parts.domain + parts.suffix)
+        << spec;
+  }
+}
+
+TEST(PillLabelTest, AnythingWithoutARegistrableDomainIsAllDomain) {
+  for (const char* spec : {"http://localhost:8899/x", "https://127.0.0.1/",
+                           "chrome://settings", "file:///tmp/x.html"}) {
+    const GURL url(spec);
+    const PillLabelParts parts = SplitPillLabel(url);
+    EXPECT_EQ(u"", parts.prefix) << spec;
+    EXPECT_EQ(u"", parts.suffix) << spec;
+  }
+}
+
 }  // namespace
 }  // namespace arcium

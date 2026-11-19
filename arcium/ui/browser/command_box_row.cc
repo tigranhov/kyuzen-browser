@@ -8,10 +8,17 @@
 #include <utility>
 
 #include "arcium/ui/sidebar/sidebar_colors.h"
+#include "components/vector_icons/vector_icons.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
+#include "ui/base/models/image_model.h"
 #include "ui/events/event.h"
+#include "ui/gfx/font.h"
+#include "ui/gfx/font_list.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/size.h"
 #include "ui/views/background.h"
+#include "ui/views/border.h"
+#include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/layout/flex_layout.h"
 #include "ui/views/layout/flex_layout_types.h"
@@ -23,45 +30,98 @@ namespace arcium {
 namespace {
 constexpr int kRowHeight = 36;
 constexpr float kRowCornerRadius = 8;
+// The sidebar's columns: 8 in, a 16pt icon, 12 to the text.
+constexpr int kRowInset = 8;
+constexpr int kIconSize = 16;
+constexpr int kIconTextGap = 12;
+constexpr int kKeycapRadius = 4;
+
+// The glyph a row draws before, or instead of, a site's icon: a search for a
+// search, a keyboard for a command, a globe for a page.
+const gfx::VectorIcon& KindIcon(const SuggestionRow& row) {
+  if (row.command_id) {
+    return vector_icons::kKeyboardIcon;
+  }
+  if (row.is_search) {
+    return vector_icons::kSearchIcon;
+  }
+  return vector_icons::kGlobeIcon;
+}
+
+std::unique_ptr<views::Label> MakeAside(const std::u16string& text) {
+  auto label = std::make_unique<views::Label>(text);
+  label->SetEnabledColor(kColorArciumRowTextSecondary);
+  label->SetFontList(
+      views::Label::GetDefaultFontList().DeriveWithSizeDelta(-1));
+  label->SetProperty(views::kMarginsKey, gfx::Insets::TLBR(0, 8, 0, 0));
+  return label;
+}
+
 }  // namespace
 
 CommandBoxRow::CommandBoxRow(const SuggestionRow& row,
+                             const std::u16string& shortcut,
                              base::RepeatingClosure on_chosen)
     : on_chosen_(std::move(on_chosen)) {
   auto* layout = SetLayoutManager(std::make_unique<views::FlexLayout>());
   layout->SetOrientation(views::LayoutOrientation::kHorizontal)
       .SetCrossAxisAlignment(views::LayoutAlignment::kCenter)
-      .SetInteriorMargin(gfx::Insets::VH(0, 10))
-      .SetDefault(views::kMarginsKey, gfx::Insets::VH(0, 4));
+      .SetInteriorMargin(gfx::Insets::VH(0, kRowInset));
   SetPreferredSize(gfx::Size(0, kRowHeight));
+
+  auto icon = std::make_unique<views::ImageView>(ui::ImageModel::FromVectorIcon(
+      KindIcon(row), kColorArciumRowTextSecondary, kIconSize));
+  icon->SetImageSize(gfx::Size(kIconSize, kIconSize));
+  icon->SetProperty(views::kMarginsKey,
+                    gfx::Insets::TLBR(0, 0, 0, kIconTextGap));
+  icon_ = AddChildView(std::move(icon));
 
   auto title = std::make_unique<views::Label>(row.title);
   title->SetHorizontalAlignment(gfx::ALIGN_LEFT);
   title->SetElideBehavior(gfx::ELIDE_TAIL);
+  title->SetEnabledColor(kColorArciumRowTextActive);
   title->SetProperty(
       views::kFlexBehaviorKey,
       views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
-                               views::MaximumFlexSizeRule::kUnbounded));
+                               views::MaximumFlexSizeRule::kPreferred)
+          .WithOrder(2));
   AddChildView(std::move(title));
 
   if (!row.subtitle.empty()) {
-    auto subtitle = std::make_unique<views::Label>(row.subtitle);
-    subtitle->SetEnabledColor(kColorArciumRowTextSecondary);
+    auto subtitle = MakeAside(row.subtitle);
     subtitle->SetElideBehavior(gfx::ELIDE_HEAD);
+    subtitle->SetHorizontalAlignment(gfx::ALIGN_LEFT);
     subtitle->SetProperty(
         views::kFlexBehaviorKey,
         views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
-                                 views::MaximumFlexSizeRule::kPreferred));
+                                 views::MaximumFlexSizeRule::kPreferred)
+            .WithOrder(1));
     AddChildView(std::move(subtitle));
   }
 
+  // Everything after this sits at the right edge.
+  auto spacer = std::make_unique<views::View>();
+  spacer->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+                               views::MaximumFlexSizeRule::kUnbounded)
+          .WithOrder(3));
+  AddChildView(std::move(spacer));
+
   if (row.is_open_tab) {
-    // Said plainly, because what this row does is different: it goes to a tab
-    // instead of loading the page a second time.
-    auto open = std::make_unique<views::Label>(u"Open tab");
-    open->SetEnabledColor(kColorArciumRowTextSecondary);
-    AddChildView(std::move(open));
+    // What Enter does, said plainly: it goes to the tab rather than loading
+    // the page a second time. "Open tab" read as a command.
+    aside_ = AddChildView(MakeAside(u"Switch to tab"));
+  } else if (!shortcut.empty()) {
+    auto keycap = MakeAside(shortcut);
+    keycap->SetBorder(views::CreateEmptyBorder(gfx::Insets::VH(1, 6)));
+    keycap->SetBackground(views::CreateRoundedRectBackground(
+        kColorArciumControlHoverBackground, kKeycapRadius));
+    aside_ = AddChildView(std::move(keycap));
   }
+
+  enter_mark_ = AddChildView(MakeAside(u"\u21B5"));
+  enter_mark_->SetVisible(false);
 }
 
 CommandBoxRow::~CommandBoxRow() = default;
@@ -71,7 +131,14 @@ void CommandBoxRow::SetSelected(bool selected) {
     return;
   }
   selected_ = selected;
+  enter_mark_->SetVisible(selected_);
   UpdateBackground();
+}
+
+void CommandBoxRow::SetIcon(const ui::ImageModel& icon) {
+  if (!icon.IsEmpty()) {
+    icon_->SetImage(icon);
+  }
 }
 
 void CommandBoxRow::OnThemeChanged() {
